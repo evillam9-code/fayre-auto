@@ -2729,30 +2729,10 @@ function renderConfig(){
       <div class="card-title">🏦 Bancos y Cuentas</div>
       <p style="font-size:13px;color:var(--gray);margin-bottom:12px">Configure los bancos y sus cuentas. Estos aparecerán en todos los registros de dinero (gastos, ventas, caja, nómina, etc.).</p>
       <div id="cf-bancos-list" style="display:flex;flex-direction:column;gap:12px">
-        ${(DB.config.bancoCuentas||[]).map((b,bi)=>`
-          <div style="border:1.5px solid var(--blue3);border-radius:8px;padding:12px;background:#f8fafc">
-            <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
-              <input type="text" id="cf-banco-nombre-\${bi}" value="\${escHtml(b.banco||'')}" placeholder="Nombre del banco" style="flex:1;font-weight:700">
-              <button class="btn btn-red btn-sm" onclick="eliminarBancoConfig(\${bi})">🗑 Eliminar Banco</button>
-            </div>
-            <div id="cf-banco-cuentas-\${bi}" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">
-              \${(b.cuentas||[]).map((ct,ci)=>`
-                <div style="display:flex;gap:6px;align-items:center">
-                  <select id="cf-banco-tipo-\${bi}-\${ci}" style="width:140px">
-                    <option value="Ahorro" \${ct.tipo==='Ahorro'?'selected':''}>Ahorro</option>
-                    <option value="Corriente" \${ct.tipo==='Corriente'?'selected':''}>Corriente</option>
-                    <option value="Caja" \${ct.tipo==='Caja'?'selected':''}>Caja</option>
-                  </select>
-                  <select id="cf-banco-moneda-\${bi}-\${ci}" style="width:120px">
-                    <option value="RD\\$" \${(ct.moneda||'RD\\$')==='RD\\$'?'selected':''}>RD\$ Pesos</option>
-                    <option value="USD" \${ct.moneda==='USD'?'selected':''}>USD Dólares</option>
-                  </select>
-                  <input type="text" id="cf-banco-cuenta-\${bi}-\${ci}" value="\${escHtml(ct.numero||'')}" placeholder="Número de cuenta" style="flex:1">
-                  <button class="btn btn-red btn-sm" onclick="eliminarCuentaBanco(\${bi},\${ci})">🗑</button>
-                </div>`).join('')}
-            </div>
-            <button class="btn btn-secondary btn-sm" onclick="agregarCuentaBanco(\${bi})">➕ Agregar Cuenta</button>
-          </div>`).join('')}
+        ${(DB.config.bancoCuentas||[]).map((b,bi)=>{
+          const cuentasHTML=(b.cuentas||[]).map((ct,ci)=>'<div style="display:flex;gap:6px;align-items:center"><select id="cf-banco-tipo-'+bi+'-'+ci+'" style="width:140px"><option value="Ahorro" '+(ct.tipo==='Ahorro'?'selected':'')+'>Ahorro</option><option value="Corriente" '+(ct.tipo==='Corriente'?'selected':'')+'>Corriente</option><option value="Caja" '+(ct.tipo==='Caja'?'selected':'')+'>Caja</option></select><select id="cf-banco-moneda-'+bi+'-'+ci+'" style="width:120px"><option value="RD$" '+((ct.moneda||'RD$')==='RD$'?'selected':'')+'>RD$ Pesos</option><option value="USD" '+(ct.moneda==='USD'?'selected':'')+'>USD Dólares</option></select><input type="text" id="cf-banco-cuenta-'+bi+'-'+ci+'" value="'+escHtml(ct.numero||'')+'" placeholder="Número de cuenta" style="flex:1"><button class="btn btn-red btn-sm" onclick="eliminarCuentaBanco('+bi+','+ci+')">🗑</button></div>').join('');
+          return '<div style="border:1.5px solid var(--blue3);border-radius:8px;padding:12px;background:#f8fafc;margin-bottom:8px"><div style="display:flex;gap:8px;align-items:center;margin-bottom:8px"><input type="text" id="cf-banco-nombre-'+bi+'" value="'+escHtml(b.banco||'')+'" placeholder="Nombre del banco" style="flex:1;font-weight:700"><button class="btn btn-red btn-sm" onclick="eliminarBancoConfig('+bi+')">🗑 Eliminar</button></div><div id="cf-banco-cuentas-'+bi+'" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">'+cuentasHTML+'</div><button class="btn btn-secondary btn-sm" onclick="agregarCuentaBanco('+bi+')">➕ Agregar Cuenta</button></div>';
+        }).join('')}
       </div>
       <div style="margin-top:12px;display:flex;gap:8px">
         <button class="btn btn-secondary btn-sm" onclick="agregarBancoConfig()">➕ Agregar Banco</button>
