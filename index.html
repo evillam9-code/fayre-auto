@@ -2281,6 +2281,7 @@ function editarUsuario(i){
     {id:'cxc',label:'📬 Cuentas por Cobrar'},{id:'gastos',label:'🏢 Gastos Empresa'},
     {id:'nomina',label:'👷 Nómina'},{id:'caja',label:'💳 Caja'},
     {id:'cotizaciones',label:'📋 Cotizaciones'},{id:'autorizaciones',label:'📝 Autorización Compra'},
+    {id:'seguros',label:'🛡️ Seguros'},{id:'facturaExterna',label:'🧾 Facturas Externas'},{id:'alertas',label:'🔔 Alertas'},
   ];
   const mods=u.modulos||[];
   const perms=u.permisos||{};
@@ -4900,8 +4901,25 @@ function eliminarCliente(i){if(currentUser?.role!=='admin'&&!canDo('eliminar')){
 
 
 // ══ COTIZACIONES (funciones) ══
+
+function agregarBancoCotRapido(){
+  const nombre=prompt('Nombre del banco a agregar:');
+  if(!nombre||!nombre.trim())return;
+  const n=nombre.trim();
+  if(!DB.config.bancoCuentas)DB.config.bancoCuentas=[];
+  if(DB.config.bancoCuentas.find(b=>b.banco.toLowerCase()===n.toLowerCase())){
+    toast('Ese banco ya existe','error');return;
+  }
+  DB.config.bancoCuentas.push({banco:n,cuentas:[]});
+  sDB('config');
+  if(typeof fbGuardar==='function'&&window._fbActivo)fbGuardar('config').catch(()=>{});
+  const sel=document.getElementById('cot-banco');
+  if(sel){const opt=document.createElement('option');opt.value=n;opt.textContent=n;opt.selected=true;sel.appendChild(opt);}
+  toast('Banco "'+n+'" agregado ✓','success');
+}
+
 function nuevaCotizacion(){
-  const bancos=DB.config.bancos||['Banco Popular','BHD León','Banreservas','Scotiabank','Banco Santa Cruz','Otro'];
+  const _bcOpts=(DB.config.bancoCuentas||[]).map(b=>`<option value="${escHtml(b.banco)}">${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos — configure en Ajustes</option>';
   openModal('Nueva Cotización',`
     <div class="form-row c3">
       <div class="form-field"><label class="required">Nombre del Cliente / Empresa</label><input type="text" id="cot-cli"></div>
@@ -4917,7 +4935,7 @@ function nuevaCotizacion(){
     <div class="form-row c3">
       <div class="form-field"><label>Teléfono</label><input type="text" id="cot-tel" maxlength="12" placeholder="000-000-0000" oninput="fmtTelInput(this)"></div>
       <div class="form-field"><label class="required">Entidad Bancaria</label>
-        <select id="cot-banco"><option value="">Seleccionar...</option>${bancos.map(b=>`<option>${escHtml(b)}</option>`).join('')}</select>
+        <div style="display:flex;gap:6px"><select id="cot-banco" style="flex:1"><option value="">Seleccionar...</option>${_bcOpts}</select><button type="button" class="btn btn-secondary btn-sm" onclick="agregarBancoCotRapido()" title="Agregar banco">➕</button></div>
       </div>
       <div class="form-field"><label>Fecha</label><input type="date" id="cot-fecha" value="${today()}"></div>
     </div>
@@ -4983,7 +5001,7 @@ function guardarCotizacion(idx){
 function editarCotizacion(i){
   if(currentUser?.role!=='admin'){toast('Solo el administrador puede editar','error');return;}
   const c=DB.cotizaciones[i];
-  const bancos=DB.config.bancos||['Banco Popular','BHD León','Banreservas','Scotiabank','Banco Santa Cruz','Otro'];
+  const _bcOpts2=(DB.config.bancoCuentas||[]).map(b=>`<option value="${escHtml(b.banco)}" ${b.banco===c.banco?'selected':''}>${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos — configure en Ajustes</option>';
   openModal('Editar Cotización',`
     <div class="form-row c3">
       <div class="form-field"><label>Cliente / Empresa</label><input type="text" id="cot-cli" value="${escHtml(c.cliente||'')}"></div>
@@ -4994,7 +5012,7 @@ function editarCotizacion(i){
     </div>
     <div class="form-row c3">
       <div class="form-field"><label>Teléfono</label><input type="text" id="cot-tel" value="${escHtml(c.telefono||'')}" maxlength="12" oninput="fmtTelInput(this)"></div>
-      <div class="form-field"><label>Banco</label><select id="cot-banco">${bancos.map(b=>`<option ${b===c.banco?'selected':''}>${escHtml(b)}</option>`).join('')}</select></div>
+      <div class="form-field"><label>Banco</label><div style="display:flex;gap:6px"><select id="cot-banco" style="flex:1"><option value="">Seleccionar...</option>${_bcOpts2}</select><button type="button" class="btn btn-secondary btn-sm" onclick="agregarBancoCotRapido()" title="Agregar banco">➕</button></div></div>
       <div class="form-field"><label>Fecha</label><input type="date" id="cot-fecha" value="${c.fecha||today()}"></div>
     </div>
     <div class="form-row c3">
