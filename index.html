@@ -176,6 +176,31 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
   .lft{display:none!important}
   .rgt{width:100%!important}
 }
+
+/* ══ CHAT ══ */
+.chat-wrap{display:grid;grid-template-columns:220px 1fr;height:calc(100vh - 160px);gap:0;border:1.5px solid var(--gray3);border-radius:var(--radius);overflow:hidden;background:#fff}
+.chat-list{border-right:1.5px solid var(--gray3);overflow-y:auto;background:var(--gray2)}
+.chat-list-header{padding:12px 14px;font-size:12px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--gray3);background:#fff}
+.chat-user-item{display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--gray3);transition:.15s;background:#fff}
+.chat-user-item:hover{background:var(--blue3)}
+.chat-user-item.active{background:var(--blue3);border-left:3px solid var(--blue)}
+.chat-presence{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.chat-presence.online{background:#16a34a}
+.chat-presence.offline{background:#94a3b8}
+.chat-user-name{font-size:13px;font-weight:600;color:var(--navy);flex:1}
+.chat-unread{background:var(--red);color:#fff;border-radius:999px;font-size:10px;font-weight:700;padding:1px 6px;min-width:18px;text-align:center}
+.chat-main{display:flex;flex-direction:column;height:100%}
+.chat-header{padding:12px 16px;border-bottom:1.5px solid var(--gray3);display:flex;align-items:center;gap:10px;background:#fff}
+.chat-messages{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px;background:#f8fafc}
+.chat-bubble{max-width:70%;padding:9px 13px;border-radius:12px;font-size:13px;line-height:1.5;word-break:break-word}
+.chat-bubble.mine{background:var(--blue);color:#fff;align-self:flex-end;border-bottom-right-radius:3px}
+.chat-bubble.theirs{background:#fff;color:var(--navy);align-self:flex-start;border:1px solid var(--gray3);border-bottom-left-radius:3px}
+.chat-time{font-size:10px;opacity:.65;margin-top:3px;text-align:right}
+.chat-input-area{padding:12px 14px;border-top:1.5px solid var(--gray3);display:flex;gap:8px;background:#fff}
+.chat-input-area input{flex:1;padding:9px 13px;border:1.5px solid var(--gray3);border-radius:8px;font-size:13px;outline:none}
+.chat-input-area input:focus{border-color:var(--blue)}
+.chat-empty{flex:1;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;color:var(--gray);font-size:14px}
+
 </style>
 <script>
 (function(){
@@ -268,6 +293,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
     <div class="nav-item" onclick="showPage('autorizaciones')" id="nav-autorizaciones"><span class="ico">📝</span>Autorización Compra</div>
     <div class="nav-item" onclick="showPage('seguros')" id="nav-seguros"><span class="ico">🛡️</span>Seguros</div>
     <div class="nav-item" onclick="showPage('facturaExterna')" id="nav-facturaExterna"><span class="ico">🧾</span>Facturas Externas</div>
+    <div class="nav-item" onclick="showPage('chat')" id="nav-chat"><span class="ico">💬</span>Chat Interno <span id="chat-badge" style="display:none;background:#dc2626;color:#fff;border-radius:999px;font-size:10px;font-weight:700;padding:1px 6px;margin-left:auto">0</span></div>
     <div class="sb-sec">SISTEMA</div>
     <div class="nav-item" onclick="showPage('usuarios')" id="nav-usuarios"><span class="ico">👥</span>Usuarios</div>
     <div class="nav-item" onclick="showPage('alertas')" id="nav-alertas"><span class="ico">🔔</span>Alertas del Sistema</div>
@@ -312,6 +338,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
       <div class="page" id="page-autorizaciones"></div>
       <div class="page" id="page-seguros"></div>
       <div class="page" id="page-facturaExterna"></div>
+      <div class="page" id="page-chat"></div>
     </div>
   </div>
 </div>
@@ -646,7 +673,7 @@ function showPage(id){
   if(id!=='dashboard'&&currentUser?.role!=='admin'&&!canAccess(id)){toast('No tienes acceso a este módulo','error');return;}
   document.getElementById('page-'+id)?.classList.add('active');
   document.getElementById('nav-'+id)?.classList.add('active');
-  const r={dashboard:renderDashboard,inventario:renderInventario,ventas:renderVentas,cotizaciones:renderCotizaciones,clientes:renderClientes,suplidores:renderSuplidores,caja:renderCaja,gastos:renderGastos,nomina:renderNomina,informes:renderInformes,usuarios:renderUsuarios,config:renderConfig,gastosVeh:renderGastosVeh,cxp:renderCXP,cxc:renderCXC,autorizaciones:renderAutorizaciones,seguros:renderSeguros,facturaExterna:renderFacturaExterna,alertas:renderAlertas};
+  const r={dashboard:renderDashboard,inventario:renderInventario,ventas:renderVentas,cotizaciones:renderCotizaciones,clientes:renderClientes,suplidores:renderSuplidores,caja:renderCaja,gastos:renderGastos,nomina:renderNomina,informes:renderInformes,usuarios:renderUsuarios,config:renderConfig,gastosVeh:renderGastosVeh,cxp:renderCXP,cxc:renderCXC,autorizaciones:renderAutorizaciones,seguros:renderSeguros,facturaExterna:renderFacturaExterna,alertas:renderAlertas,chat:renderChat};
   if(r[id])r[id]();
 }
 
@@ -865,7 +892,31 @@ function renderDashboard(){
           return`<tr><td style="font-size:11px">${fmtDate(v.fecha)}</td><td style="font-size:12px;font-weight:600">${escHtml(v.vehiculo||'—')}</td><td style="font-size:12px">${escHtml(v.cliente||'—')}</td><td><span class="badge ${esUSD?'badge-blue':'badge-green'}" style="font-size:10px">${v.moneda||'RD$'}</span></td><td style="font-weight:700;color:var(--green);font-size:12px">${esUSD?'$'+parseFloat(v.precioVenta||0).toLocaleString('en-US',{minimumFractionDigits:2}):fmt(v.precioVenta)}</td></tr>`;
         }).join('')}</tbody></table></div>`:'<div style="text-align:center;padding:24px;color:var(--gray)">Sin ventas aún</div>'}
       </div>
-    </div>`;
+    </div>
+    ${currentUser?.role==='admin'?`
+    <div class="card" style="margin-top:16px;border-top:4px solid var(--green)">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div class="card-title" style="margin:0">🟢 Usuarios Conectados Ahora</div>
+        <button class="btn btn-secondary btn-sm" onclick="renderDashboard()">↻ Actualizar</button>
+      </div>
+      ${(()=>{
+        const ahora=Date.now();
+        const conectados=(DB.users||[]).filter(u=>u.activo&&u.id!==currentUser.id&&(DB.presencia||{})[u.id]&&(ahora-(DB.presencia||{})[u.id])<30000);
+        if(!conectados.length)return '<div style="text-align:center;padding:16px;color:var(--gray);font-size:13px">No hay otros usuarios conectados en este momento</div>';
+        return '<div style="display:flex;flex-wrap:wrap;gap:10px">'+conectados.map(u=>{
+          const hace=Math.floor((ahora-(DB.presencia||{})[u.id])/1000);
+          const tiempoStr=hace<60?hace+'s':Math.floor(hace/60)+'min';
+          return '<div style="display:flex;align-items:center;gap:8px;padding:8px 14px;background:var(--green2);border:1.5px solid var(--green);border-radius:10px">'+
+            '<div style="width:10px;height:10px;border-radius:50%;background:var(--green)"></div>'+
+            '<div>'+
+              '<div style="font-size:13px;font-weight:700;color:var(--navy)">'+escHtml(u.nombre)+'</div>'+
+              '<div style="font-size:10px;color:var(--gray)">'+escHtml(u.role||'')+' · activo hace '+tiempoStr+'</div>'+
+            '</div>'+
+          '</div>';
+        }).join('')+'</div>';
+      })()}
+    </div>`:''}
+`;
 }
 
 
@@ -2964,6 +3015,141 @@ function cargarLogoConfig(input){
     toast('Logo cargado ✓','success');
   };
   reader.readAsDataURL(file);
+}
+
+
+// ══ CHAT INTERNO ══
+let _chatWith=null;
+let _presenceInterval=null;
+
+function renderChat(){
+  const esAdmin=currentUser?.role==='admin';
+  const tieneChat=esAdmin||(currentUser?.modulos||[]).includes('chat');
+  if(!tieneChat){
+    document.getElementById('page-chat').innerHTML='<div style="text-align:center;padding:48px"><div style="font-size:48px;margin-bottom:12px">🔒</div><div style="font-size:18px;font-weight:700;color:var(--navy)">Acceso restringido</div><p style="color:var(--gray);margin-top:8px">No tienes acceso al chat interno.<br>Contacta al administrador.</p></div>';
+    return;
+  }
+  const otros=DB.users.filter(u=>u.activo&&u.id!==currentUser.id);
+  function unreadCount(uid){
+    const key=[currentUser.id,uid].sort().join('_');
+    return ((DB.chat||{})[key]||[]).filter(m=>m.to===currentUser.id&&!m.leido).length;
+  }
+  function isOnline(uid){
+    const p=(DB.presencia||{})[uid];
+    return p&&(Date.now()-p)<30000;
+  }
+  const listaHTML=otros.map(u=>{
+    const unread=unreadCount(u.id);
+    const online=isOnline(u.id);
+    const ac=_chatWith===u.id?' active':'';
+    const pr=esAdmin?'<div class="chat-presence '+(online?'online':'offline')+'"></div>':'';
+    const ur=unread>0?'<div class="chat-unread">'+unread+'</div>':'';
+    return '<div class="chat-user-item'+ac+'" data-uid="'+u.id+'" onclick="_chatAbrirCon(this.dataset.uid)">'+pr+'<div class="chat-user-name">'+escHtml(u.nombre)+'</div>'+ur+'</div>';
+  }).join('');
+
+  const mainHTML=_chatWith?
+    '<div class="chat-header">'+
+      (esAdmin?'<div class="chat-presence '+(isOnline(_chatWith)?'online':'offline')+'"></div>':'')+
+      '<div style="font-weight:700;font-size:14px;color:var(--navy)">'+escHtml(_chatNombre(_chatWith))+'</div>'+
+      (esAdmin&&isOnline(_chatWith)?'<div style="font-size:11px;color:var(--green);margin-left:4px">● En línea</div>':'')+
+    '</div>'+
+    '<div class="chat-messages" id="chat-messages">'+_renderMensajes()+'</div>'+
+    '<div class="chat-input-area">'+
+      '<input type="text" id="chat-input" placeholder="Escribe un mensaje..." onkeydown="if(event.keyCode===13)_chatEnviar()">'+
+      '<button class="btn btn-primary" onclick="_chatEnviar()">Enviar ➤</button>'+
+    '</div>'
+    :'<div class="chat-empty"><div style="font-size:36px">💬</div><div>Selecciona un usuario para chatear</div></div>';
+
+  document.getElementById('page-chat').innerHTML=
+    '<h1 style="margin-bottom:12px">💬 Chat Interno</h1>'+
+    '<div class="chat-wrap">'+
+      '<div class="chat-list">'+
+        '<div class="chat-list-header">👥 Usuarios ('+otros.length+')</div>'+
+        (listaHTML||'<div style="padding:16px;font-size:12px;color:var(--gray);text-align:center">Sin usuarios disponibles</div>')+
+      '</div>'+
+      '<div class="chat-main" id="chat-main">'+mainHTML+'</div>'+
+    '</div>';
+
+  _chatScrollBottom();
+  _chatMarcarLeidos();
+  _chatIniciarPresencia();
+}
+
+function _chatNombre(uid){return DB.users.find(u=>u.id===uid)?.nombre||uid;}
+
+function _renderMensajes(){
+  const key=[currentUser.id,_chatWith].sort().join('_');
+  const msgs=((DB.chat||{})[key]||[]);
+  if(!msgs.length)return '<div style="text-align:center;color:var(--gray);font-size:13px;padding:24px">No hay mensajes aún. ¡Escribe el primero!</div>';
+  return msgs.map(m=>{
+    const mio=m.from===currentUser.id;
+    const hora=m.ts?new Date(m.ts).toLocaleTimeString('es-DO',{hour:'2-digit',minute:'2-digit'}):'';
+    return '<div class="chat-bubble '+(mio?'mine':'theirs')+'">'+escHtml(m.texto)+'<div class="chat-time">'+hora+(mio&&m.leido?' ✓✓':mio?' ✓':'')+'</div></div>';
+  }).join('');
+}
+
+function _chatAbrirCon(uid){
+  _chatWith=uid;
+  renderChat();
+  setTimeout(()=>{document.getElementById('chat-input')?.focus();},100);
+}
+
+function _chatEnviar(){
+  const inp=document.getElementById('chat-input');
+  if(!inp)return;
+  const texto=inp.value.trim();
+  if(!texto)return;
+  if(!DB.chat)DB.chat={};
+  const key=[currentUser.id,_chatWith].sort().join('_');
+  if(!DB.chat[key])DB.chat[key]=[];
+  DB.chat[key].push({from:currentUser.id,to:_chatWith,texto,ts:Date.now(),leido:false});
+  sDB('chat');
+  if(typeof fbGuardar==='function'&&window._fbActivo)fbGuardar('chat').catch(()=>{});
+  inp.value='';
+  const msgsDiv=document.getElementById('chat-messages');
+  if(msgsDiv){msgsDiv.innerHTML=_renderMensajes();_chatScrollBottom();}
+  _chatActualizarBadge();
+}
+
+function _chatMarcarLeidos(){
+  if(!_chatWith||!DB.chat)return;
+  const key=[currentUser.id,_chatWith].sort().join('_');
+  if(!DB.chat[key])return;
+  let changed=false;
+  DB.chat[key].forEach(m=>{if(m.to===currentUser.id&&!m.leido){m.leido=true;changed=true;}});
+  if(changed){sDB('chat');if(typeof fbGuardar==='function'&&window._fbActivo)fbGuardar('chat').catch(()=>{});}
+  _chatActualizarBadge();
+}
+
+function _chatActualizarBadge(){
+  if(!currentUser)return;
+  let total=0;
+  (DB.users||[]).filter(u=>u.id!==currentUser.id).forEach(u=>{
+    const key=[currentUser.id,u.id].sort().join('_');
+    total+=((DB.chat||{})[key]||[]).filter(m=>m.to===currentUser.id&&!m.leido).length;
+  });
+  const badge=document.getElementById('chat-badge');
+  if(badge){badge.style.display=total>0?'inline':'none';badge.textContent=total;}
+}
+
+function _chatScrollBottom(){
+  setTimeout(()=>{const d=document.getElementById('chat-messages');if(d)d.scrollTop=d.scrollHeight;},50);
+}
+
+function _chatIniciarPresencia(){
+  if(!DB.presencia)DB.presencia={};
+  DB.presencia[currentUser.id]=Date.now();
+  sDB('presencia');
+  if(typeof fbGuardar==='function'&&window._fbActivo)fbGuardar('presencia').catch(()=>{});
+  if(_presenceInterval)clearInterval(_presenceInterval);
+  _presenceInterval=setInterval(()=>{
+    if(!currentUser)return;
+    if(!DB.presencia)DB.presencia={};
+    DB.presencia[currentUser.id]=Date.now();
+    sDB('presencia');
+    if(typeof fbGuardar==='function'&&window._fbActivo)fbGuardar('presencia').catch(()=>{});
+    _chatActualizarBadge();
+  },20000);
 }
 
 // ══ GUARDAR POR SECCIÓN ══
@@ -7930,6 +8116,7 @@ function aplicarColoresSistema(){
 
 // Aplicar colores al cargar
 document.addEventListener('DOMContentLoaded',()=>{
+  setInterval(()=>{if(currentUser)_chatActualizarBadge();},10000);
   if(DB.config?.colores)aplicarColoresSistema();
 });
 
