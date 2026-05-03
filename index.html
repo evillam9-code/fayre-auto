@@ -3065,7 +3065,7 @@ function _chatIniciarPresencia(){
       lista.innerHTML='<div class="chat-list-header">👥 Usuarios ('+otros.length+')</div>'+otros.map(u=>{
         const unread=(chatMsgs[_chatKey(currentUser.id,u.id)]||[]).filter(m=>m.to===currentUser.id&&!m.leido).length;
         const online=_chatOnline(u.id);
-        return '<div class="chat-user-item'+(_chatWith===u.id?' active':'')+'" onclick="_chatAbrirCon(''+u.id+'')"><div class="chat-presence '+(online?'online':'offline')+'"></div><div class="chat-user-name">'+escHtml(u.nombre)+'</div>'+(unread>0?'<div class="chat-unread">'+unread+'</div>':'')+'</div>';
+        return '<div class="chat-user-item'+(_chatWith===u.id?' active':'')+'" onclick="_chatAbrirCon(&quot;'+u.id+'&quot;)"><div class="chat-presence '+(online?'online':'offline')+'"></div><div class="chat-user-name">'+escHtml(u.nombre)+'</div>'+(unread>0?'<div class="chat-unread">'+unread+'</div>':'')+'</div>';
       }).join('');
     }
     _chatActualizarBadge();
