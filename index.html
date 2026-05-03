@@ -6,7 +6,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<title>FAYRE — Sistema de Gestión Vehicular</title>
+<title>JEYCO — Sistema de Gestión Vehicular</title>
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 :root{--navy:#0f172a;--navy2:#1e293b;--navy3:#334155;--blue:#2563eb;--blue2:#1d4ed8;--blue3:#dbeafe;--green:#16a34a;--green2:#dcfce7;--red:#dc2626;--red2:#fee2e2;--amber:#d97706;--amber2:#fef3c7;--purple:#7c3aed;--purple2:#ede9fe;--gray:#6b7280;--gray2:#f1f5f9;--gray3:#e2e8f0;--white:#ffffff;--radius:12px;--radius-sm:7px;--shadow:0 2px 8px rgba(15,23,42,.10);--shadow-lg:0 8px 40px rgba(0,0,0,.16);--sidebar-bg:#0f172a;--main-bg:#f1f5f9}
@@ -176,6 +176,32 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
   .lft{display:none!important}
   .rgt{width:100%!important}
 }
+
+/* ══ CHAT ══ */
+.chat-wrap{display:grid;grid-template-columns:220px 1fr;height:calc(100vh - 120px);gap:0;border:1.5px solid var(--gray3);border-radius:var(--radius);overflow:hidden;background:#fff}
+.chat-list{border-right:1.5px solid var(--gray3);overflow-y:auto;background:var(--gray2)}
+.chat-list-header{padding:12px 14px;font-size:12px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--gray3);background:#fff}
+.chat-user-item{display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--gray3);transition:.15s;background:#fff}
+.chat-user-item:hover{background:var(--blue3)}
+.chat-user-item.active{background:var(--blue3);border-left:3px solid var(--blue)}
+.chat-presence{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.chat-presence.online{background:#16a34a}
+.chat-presence.offline{background:#94a3b8}
+.chat-user-name{font-size:13px;font-weight:600;color:var(--navy);flex:1}
+.chat-unread{background:var(--red);color:#fff;border-radius:999px;font-size:10px;font-weight:700;padding:1px 6px;min-width:18px;text-align:center}
+.chat-main{display:flex;flex-direction:column;height:100%}
+.chat-header{padding:12px 16px;border-bottom:1.5px solid var(--gray3);display:flex;align-items:center;gap:10px;background:#fff}
+.chat-messages{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px;background:#f8fafc}
+.chat-bubble{max-width:70%;padding:9px 13px;border-radius:12px;font-size:13px;line-height:1.5;word-break:break-word}
+.chat-bubble.mine{background:var(--blue);color:#fff;align-self:flex-end;border-bottom-right-radius:3px}
+.chat-bubble.theirs{background:#fff;color:var(--navy);align-self:flex-start;border:1px solid var(--gray3);border-bottom-left-radius:3px}
+.chat-bubble .chat-time{font-size:10px;opacity:.65;margin-top:3px;text-align:right}
+.chat-input-area{padding:12px 14px;border-top:1.5px solid var(--gray3);display:flex;gap:8px;background:#fff}
+.chat-input-area input{flex:1;padding:9px 13px;border:1.5px solid var(--gray3);border-radius:8px;font-size:13px;outline:none}
+.chat-input-area input:focus{border-color:var(--blue)}
+.chat-empty{flex:1;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;color:var(--gray);font-size:14px}
+@media(max-width:600px){.chat-wrap{grid-template-columns:1fr}.chat-list{display:none}.chat-list.mobile-open{display:block;position:fixed;inset:0;z-index:300}}
+
 </style>
 <script>
 (function(){
@@ -268,6 +294,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
     <div class="nav-item" onclick="showPage('autorizaciones')" id="nav-autorizaciones"><span class="ico">📝</span>Autorización Compra</div>
     <div class="nav-item" onclick="showPage('seguros')" id="nav-seguros"><span class="ico">🛡️</span>Seguros</div>
     <div class="nav-item" onclick="showPage('facturaExterna')" id="nav-facturaExterna"><span class="ico">🧾</span>Facturas Externas</div>
+    <div class="nav-item" onclick="showPage('chat')" id="nav-chat"><span class="ico">💬</span>Chat Interno <span id="chat-badge" style="display:none;background:#dc2626;color:#fff;border-radius:999px;font-size:10px;font-weight:700;padding:1px 6px;margin-left:auto">0</span></div>
     <div class="sb-sec">SISTEMA</div>
     <div class="nav-item" onclick="showPage('usuarios')" id="nav-usuarios"><span class="ico">👥</span>Usuarios</div>
     <div class="nav-item" onclick="showPage('alertas')" id="nav-alertas"><span class="ico">🔔</span>Alertas del Sistema</div>
@@ -312,6 +339,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
       <div class="page" id="page-autorizaciones"></div>
       <div class="page" id="page-seguros"></div>
       <div class="page" id="page-facturaExterna"></div>
+      <div class="page" id="page-chat"></div>
     </div>
   </div>
 </div>
@@ -646,7 +674,7 @@ function showPage(id){
   if(id!=='dashboard'&&currentUser?.role!=='admin'&&!canAccess(id)){toast('No tienes acceso a este módulo','error');return;}
   document.getElementById('page-'+id)?.classList.add('active');
   document.getElementById('nav-'+id)?.classList.add('active');
-  const r={dashboard:renderDashboard,inventario:renderInventario,ventas:renderVentas,cotizaciones:renderCotizaciones,clientes:renderClientes,suplidores:renderSuplidores,caja:renderCaja,gastos:renderGastos,nomina:renderNomina,informes:renderInformes,usuarios:renderUsuarios,config:renderConfig,gastosVeh:renderGastosVeh,cxp:renderCXP,cxc:renderCXC,autorizaciones:renderAutorizaciones,seguros:renderSeguros,facturaExterna:renderFacturaExterna,alertas:renderAlertas};
+  const r={dashboard:renderDashboard,inventario:renderInventario,ventas:renderVentas,cotizaciones:renderCotizaciones,clientes:renderClientes,suplidores:renderSuplidores,caja:renderCaja,gastos:renderGastos,nomina:renderNomina,informes:renderInformes,usuarios:renderUsuarios,config:renderConfig,gastosVeh:renderGastosVeh,cxp:renderCXP,cxc:renderCXC,autorizaciones:renderAutorizaciones,seguros:renderSeguros,facturaExterna:renderFacturaExterna,alertas:renderAlertas,chat:renderChat};
   if(r[id])r[id]();
 }
 
@@ -1429,7 +1457,6 @@ function renderCaja(){
     </div>
 
     <!-- Selector de vista por cuentas -->
-    ${(currentUser?.role==='admin'||(currentUser?.modulos||[]).includes('verSaldoCaja'))?`
     <div class="card" style="margin-bottom:14px;padding:14px 16px">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
         <div style="font-size:14px;font-weight:700">🏦 Saldo por Cuentas Bancarias</div>
@@ -1449,7 +1476,6 @@ function renderCaja(){
 
     <!-- Tarjetas por banco/cuenta -->
     ${Object.keys(bancoGroups).length>0?bancoCards:'<div class="card" style="text-align:center;padding:24px;color:var(--gray)">Sin movimientos registrados en este período</div>'}
-    `:''}<!-- fin verSaldoCaja -->
 
     <!-- Balance del mes -->
     <div class="card" style="background:var(--navy);margin-bottom:16px">
@@ -1644,7 +1670,7 @@ function imprimirGastos(){
 function nuevoGasto(){
   const cats=DB.config.categoriasGastos||['Alquiler','Servicios','Salarios','Papelería','Mantenimiento','Publicidad','Combustible','Impuestos','Otros'];
   // Solo suplidores de empresa
-  const supsEmp=(DB.suplidores||[]).filter(s=>s.tipoSuplidor==='empresa'||s.tipoSuplidor==='importadora'||(s.tipoSuplidor==null&&!s.tipoSuplidor));
+  const supsEmp=(DB.suplidores||[]).filter(s=>s.tipoSuplidor==='empresa'||(s.tipoSuplidor==null&&!s.tipoSuplidor));
   const supsOpts=supsEmp.map(s=>`<option value="${escHtml(s.empresa||s.nombre)}">${escHtml(s.empresa||s.nombre)}</option>`).join('');
   const bcs=DB.config.bancoCuentas||[];
   const bancoOpts=bcs.map(b=>`<option value="${escHtml(b.banco)}">${escHtml(b.banco)}</option>`).join('')||'<option value="Caja General">Caja General</option>';
@@ -2081,7 +2107,7 @@ function renderUsuarios(){
     {id:'ventas',label:'Ventas'},{id:'cxc',label:'Cuentas por Cobrar'},
     {id:'suplidores',label:'Suplidores'},{id:'gastos',label:'Gastos Empresa'},
     {id:'nomina',label:'Nómina'},{id:'caja',label:'Caja'},
-    {id:'cotizaciones',label:'Cotizaciones'},{id:'autorizaciones',label:'Autorización Compra'},{id:'seguros',label:'Seguros'},{id:'facturaExterna',label:'Facturas Externas'},{id:'alertas',label:'Alertas'},{id:'verSaldoCaja',label:'💰 Saldo Caja'},
+    {id:'cotizaciones',label:'Cotizaciones'},{id:'autorizaciones',label:'Autorización Compra'},
     {id:'usuarios',label:'Usuarios'},{id:'config',label:'Configuración'},
   ];
   const BORRAR=[
@@ -2191,7 +2217,7 @@ function crearUsuarioNuevo(){
   const role=document.getElementById('nu-role')?.value;
   if(!nombre||!user||!pass){toast('Complete nombre, usuario y contraseña','error');return;}
   if(DB.users.find(u=>u.username===user)){toast('El usuario ya existe','error');return;}
-  const MODS_IDS=['dashboard','informes','inventario','gastosVeh','cxp','clientes','ventas','cxc','suplidores','gastos','nomina','caja','cotizaciones','autorizaciones','seguros','facturaExterna','alertas','verSaldoCaja','usuarios','config'];
+  const MODS_IDS=['dashboard','informes','inventario','gastosVeh','cxp','clientes','ventas','cxc','suplidores','gastos','nomina','caja','cotizaciones','autorizaciones','usuarios','config'];
   const DEL_IDS=['ventas','clientes','suplidores','gastos','nomina','gastosVeh','cxc','inventario'];
   const modulos=role==='admin'?MODS_IDS:MODS_IDS.filter(id=>document.getElementById('nu-mod-'+id)?.checked);
   const puedeEliminar=role==='admin'||DEL_IDS.some(id=>document.getElementById('nu-del-'+id)?.checked);
@@ -2283,7 +2309,6 @@ function editarUsuario(i){
     {id:'cxc',label:'📬 Cuentas por Cobrar'},{id:'gastos',label:'🏢 Gastos Empresa'},
     {id:'nomina',label:'👷 Nómina'},{id:'caja',label:'💳 Caja'},
     {id:'cotizaciones',label:'📋 Cotizaciones'},{id:'autorizaciones',label:'📝 Autorización Compra'},
-    {id:'seguros',label:'🛡️ Seguros'},{id:'facturaExterna',label:'🧾 Facturas Externas'},{id:'alertas',label:'🔔 Alertas'},{id:'verSaldoCaja',label:'💰 Ver Saldo Caja'},
   ];
   const mods=u.modulos||[];
   const perms=u.permisos||{};
@@ -2372,7 +2397,7 @@ function guardarUsuario(idx){
   const pass=document.getElementById('u-pass').value;
   if(!nombre||!user||(!pass&&idx===undefined)){toast('Complete todos los campos','error');return;}
   if(idx===undefined&&DB.users.find(u=>u.username===user)){toast('El usuario ya existe','error');return;}
-  const MODS_IDS=['dashboard','informes','suplidores','inventario','gastosVeh','cxp','clientes','ventas','cxc','gastos','nomina','caja','cotizaciones','autorizaciones','seguros','facturaExterna','alertas','verSaldoCaja'];
+  const MODS_IDS=['dashboard','informes','suplidores','inventario','gastosVeh','cxp','clientes','ventas','cxc','gastos','nomina','caja','cotizaciones','autorizaciones'];
   const nuevosMods=MODS_IDS.filter(m=>{const el=document.getElementById('u-mod-'+m);return el&&el.checked;});
   const permKeys=['editar','eliminar','imprimir','pdf','editarVentas','editarClientes','editarSuplidores','editarGastos','editarNomina','editarGastosVeh','editarCobros','editarVehiculos','borrarVentas','borrarClientes','borrarSuplidores','borrarGastos','borrarNomina','borrarGastosVeh','borrarCobros','borrarVehiculos'];
   const nuevosPerms={};permKeys.forEach(k=>{const el=document.getElementById('u-perm-'+k);if(el)nuevosPerms[k]=el.checked;});
@@ -2400,13 +2425,6 @@ function guardarUsuario(idx){
 // ══ MÓDULO DE ALERTAS ══
 let alertasSeleccionadas=new Set();
 function renderAlertas(){
-  // Verificar si el usuario tiene acceso al módulo de alertas
-  const esAdmin=currentUser?.role==='admin';
-  const tieneAccesoAlertas=esAdmin||(currentUser?.modulos||[]).includes('alertas');
-  if(!tieneAccesoAlertas){
-    document.getElementById('page-alertas').innerHTML='<div style="text-align:center;padding:48px"><div style="font-size:48px;margin-bottom:12px">🔒</div><div style="font-size:18px;font-weight:700;color:var(--navy)">Acceso restringido</div><p style="color:var(--gray);margin-top:8px">No tienes permiso para ver las alertas del sistema.<br>Contacta al administrador para solicitar acceso.</p></div>';
-    return;
-  }
   const hoy=today();
   const hoyDate=new Date();
   const alertas=[];
@@ -2497,7 +2515,7 @@ function guardarPermisosUsuarioConfig(i){
   if(currentUser?.role!=='admin'){toast('Solo el administrador puede editar usuarios','error');return;}
   const u=DB.users[i];
   if(!u)return;
-  const MODS_IDS=['dashboard','informes','suplidores','inventario','gastosVeh','cxp','clientes','ventas','cxc','gastos','nomina','caja','cotizaciones','autorizaciones','seguros','facturaExterna','alertas','verSaldoCaja'];
+  const MODS_IDS=['dashboard','informes','suplidores','inventario','gastosVeh','cxp','clientes','ventas','cxc','gastos','nomina','caja','cotizaciones','autorizaciones'];
   const ALERT_IDS=['SIN_VIN','SIN_COSTO','CXP','CXC_VENCIDA','CXC','SIN_VENDER_6M','SIN_VENDER_1A','DOCS'];
   if(u.role!=='admin'){
     const mods=MODS_IDS.filter(id=>document.getElementById(`cfg-mod-${i}-${id}`)?.checked);
@@ -2525,61 +2543,6 @@ function guardarPermisosUsuarioConfig(i){
       informes:renderInformes,config:renderConfig};
     if(_rm[_pid])setTimeout(_rm[_pid],100);
   }
-}
-
-
-function agregarBancoConfig(){
-  const list=document.getElementById('cf-bancos-list');
-  if(!list)return;
-  const bi=(DB.config.bancoCuentas||[]).length+list.querySelectorAll('[id^="cf-banco-nombre-"]').length;
-  const div=document.createElement('div');
-  div.style.cssText='border:1.5px solid var(--blue3);border-radius:8px;padding:12px;background:#f8fafc';
-  div.innerHTML=`<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px"><input type="text" id="cf-banco-nombre-new-${Date.now()}" placeholder="Nombre del banco" style="flex:1;font-weight:700"><button class="btn btn-red btn-sm" onclick="this.closest('[style]').remove()">🗑 Eliminar</button></div><div style="font-size:12px;color:var(--gray)">Guarda primero para agregar cuentas a este banco.</div>`;
-  list.appendChild(div);
-}
-function agregarCuentaBanco(bi){
-  const cuentasDiv=document.getElementById('cf-banco-cuentas-'+bi);
-  if(!cuentasDiv)return;
-  const ci=cuentasDiv.querySelectorAll('[id^="cf-banco-cuenta-"]').length;
-  const div=document.createElement('div');
-  div.style.cssText='display:flex;gap:6px;align-items:center';
-  div.innerHTML=`<select id="cf-banco-tipo-${bi}-new-${ci}" style="width:140px"><option value="Ahorro">Ahorro</option><option value="Corriente">Corriente</option><option value="Caja">Caja</option></select><select id="cf-banco-moneda-${bi}-new-${ci}" style="width:120px"><option value="RD$">RD$ Pesos</option><option value="USD">USD Dólares</option></select><input type="text" id="cf-banco-cuenta-${bi}-new-${ci}" placeholder="Número de cuenta" style="flex:1"><button class="btn btn-red btn-sm" onclick="this.parentElement.remove()">🗑</button>`;
-  cuentasDiv.appendChild(div);
-}
-function eliminarBancoConfig(bi){
-  if(!confirm('¿Eliminar este banco y todas sus cuentas?'))return;
-  const bcs=DB.config.bancoCuentas||[];
-  bcs.splice(bi,1);
-  DB.config.bancoCuentas=bcs;
-  sDB('config');
-  renderConfig();
-  toast('Banco eliminado','success');
-}
-function eliminarCuentaBanco(bi,ci){
-  const bcs=DB.config.bancoCuentas||[];
-  if(bcs[bi]&&bcs[bi].cuentas){bcs[bi].cuentas.splice(ci,1);DB.config.bancoCuentas=bcs;sDB('config');renderConfig();toast('Cuenta eliminada','success');}
-}
-function guardarBancosConfig(){
-  const bcs=[];
-  document.querySelectorAll('[id^="cf-banco-nombre-"]').forEach(inp=>{
-    const bi=inp.id.replace('cf-banco-nombre-','');
-    const banco=inp.value.trim();
-    if(!banco)return;
-    const cuentas=[];
-    document.querySelectorAll('[id^="cf-banco-cuenta-'+bi+'-"]').forEach(cinp=>{
-      const suffix=cinp.id.replace('cf-banco-cuenta-'+bi+'-','');
-      const tipo=document.getElementById('cf-banco-tipo-'+bi+'-'+suffix)?.value||'Ahorro';
-      const moneda=document.getElementById('cf-banco-moneda-'+bi+'-'+suffix)?.value||'RD$';
-      const numero=cinp.value.trim();
-      if(numero)cuentas.push({tipo,moneda,numero,banco});
-    });
-    bcs.push({banco,cuentas});
-  });
-  DB.config.bancoCuentas=bcs;
-  sDB('config');
-  if(typeof fbGuardar==='function'&&window._fbActivo)fbGuardar('config').catch(()=>{});
-  toast('✅ Bancos y cuentas guardados','success');
-  renderConfig();
 }
 
 function renderConfig(){
@@ -2727,21 +2690,6 @@ function renderConfig(){
         <button class="btn btn-green" onclick="guardarColores()">💾 Guardar Colores</button>
       </div>
     </div>
-    <!-- BANCOS Y CUENTAS -->
-    <div class="card" style="margin-top:16px">
-      <div class="card-title">🏦 Bancos y Cuentas</div>
-      <p style="font-size:13px;color:var(--gray);margin-bottom:12px">Configure los bancos y sus cuentas. Estos aparecerán en todos los registros de dinero (gastos, ventas, caja, nómina, etc.).</p>
-      <div id="cf-bancos-list" style="display:flex;flex-direction:column;gap:12px">
-        ${(DB.config.bancoCuentas||[]).map((b,bi)=>{
-          const cuentasHTML=(b.cuentas||[]).map((ct,ci)=>'<div style="display:flex;gap:6px;align-items:center"><select id="cf-banco-tipo-'+bi+'-'+ci+'" style="width:140px"><option value="Ahorro" '+(ct.tipo==='Ahorro'?'selected':'')+'>Ahorro</option><option value="Corriente" '+(ct.tipo==='Corriente'?'selected':'')+'>Corriente</option><option value="Caja" '+(ct.tipo==='Caja'?'selected':'')+'>Caja</option></select><select id="cf-banco-moneda-'+bi+'-'+ci+'" style="width:120px"><option value="RD$" '+((ct.moneda||'RD$')==='RD$'?'selected':'')+'>RD$ Pesos</option><option value="USD" '+(ct.moneda==='USD'?'selected':'')+'>USD Dólares</option></select><input type="text" id="cf-banco-cuenta-'+bi+'-'+ci+'" value="'+escHtml(ct.numero||'')+'" placeholder="Número de cuenta" style="flex:1"><button class="btn btn-red btn-sm" onclick="eliminarCuentaBanco('+bi+','+ci+')">🗑</button></div>').join('');
-          return '<div style="border:1.5px solid var(--blue3);border-radius:8px;padding:12px;background:#f8fafc;margin-bottom:8px"><div style="display:flex;gap:8px;align-items:center;margin-bottom:8px"><input type="text" id="cf-banco-nombre-'+bi+'" value="'+escHtml(b.banco||'')+'" placeholder="Nombre del banco" style="flex:1;font-weight:700"><button class="btn btn-red btn-sm" onclick="eliminarBancoConfig('+bi+')">🗑 Eliminar</button></div><div id="cf-banco-cuentas-'+bi+'" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">'+cuentasHTML+'</div><button class="btn btn-secondary btn-sm" onclick="agregarCuentaBanco('+bi+')">➕ Agregar Cuenta</button></div>';
-        }).join('')}
-      </div>
-      <div style="margin-top:12px;display:flex;gap:8px">
-        <button class="btn btn-secondary btn-sm" onclick="agregarBancoConfig()">➕ Agregar Banco</button>
-        <button class="btn btn-primary" onclick="guardarBancosConfig()">💾 Guardar Bancos</button>
-      </div>
-    </div>
     <!-- COMPAÑÍAS DE SEGUROS -->
     <div class="card">
       <div class="card-title">🛡️ Compañías de Seguros</div>
@@ -2858,7 +2806,7 @@ function renderConfig(){
       <p style="font-size:13px;color:var(--gray);margin-bottom:12px">El administrador puede editar módulos, permisos y alertas de cada usuario. Los cambios se guardan de inmediato.</p>
       <div style="display:flex;flex-direction:column;gap:12px">
         ${DB.users.map((u,ui)=>{
-          const MODS_LIST=[{id:'dashboard',label:'Inicio'},{id:'informes',label:'Informe'},{id:'suplidores',label:'Suplidores'},{id:'inventario',label:'Reg. Vehículo'},{id:'gastosVeh',label:'Gastos Veh.'},{id:'cxp',label:'CxP'},{id:'clientes',label:'Clientes'},{id:'ventas',label:'Ventas'},{id:'cxc',label:'CxC'},{id:'gastos',label:'Gastos Emp.'},{id:'nomina',label:'Nómina'},{id:'caja',label:'Caja'},{id:'cotizaciones',label:'Cotizaciones'},{id:'autorizaciones',label:'Autorización Compra'},{id:'seguros',label:'Seguros'},{id:'facturaExterna',label:'Facturas Externas'},{id:'alertas',label:'Alertas'},{id:'verSaldoCaja',label:'💰 Ver Saldo Caja'}];
+          const MODS_LIST=[{id:'dashboard',label:'Inicio'},{id:'informes',label:'Informe'},{id:'suplidores',label:'Suplidores'},{id:'inventario',label:'Reg. Vehículo'},{id:'gastosVeh',label:'Gastos Veh.'},{id:'cxp',label:'CxP'},{id:'clientes',label:'Clientes'},{id:'ventas',label:'Ventas'},{id:'cxc',label:'CxC'},{id:'gastos',label:'Gastos Emp.'},{id:'nomina',label:'Nómina'},{id:'caja',label:'Caja'},{id:'cotizaciones',label:'Cotizaciones'},{id:'autorizaciones',label:'Autorizaciones'},{id:'seguros',label:'Seguros'},{id:'facturaExterna',label:'Facturas Ext.'},{id:'alertas',label:'Alertas'},{id:'verSaldoCaja',label:'💰 Saldo Caja'},{id:'chat',label:'💬 Chat'}];
           const ALERT_TYPES=[{id:'SIN_VIN',label:'Sin VIN'},{id:'SIN_COSTO',label:'Sin costos'},{id:'CXP',label:'CxP pendientes'},{id:'CXC_VENCIDA',label:'CxC vencidas'},{id:'CXC',label:'CxC pendientes'},{id:'SIN_VENDER_6M',label:'6m sin vender'},{id:'SIN_VENDER_1A',label:'1 año sin vender'},{id:'DOCS',label:'Docs pendientes'}];
           const mods=u.modulos||[];
           const alertas=u.alertasPermitidas||ALERT_TYPES.map(a=>a.id);
@@ -2964,6 +2912,164 @@ function cargarLogoConfig(input){
     toast('Logo cargado ✓','success');
   };
   reader.readAsDataURL(file);
+}
+
+
+// ══ CHAT INTERNO ══
+let _chatWith=null;
+let _chatUnsub=null;
+let _presenceInterval=null;
+
+function renderChat(){
+  const esAdmin=currentUser?.role==='admin';
+  const tieneChat=esAdmin||(currentUser?.modulos||[]).includes('chat');
+  if(!tieneChat){
+    document.getElementById('page-chat').innerHTML='<div style="text-align:center;padding:48px"><div style="font-size:48px;margin-bottom:12px">🔒</div><div style="font-size:18px;font-weight:700;color:var(--navy)">Acceso restringido</div><p style="color:var(--gray);margin-top:8px">No tienes acceso al chat interno.<br>Contacta al administrador.</p></div>';
+    return;
+  }
+  const otros=DB.users.filter(u=>u.activo&&u.id!==currentUser.id);
+  const chatMsgs=DB.chat||{};
+  // Contar no leídos por usuario
+  function unreadCount(uid){
+    const key=_chatKey(currentUser.id,uid);
+    const msgs=(chatMsgs[key]||[]);
+    return msgs.filter(m=>m.to===currentUser.id&&!m.leido).length;
+  }
+  // Presencia (solo admin ve todos, otros solo ven su lista)
+  const usuariosList=otros.map(u=>{
+    const unread=unreadCount(u.id);
+    const online=_chatOnline(u.id);
+    const activo=esAdmin||true; // todos ven su lista de contactos
+    return `<div class="chat-user-item${_chatWith===u.id?' active':''}" onclick="_chatAbrirCon('${u.id}')">
+      ${esAdmin?`<div class="chat-presence ${online?'online':'offline'}"></div>`:''}
+      <div class="chat-user-name">${escHtml(u.nombre)}</div>
+      ${unread>0?`<div class="chat-unread">${unread}</div>`:''}
+    </div>`;
+  }).join('');
+
+  const mensajesHTML=_chatWith?_renderMensajes():'';
+
+  document.getElementById('page-chat').innerHTML=`
+    <h1 style="margin-bottom:12px">💬 Chat Interno</h1>
+    <div class="chat-wrap">
+      <div class="chat-list">
+        <div class="chat-list-header">👥 Usuarios (${otros.length})</div>
+        ${usuariosList||'<div style="padding:16px;font-size:12px;color:var(--gray);text-align:center">Sin usuarios disponibles</div>'}
+      </div>
+      <div class="chat-main" id="chat-main">
+        ${_chatWith?`
+          <div class="chat-header">
+            ${esAdmin?`<div class="chat-presence ${_chatOnline(_chatWith)?'online':'offline'}"></div>`:''}
+            <div style="font-weight:700;font-size:14px;color:var(--navy)">${escHtml(_chatNombre(_chatWith))}</div>
+            ${esAdmin&&_chatOnline(_chatWith)?'<div style="font-size:11px;color:var(--green);margin-left:4px">● En línea</div>':''}
+          </div>
+          <div class="chat-messages" id="chat-messages">${mensajesHTML}</div>
+          <div class="chat-input-area">
+            <input type="text" id="chat-input" placeholder="Escribe un mensaje..." onkeydown="if(event.key==='Enter')_chatEnviar()">
+            <button class="btn btn-primary" onclick="_chatEnviar()">Enviar ➤</button>
+          </div>
+        `:`<div class="chat-empty"><div style="font-size:36px">💬</div><div>Selecciona un usuario para chatear</div></div>`}
+      </div>
+    </div>`;
+  _chatScrollBottom();
+  _chatMarcarLeidos();
+  _chatIniciarPresencia();
+}
+
+function _chatKey(a,b){return [a,b].sort().join('_');}
+function _chatNombre(uid){return DB.users.find(u=>u.id===uid)?.nombre||uid;}
+function _chatOnline(uid){
+  const p=DB.presencia||{};
+  if(!p[uid])return false;
+  return (Date.now()-p[uid])<30000; // 30 segundos
+}
+
+function _renderMensajes(){
+  const key=_chatKey(currentUser.id,_chatWith);
+  const msgs=(DB.chat||{})[key]||[];
+  if(!msgs.length)return '<div style="text-align:center;color:var(--gray);font-size:13px;padding:24px">No hay mensajes aún. ¡Escribe el primero!</div>';
+  return msgs.map(m=>{
+    const mio=m.from===currentUser.id;
+    const hora=m.ts?new Date(m.ts).toLocaleTimeString('es-DO',{hour:'2-digit',minute:'2-digit'}):'';
+    return `<div class="chat-bubble ${mio?'mine':'theirs'}">${escHtml(m.texto)}<div class="chat-time">${hora}${mio&&m.leido?' ✓✓':mio?' ✓':''}</div></div>`;
+  }).join('');
+}
+
+function _chatAbrirCon(uid){
+  _chatWith=uid;
+  renderChat();
+  setTimeout(()=>{document.getElementById('chat-input')?.focus();},100);
+}
+
+function _chatEnviar(){
+  const inp=document.getElementById('chat-input');
+  if(!inp)return;
+  const texto=inp.value.trim();
+  if(!texto)return;
+  if(!DB.chat)DB.chat={};
+  const key=_chatKey(currentUser.id,_chatWith);
+  if(!DB.chat[key])DB.chat[key]=[];
+  DB.chat[key].push({from:currentUser.id,to:_chatWith,texto,ts:Date.now(),leido:false});
+  sDB('chat');
+  if(typeof fbGuardar==='function'&&window._fbActivo)fbGuardar('chat').catch(()=>{});
+  inp.value='';
+  // Re-render solo mensajes
+  const msgsDiv=document.getElementById('chat-messages');
+  if(msgsDiv){msgsDiv.innerHTML=_renderMensajes();_chatScrollBottom();}
+  _chatActualizarBadge();
+}
+
+function _chatMarcarLeidos(){
+  if(!_chatWith||!DB.chat)return;
+  const key=_chatKey(currentUser.id,_chatWith);
+  if(!DB.chat[key])return;
+  let changed=false;
+  DB.chat[key].forEach(m=>{if(m.to===currentUser.id&&!m.leido){m.leido=true;changed=true;}});
+  if(changed){sDB('chat');if(typeof fbGuardar==='function'&&window._fbActivo)fbGuardar('chat').catch(()=>{});}
+  _chatActualizarBadge();
+}
+
+function _chatActualizarBadge(){
+  const chatMsgs=DB.chat||{};
+  let total=0;
+  DB.users.filter(u=>u.id!==currentUser.id).forEach(u=>{
+    const key=_chatKey(currentUser.id,u.id);
+    total+=(chatMsgs[key]||[]).filter(m=>m.to===currentUser.id&&!m.leido).length;
+  });
+  const badge=document.getElementById('chat-badge');
+  if(badge){badge.style.display=total>0?'inline':'none';badge.textContent=total;}
+}
+
+function _chatScrollBottom(){
+  setTimeout(()=>{const d=document.getElementById('chat-messages');if(d)d.scrollTop=d.scrollHeight;},50);
+}
+
+function _chatIniciarPresencia(){
+  // Registrar presencia del usuario actual
+  if(!DB.presencia)DB.presencia={};
+  DB.presencia[currentUser.id]=Date.now();
+  sDB('presencia');
+  if(typeof fbGuardar==='function'&&window._fbActivo)fbGuardar('presencia').catch(()=>{});
+  // Actualizar cada 20 segundos
+  if(_presenceInterval)clearInterval(_presenceInterval);
+  _presenceInterval=setInterval(()=>{
+    if(!DB.presencia)DB.presencia={};
+    DB.presencia[currentUser.id]=Date.now();
+    sDB('presencia');
+    if(typeof fbGuardar==='function'&&window._fbActivo)fbGuardar('presencia').catch(()=>{});
+    // Refrescar lista sin perder chat abierto
+    const lista=document.querySelector('.chat-list');
+    if(lista&&currentUser?.role==='admin'){
+      const otros=DB.users.filter(u=>u.activo&&u.id!==currentUser.id);
+      const chatMsgs=DB.chat||{};
+      lista.innerHTML='<div class="chat-list-header">👥 Usuarios ('+otros.length+')</div>'+otros.map(u=>{
+        const unread=(chatMsgs[_chatKey(currentUser.id,u.id)]||[]).filter(m=>m.to===currentUser.id&&!m.leido).length;
+        const online=_chatOnline(u.id);
+        return '<div class="chat-user-item'+(_chatWith===u.id?' active':'')+'" onclick="_chatAbrirCon(''+u.id+'')"><div class="chat-presence '+(online?'online':'offline')+'"></div><div class="chat-user-name">'+escHtml(u.nombre)+'</div>'+(unread>0?'<div class="chat-unread">'+unread+'</div>':'')+'</div>';
+      }).join('');
+    }
+    _chatActualizarBadge();
+  },20000);
 }
 
 // ══ GUARDAR POR SECCIÓN ══
@@ -3405,7 +3511,7 @@ function mostrarTipoSuplidor(nombre,infoId){
   const inf=document.getElementById(infoId);if(!inf)return;
   const sup=DB.suplidores.find(s=>(s.empresa||s.nombre||'')===nombre);
   if(!sup){inf.textContent='';return;}
-  inf.textContent=sup.tipoSuplidor==='vehiculo'?'Tipo: 🚗 Suplidor de Vehículos':sup.tipoSuplidor==='importadora'?'Tipo: 🏦 Compañía Importadora':sup.tipoSuplidor==='empresa'?'Tipo: 🏢 Suplidor de Empresa':'';
+  inf.textContent=sup.tipoSuplidor==='vehiculo'?'Tipo: 🚗 Suplidor de Vehículos':sup.tipoSuplidor==='empresa'?'Tipo: 🏢 Suplidor de Empresa':'';
 }
 
 function calcPendienteGVeh(){
@@ -4903,25 +5009,8 @@ function eliminarCliente(i){if(currentUser?.role!=='admin'&&!canDo('eliminar')){
 
 
 // ══ COTIZACIONES (funciones) ══
-
-function agregarBancoCotRapido(){
-  const nombre=prompt('Nombre del banco a agregar:');
-  if(!nombre||!nombre.trim())return;
-  const n=nombre.trim();
-  if(!DB.config.bancoCuentas)DB.config.bancoCuentas=[];
-  if(DB.config.bancoCuentas.find(b=>b.banco.toLowerCase()===n.toLowerCase())){
-    toast('Ese banco ya existe','error');return;
-  }
-  DB.config.bancoCuentas.push({banco:n,cuentas:[]});
-  sDB('config');
-  if(typeof fbGuardar==='function'&&window._fbActivo)fbGuardar('config').catch(()=>{});
-  const sel=document.getElementById('cot-banco');
-  if(sel){const opt=document.createElement('option');opt.value=n;opt.textContent=n;opt.selected=true;sel.appendChild(opt);}
-  toast('Banco "'+n+'" agregado ✓','success');
-}
-
 function nuevaCotizacion(){
-  const _bcOpts=(DB.config.cuentas||['Caja General']).map(c=>`<option value="${escHtml(c)}">${escHtml(c)}</option>`).join('');
+  const bancos=DB.config.bancos||['Banco Popular','BHD León','Banreservas','Scotiabank','Banco Santa Cruz','Otro'];
   openModal('Nueva Cotización',`
     <div class="form-row c3">
       <div class="form-field"><label class="required">Nombre del Cliente / Empresa</label><input type="text" id="cot-cli"></div>
@@ -4937,7 +5026,7 @@ function nuevaCotizacion(){
     <div class="form-row c3">
       <div class="form-field"><label>Teléfono</label><input type="text" id="cot-tel" maxlength="12" placeholder="000-000-0000" oninput="fmtTelInput(this)"></div>
       <div class="form-field"><label class="required">Entidad Bancaria</label>
-        <div style="display:flex;gap:6px"><select id="cot-banco" style="flex:1"><option value="">Seleccionar...</option>${_bcOpts}</select><button type="button" class="btn btn-secondary btn-sm" onclick="agregarBancoCotRapido()" title="Agregar banco">➕</button></div>
+        <select id="cot-banco"><option value="">Seleccionar...</option>${bancos.map(b=>`<option>${escHtml(b)}</option>`).join('')}</select>
       </div>
       <div class="form-field"><label>Fecha</label><input type="date" id="cot-fecha" value="${today()}"></div>
     </div>
@@ -5003,7 +5092,7 @@ function guardarCotizacion(idx){
 function editarCotizacion(i){
   if(currentUser?.role!=='admin'){toast('Solo el administrador puede editar','error');return;}
   const c=DB.cotizaciones[i];
-  const _bcOpts2=(DB.config.cuentas||['Caja General']).map(ct=>`<option value="${escHtml(ct)}" ${ct===c.banco?'selected':''}>${escHtml(ct)}</option>`).join('');
+  const bancos=DB.config.bancos||['Banco Popular','BHD León','Banreservas','Scotiabank','Banco Santa Cruz','Otro'];
   openModal('Editar Cotización',`
     <div class="form-row c3">
       <div class="form-field"><label>Cliente / Empresa</label><input type="text" id="cot-cli" value="${escHtml(c.cliente||'')}"></div>
@@ -5014,7 +5103,7 @@ function editarCotizacion(i){
     </div>
     <div class="form-row c3">
       <div class="form-field"><label>Teléfono</label><input type="text" id="cot-tel" value="${escHtml(c.telefono||'')}" maxlength="12" oninput="fmtTelInput(this)"></div>
-      <div class="form-field"><label>Banco</label><div style="display:flex;gap:6px"><select id="cot-banco" style="flex:1"><option value="">Seleccionar...</option>${_bcOpts2}</select><button type="button" class="btn btn-secondary btn-sm" onclick="agregarBancoCotRapido()" title="Agregar banco">➕</button></div></div>
+      <div class="form-field"><label>Banco</label><select id="cot-banco">${bancos.map(b=>`<option ${b===c.banco?'selected':''}>${escHtml(b)}</option>`).join('')}</select></div>
       <div class="form-field"><label>Fecha</label><input type="date" id="cot-fecha" value="${c.fecha||today()}"></div>
     </div>
     <div class="form-row c3">
@@ -5197,15 +5286,14 @@ function renderSuplidores(tabActivo){
   const ds='background:#e2e8f0;color:#adb5bd;cursor:not-allowed;border:1px solid #dee2e6';
   const supVeh=DB.suplidores.filter(s=>(s.tipoSuplidor||'vehiculo')==='vehiculo');
   const supEmp=DB.suplidores.filter(s=>s.tipoSuplidor==='empresa');
-  const supImp=DB.suplidores.filter(s=>s.tipoSuplidor==='importadora');
-  const lista=tabActivo==='vehiculo'?supVeh:tabActivo==='empresa'?supEmp:supImp;
+  const lista=tabActivo==='vehiculo'?supVeh:supEmp;
   function filasSup(arr){
     return arr.map((s,i)=>{
       const realIdx=DB.suplidores.findIndex(x=>(x.id||String(x))===s.id);
       return `<tr onclick="selSupl('${s.id}',this)" style="cursor:pointer">
         <td style="text-align:center"><input type="radio" name="sup-sel" onclick="event.stopPropagation();selSupl('${s.id}',this.closest('tr'))" style="width:15px;height:15px;cursor:pointer;accent-color:var(--blue)"></td>
         <td style="font-size:11px;color:var(--gray);font-weight:600">${escHtml(s.supId||'—')}</td>
-        <td><span class="badge ${(s.tipoSuplidor||'vehiculo')==='vehiculo'?'badge-blue':s.tipoSuplidor==='importadora'?'badge-yellow':'badge-green'}" style="font-size:10px">${(s.tipoSuplidor||'vehiculo')==='vehiculo'?'🚗 Vehículo':s.tipoSuplidor==='importadora'?'🏦 Importadora':'🏢 Empresa'}</span></td>
+        <td><span class="badge ${(s.tipoSuplidor||'vehiculo')==='vehiculo'?'badge-blue':'badge-green'}" style="font-size:10px">${(s.tipoSuplidor||'vehiculo')==='vehiculo'?'🚗 Vehículo':'🏢 Empresa'}</span></td>
         <td style="font-weight:700">${escHtml(s.empresa||s.nombre||'—')}</td>
         <td style="font-size:13px">${escHtml(s.propietario||'—')}</td>
         <td style="font-size:12px;color:var(--gray)"><span style="font-size:10px;background:var(--blue3);color:var(--blue);border-radius:4px;padding:1px 5px;font-weight:700;margin-right:4px">${escHtml(s.tipoDoc||'RNC')}</span>${escHtml(s.rnc||'—')}</td>
@@ -5224,17 +5312,16 @@ function renderSuplidores(tabActivo){
   }
   document.getElementById('page-suplidores').innerHTML=`
     <div class="page-header">
-      <div><h1>🏭 Suplidores</h1><p>${DB.suplidores.length} suplidor(es) — Vehículos: ${supVeh.length} | Empresa: ${supEmp.length} | Importadora: ${supImp.length}</p></div>
+      <div><h1>🏭 Suplidores</h1><p>${DB.suplidores.length} suplidor(es) — Vehículos: ${supVeh.length} | Empresa: ${supEmp.length}</p></div>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
         <button id="sup-btn-editar" disabled class="btn btn-sm" style="${ds}" onclick="supAccion('editar')">✏️ Editar</button>
         ${currentUser?.role==='admin'?`<button id="sup-btn-eliminar" disabled class="btn btn-sm" style="${ds}" onclick="supAccion('eliminar')">🗑 Eliminar</button>`:''}
-        <button class="btn btn-primary" onclick="nuevoSuplidor('${tabActivo}')">➕ Nuevo ${tabActivo==='vehiculo'?'Suplidor Vehículo':tabActivo==='importadora'?'Importadora':'Suplidor Empresa'}</button>
+        <button class="btn btn-primary" onclick="nuevoSuplidor('${tabActivo}')">➕ Nuevo Suplidor</button>
       </div>
     </div>
     <div style="display:flex;gap:0;margin-bottom:16px;border-bottom:2px solid var(--gray3)">
-      <button onclick="renderSuplidores('vehiculo')" class="btn" style="border-radius:8px 8px 0 0;border-bottom:none;${tabActivo==='vehiculo'?'background:var(--blue);color:#fff;':'background:var(--gray2);color:var(--navy);'}">🚗 Vehículos (${supVeh.length})</button>
-      <button onclick="renderSuplidores('empresa')" class="btn" style="border-radius:8px 8px 0 0;border-bottom:none;margin-left:4px;${tabActivo==='empresa'?'background:var(--blue);color:#fff;':'background:var(--gray2);color:var(--navy);'}">🏢 Empresa (${supEmp.length})</button>
-      <button onclick="renderSuplidores('importadora')" class="btn" style="border-radius:8px 8px 0 0;border-bottom:none;margin-left:4px;${tabActivo==='importadora'?'background:var(--gold,#b45309);color:#fff;':'background:var(--gray2);color:var(--navy);'}">🏦 Importadora (${supImp.length})</button>
+      <button onclick="renderSuplidores('vehiculo')" class="btn" style="border-radius:8px 8px 0 0;border-bottom:none;${tabActivo==='vehiculo'?'background:var(--blue);color:#fff;':'background:var(--gray2);color:var(--navy);'}">🚗 Suplidores de Vehículos (${supVeh.length})</button>
+      <button onclick="renderSuplidores('empresa')" class="btn" style="border-radius:8px 8px 0 0;border-bottom:none;margin-left:4px;${tabActivo==='empresa'?'background:var(--blue);color:#fff;':'background:var(--gray2);color:var(--navy);'}">🏢 Suplidores de Empresa (${supEmp.length})</button>
     </div>
     <div class="card"><div class="search-wrap"><input class="search-input" placeholder="Buscar por nombre, RNC, teléfono..." oninput="filterTable('sup-tbl',this.value)"></div>
       <div class="table-wrap"><table id="sup-tbl"><thead><tr>
@@ -5247,9 +5334,9 @@ function renderSuplidores(tabActivo){
 function nuevoSuplidor(tipoCtx){
   tipoCtx=tipoCtx||'vehiculo';
   const nextId='SUP-'+String(DB.suplidores.length+1).padStart(4,'0');
-  const tipoLabel=tipoCtx==='vehiculo'?'🚗 Suplidor de Vehículos':tipoCtx==='importadora'?'🏦 Compañía Importadora':'🏢 Suplidor de Empresa';
-  const tipoBg=tipoCtx==='vehiculo'?'var(--blue3)':tipoCtx==='importadora'?'#fef3c7':'var(--green2)';
-  const tipoColor=tipoCtx==='vehiculo'?'var(--blue)':tipoCtx==='importadora'?'#b45309':'var(--green)';
+  const tipoLabel=tipoCtx==='vehiculo'?'🚗 Suplidor de Vehículos':'🏢 Suplidor de Empresa';
+  const tipoBg=tipoCtx==='vehiculo'?'var(--blue3)':'var(--green2)';
+  const tipoColor=tipoCtx==='vehiculo'?'var(--blue)':'var(--green)';
   openModal('Nuevo '+tipoLabel,`
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;padding:10px 14px;background:${tipoBg};border-radius:var(--radius-sm);border:2px solid ${tipoColor}">
       <div style="font-weight:800;font-size:14px;color:${tipoColor}">${tipoLabel}</div>
@@ -5316,7 +5403,6 @@ function editarSuplidor(i){
         <select id="s-tipo-suplidor" style="border:2px solid var(--blue);font-weight:700">
           <option value="vehiculo" ${(s.tipoSuplidor||'vehiculo')==='vehiculo'?'selected':''}>🚗 Suplidor de Vehículos</option>
           <option value="empresa" ${s.tipoSuplidor==='empresa'?'selected':''}>🏢 Suplidor de Empresa</option>
-          <option value="importadora" ${s.tipoSuplidor==='importadora'?'selected':''}>🏦 Compañía Importadora</option>
         </select>
       </div>
     </div>
@@ -6811,9 +6897,10 @@ ${JSON.stringify(ventasData,null,2)}`;
 
 // ══ AUTORIZACIÓN DE COMPRA ══
 function renderAutorizaciones(){
-  const esAdmin=currentUser?.role==='admin'||canDo('admin');
-  const puedeEditar=esAdmin||canDo('editar');
-  const puedeEliminar=esAdmin||canDo('eliminar');
+  if(currentUser?.role!=='admin'){
+    document.getElementById('page-autorizaciones').innerHTML='<div style="text-align:center;padding:48px;color:var(--gray)">🔒 Solo el administrador puede gestionar autorizaciones de compra</div>';
+    return;
+  }
   const auths=DB.autorizaciones||[];
   const ds='background:#e2e8f0;color:#adb5bd;cursor:not-allowed;border:1px solid #dee2e6';
   document.getElementById('page-autorizaciones').innerHTML=`
@@ -6823,7 +6910,7 @@ function renderAutorizaciones(){
         <button id="auth-btn-imprimir" disabled class="btn btn-sm" style="${ds}" onclick="authAccion('imprimir')">🖨️ Imprimir</button>
         <button id="auth-btn-editar" disabled class="btn btn-sm" style="${ds}" onclick="authAccion('editar')">✏️ Editar</button>
         <button id="auth-btn-eliminar" disabled class="btn btn-sm" style="${ds}" onclick="authAccion('eliminar')">🗑 Eliminar</button>
-        ${esAdmin||puedeEditar?'<button class="btn btn-primary" onclick="nuevaAutorizacion()">➕ Nueva Autorización</button>':''}
+        <button class="btn btn-primary" onclick="nuevaAutorizacion()">➕ Nueva Autorización</button>
       </div>
     </div>
     <div class="card">
@@ -7930,6 +8017,8 @@ function aplicarColoresSistema(){
 
 // Aplicar colores al cargar
 document.addEventListener('DOMContentLoaded',()=>{
+  // Actualizar badge chat cada 10s
+  setInterval(()=>{if(currentUser)_chatActualizarBadge();},10000);
   if(DB.config?.colores)aplicarColoresSistema();
 });
 
@@ -7963,16 +8052,16 @@ window.addEventListener('load', ()=>{
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <script>
 const firebaseConfig = {
-  apiKey: "AIzaSyC9Hi0ti_7vq6OGWErEKzn3UJCpUqFA8zo",
-  authDomain: "fayre-auto.firebaseapp.com",
-  projectId: "fayre-auto",
-  storageBucket: "fayre-auto.firebasestorage.app",
-  messagingSenderId: "420798410670",
-  appId: "1:420798410670:web:c2d74bee477d0f2858e23f"
+  apiKey: "AIzaSyDjWQ8curIpW7aKitsqvxalhtKZmMwNVUI",
+  authDomain: "jeyco-auto.firebaseapp.com",
+  projectId: "jeyco-auto",
+  storageBucket: "jeyco-auto.firebasestorage.app",
+  messagingSenderId: "691295090653",
+  appId: "1:691295090653:web:654b323e6da172a781a834"
 };
 firebase.initializeApp(firebaseConfig);
 const _fbDB = firebase.firestore();
-const _fbCol = 'fayre';
+const _fbCol = 'jeyco';
 
 async function fbGuardar(key){
   try {
