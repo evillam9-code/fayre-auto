@@ -1430,6 +1430,7 @@ function renderCaja(){
     </div>
 
     <!-- BARRA ACUMULADA TOTAL -->
+    ${(currentUser?.role==='admin'||(currentUser?.modulos||[]).includes('verSaldoCaja'))?`
     <div style="background:var(--navy);border-radius:14px;padding:20px 24px;margin-bottom:14px">
       <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#94a3b8;letter-spacing:.8px;margin-bottom:14px">
         💰 SALDO ACUMULADO — TODAS LAS CUENTAS
@@ -1480,7 +1481,6 @@ function renderCaja(){
     </div>
 
     <!-- Selector de vista por cuentas -->
-    ${(currentUser?.role==='admin'||(currentUser?.modulos||[]).includes('verSaldoCaja'))?`
     <div class="card" style="margin-bottom:14px;padding:14px 16px">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
         <div style="font-size:14px;font-weight:700">🏦 Saldo por Cuentas Bancarias</div>
@@ -1501,8 +1501,7 @@ function renderCaja(){
     <!-- Tarjetas por banco/cuenta -->
     ${Object.keys(bancoGroups).length>0?bancoCards:'<div class="card" style="text-align:center;padding:24px;color:var(--gray)">Sin movimientos registrados en este período</div>'}
     `:''}<!-- fin verSaldoCaja -->
-
-    <!-- Balance del mes -->
+    ${(currentUser?.role==='admin'||(currentUser?.modulos||[]).includes('verSaldoCaja'))?`
     <div class="card" style="background:var(--navy);margin-bottom:16px">
       <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#94a3b8;margin-bottom:10px;text-align:center">📅 Resumen del mes seleccionado</div>
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;text-align:center">
@@ -1511,7 +1510,7 @@ function renderCaja(){
         <div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#94a3b8;margin-bottom:4px">Balance RD$</div><div style="font-size:18px;font-weight:800;color:${balRD>=0?'#4ade80':'#f87171'}">${fmt(balRD)}</div></div>
         <div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#94a3b8;margin-bottom:4px">Balance USD</div><div style="font-size:18px;font-weight:800;color:${balUSD>=0?'#4ade80':'#f87171'}">${fmtUSD(balUSD)}</div></div>
       </div>
-    </div>
+    </div>`:''}
     <div class="card">
       <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
         <select id="caja-tab" onchange="renderCaja()" style="padding:7px 12px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
