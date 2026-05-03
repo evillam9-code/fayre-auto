@@ -398,7 +398,9 @@ let DB={
   cxc:ls('cxc')||[],
   autorizaciones:ls('autorizaciones')||[],
   seguros:ls('seguros')||[],
-  facturasExternas:ls('facturasExternas')||[]
+  facturasExternas:ls('facturasExternas')||[],
+  chat:ls('chat')||{},
+  presencia:ls('presencia')||{}
 };
 function sDB(k){ss(k,DB[k]);}
 
@@ -1249,7 +1251,7 @@ function gastosVehiculo(vid){
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;background:var(--gray2);padding:12px;border-radius:8px">
       <div class="form-field" style="margin:0"><label style="font-size:10px">Costo del Vehículo (RD$)</label>
         <input type="number" id="gv-costo-veh" value="${costo||0}" step="0.01" onchange="actualizarCostoVeh('${vid}',this.value)">
-        <div style="font-size:11px;color:var(--gray);margin-top:2px">USD: $${(costo/tasa).toFixed(2)}</div>
+        <div style="font-size:11px;color:var(--gray);margin-top:2px">USD: ${fmtUSD(costo/tasa)}</div>
       </div>
       <div class="form-field" style="margin:0"><label style="font-size:10px">Suplidor</label>
         <div style="display:flex;gap:6px">
@@ -1262,9 +1264,9 @@ function gastosVehiculo(vid){
       </div>
     </div>
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px">
-      <div style="text-align:center;padding:12px;background:var(--blue3);border-radius:8px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--blue)">Costo Vehículo</div><div style="font-size:16px;font-weight:800;color:var(--blue)">${fmt(costo)}</div><div style="font-size:11px;color:var(--gray)">$${(costo/tasa).toFixed(2)} USD</div></div>
-      <div style="text-align:center;padding:12px;background:var(--red2);border-radius:8px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--red)">Total Gastos</div><div style="font-size:16px;font-weight:800;color:var(--red)">${fmt(totalGastos)}</div><div style="font-size:11px;color:var(--gray)">$${(totalGastos/tasa).toFixed(2)} USD</div></div>
-      <div style="text-align:center;padding:12px;background:var(--amber2);border-radius:8px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--amber)">Total Inversión</div><div style="font-size:16px;font-weight:800;color:var(--amber)">${fmt(totalInversion)}</div><div style="font-size:11px;color:var(--gray)">$${(totalInversion/tasa).toFixed(2)} USD</div></div>
+      <div style="text-align:center;padding:12px;background:var(--blue3);border-radius:8px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--blue)">Costo Vehículo</div><div style="font-size:16px;font-weight:800;color:var(--blue)">${fmt(costo)}</div><div style="font-size:11px;color:var(--gray)">${fmtUSD(costo/tasa)}</div></div>
+      <div style="text-align:center;padding:12px;background:var(--red2);border-radius:8px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--red)">Total Gastos</div><div style="font-size:16px;font-weight:800;color:var(--red)">${fmt(totalGastos)}</div><div style="font-size:11px;color:var(--gray)">${fmtUSD(totalGastos/tasa)}</div></div>
+      <div style="text-align:center;padding:12px;background:var(--amber2);border-radius:8px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--amber)">Total Inversión</div><div style="font-size:16px;font-weight:800;color:var(--amber)">${fmt(totalInversion)}</div><div style="font-size:11px;color:var(--gray)">${fmtUSD(totalInversion/tasa)}</div></div>
     </div>
     <div style="background:var(--gray2);border-radius:8px;padding:12px;margin-bottom:14px">
       <div style="font-size:13px;font-weight:700;margin-bottom:10px">➕ Agregar Gasto</div>
@@ -1548,7 +1550,7 @@ function nuevoCajaMov(tipo){
       <div class="form-field"><label class="required">Fecha</label><input type="date" id="cj-fecha" value="${today()}"></div>
       <div class="form-field"><label class="required">Monto</label>
         <div style="display:flex;gap:6px">
-          <input type="text" id="cj-monto" placeholder="0.00" oninput="fmtMoneyInput(this)" style="flex:1">
+          <input type="text" id="cj-monto" placeholder="0.00" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)" style="flex:1">
           <select id="cj-moneda" style="width:80px"><option value="RD$">RD$</option><option value="USD">USD</option></select>
         </div>
       </div>
@@ -1788,7 +1790,7 @@ function calcPendienteGasto(){
   const factura=parseFloat(document.getElementById('g-monto-factura')?.value||0);
   const abonado=parseFloat(document.getElementById('g-monto-abonado')?.value||0);
   const pend=document.getElementById('g-monto-pendiente');
-  if(pend)pend.value=Math.max(0,factura-abonado).toFixed(2);
+  if(pend)pend.value=fmtMoneyDisplay(Math.max(0,factura-abonado));
   // Actualizar estado automático
   const status=document.getElementById('g-status');
   if(status){
@@ -1985,7 +1987,7 @@ function calcMontoNomina(salario){
   const tipo=document.getElementById('np-tipo')?.value;
   const m={MEN:salario,'1Q':salario/2,'2Q':salario/2,SEM:salario/4,COM:0}[tipo]||salario;
   const inp=document.getElementById('np-monto');
-  if(inp)inp.value=m.toFixed(2);
+  if(inp)inp.value=fmtMoneyDisplay(m);
 }
 function guardarPagoNomina(i){
   const monto=parseFloat(document.getElementById('np-monto').value||0);
@@ -2577,25 +2579,6 @@ function guardarPermisosUsuarioConfig(i){
   }
 }
 
-
-function agregarBancoConfig(){
-  const list=document.getElementById('cf-bancos-list');
-  if(!list)return;
-  const bi=(DB.config.bancoCuentas||[]).length+list.querySelectorAll('[id^="cf-banco-nombre-"]').length;
-  const div=document.createElement('div');
-  div.style.cssText='border:1.5px solid var(--blue3);border-radius:8px;padding:12px;background:#f8fafc';
-  div.innerHTML=`<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px"><input type="text" id="cf-banco-nombre-new-${Date.now()}" placeholder="Nombre del banco" style="flex:1;font-weight:700"><button class="btn btn-red btn-sm" onclick="this.closest('[style]').remove()">🗑 Eliminar</button></div><div style="font-size:12px;color:var(--gray)">Guarda primero para agregar cuentas a este banco.</div>`;
-  list.appendChild(div);
-}
-function agregarCuentaBanco(bi){
-  const cuentasDiv=document.getElementById('cf-banco-cuentas-'+bi);
-  if(!cuentasDiv)return;
-  const ci=cuentasDiv.querySelectorAll('[id^="cf-banco-cuenta-"]').length;
-  const div=document.createElement('div');
-  div.style.cssText='display:flex;gap:6px;align-items:center';
-  div.innerHTML=`<select id="cf-banco-tipo-${bi}-new-${ci}" style="width:140px"><option value="Ahorro">Ahorro</option><option value="Corriente">Corriente</option><option value="Caja">Caja</option></select><select id="cf-banco-moneda-${bi}-new-${ci}" style="width:120px"><option value="RD$">RD$ Pesos</option><option value="USD">USD Dólares</option></select><input type="text" id="cf-banco-cuenta-${bi}-new-${ci}" placeholder="Número de cuenta" style="flex:1"><button class="btn btn-red btn-sm" onclick="this.parentElement.remove()">🗑</button>`;
-  cuentasDiv.appendChild(div);
-}
 function eliminarBancoConfig(bi){
   if(!confirm('¿Eliminar este banco y todas sus cuentas?'))return;
   const bcs=DB.config.bancoCuentas||[];
@@ -3597,7 +3580,7 @@ function calcPendienteGVeh(){
   const f=parseFloat((document.getElementById('ngv-factura')?.value||'0').replace(/,/g,''));
   const a=parseFloat((document.getElementById('ngv-abono')?.value||'0').replace(/,/g,''));
   const p=document.getElementById('ngv-pendiente');
-  if(p)p.value=(f-a).toFixed(2);
+  if(p)p.value=fmtMoneyDisplay(f-a);
 }
 
 function guardarNuevoGastoVeh(){
@@ -4232,7 +4215,7 @@ function nuevaVenta(){
       <div id="sv-endoso-wrap">
         <div class="form-row c2" style="margin-bottom:0">
           <div class="form-field" style="margin:0"><label style="font-size:10px">💰 Costo del Endoso (lo paga la empresa)</label>
-            <input type="text" id="sv-endoso-monto" value="0" oninput="fmtMoneyInput(this)" placeholder="0.00">
+            <input type="text" id="sv-endoso-monto" value="0" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)" placeholder="0.00">
           </div>
           <div style="font-size:11px;color:var(--blue);padding:8px;background:#fff;border-radius:6px;align-self:flex-end">
             ℹ️ Se creará CXP automática al gestor. Se suma al costo del vehículo.
@@ -4243,7 +4226,7 @@ function nuevaVenta(){
       <div id="sv-traspaso-wrap" style="display:none">
         <div class="form-row c2" style="margin-bottom:8px">
           <div class="form-field" style="margin:0"><label style="font-size:10px">💰 Costo del Traspaso / Matrícula</label>
-            <input type="text" id="sv-traspaso-monto" value="0" oninput="fmtMoneyInput(this)" placeholder="0.00">
+            <input type="text" id="sv-traspaso-monto" value="0" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)" placeholder="0.00">
           </div>
           <div class="form-field" style="margin:0"><label style="font-size:10px">¿El cliente pagó el traspaso?</label>
             <select id="sv-traspaso-pagado" onchange="toggleTraspasoFields()">
@@ -4272,7 +4255,7 @@ function nuevaVenta(){
         <div class="form-row c3" style="margin-bottom:8px">
           <div class="form-field" style="margin:0"><label style="font-size:10px">Marca / Modelo</label><input type="text" id="sv-rec-vehiculo" placeholder="Ej: Toyota Corolla 2018"></div>
           <div class="form-field" style="margin:0"><label style="font-size:10px">Chasis / VIN</label><input type="text" id="sv-rec-vin" placeholder="Número de chasis o VIN" maxlength="17" style="text-transform:uppercase;font-family:monospace" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'')"></div>
-          <div class="form-field" style="margin:0"><label style="font-size:10px">Kilometraje</label><input type="text" id="sv-rec-km" placeholder="0" oninput="fmtMoneyInput(this)"></div>
+          <div class="form-field" style="margin:0"><label style="font-size:10px">Kilometraje</label><input type="text" id="sv-rec-km" placeholder="0" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)"></div>
         </div>
         <div class="form-row c2" style="margin-bottom:0">
           <div class="form-field" style="margin:0"><label style="font-size:10px">Monto Recibido</label><input type="text" id="sv-rec-monto" placeholder="0.00" oninput="fmtMoneyInput(this);calcPend()"></div>
@@ -4461,7 +4444,7 @@ function calcPend(){
   const i=parseFloat((document.getElementById('sv-inicial')?.value||'0').replace(/,/g,''));
   const rec=parseFloat((document.getElementById('sv-rec-monto')?.value||'0').replace(/,/g,''));
   const pd=document.getElementById('sv-pendiente');
-  if(pd)pd.value=Math.max(0,p-i-rec).toFixed(2);
+  if(pd)pd.value=fmtMoneyDisplay(Math.max(0,p-i-rec));
   // Mostrar equivalente si es USD
   const moneda=document.getElementById('sv-moneda')?.value||'RD$';
   const tasa=parseFloat(document.getElementById('sv-tasa')?.value||DB.config.tasaCambio||60);
@@ -4682,7 +4665,7 @@ function abonarVenta(vid){
     </div>
     <div class="form-row c2">
       <div class="form-field"><label class="required">Monto a Cobrar</label>
-        <input type="text" id="ab-monto" value="${v.pendiente}" placeholder="0.00" oninput="fmtMoneyInput(this)">
+        <input type="text" id="ab-monto" value="${v.pendiente}" placeholder="0.00" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
       </div>
       <div class="form-field"><label>Cuenta</label>
         <select id="ab-cuenta">${cuentas.map(c=>`<option>${escHtml(c)}</option>`).join('')}</select>
@@ -4734,10 +4717,10 @@ function editarVenta(vid){
   openModal('✏️ Editar Venta — '+escHtml(v.factura),`
     <div class="form-row c2">
       <div class="form-field"><label>Precio de Venta</label>
-        <input type="text" id="ev-precio" value="${v.precioVenta||0}" oninput="fmtMoneyInput(this);document.getElementById('ev-pendiente').value=Math.max(0,parseFloat(this.value.replace(/,/g,'')||0)-parseFloat(document.getElementById('ev-inicial').value.replace(/,/g,'')||0)).toFixed(2)">
+        <input type="text" id="ev-precio" value="${v.precioVenta||0}" oninput="fmtMoneyInput(this);document.getElementById('ev-pendiente').value=fmtMoneyDisplay(Math.max(0,parseFloat(this.value.replace(/,/g,'')||0)-parseFloat(document.getElementById('ev-inicial').value.replace(/,/g,'')||0)))">
       </div>
       <div class="form-field"><label>Inicial Recibido</label>
-        <input type="text" id="ev-inicial" value="${v.inicial||0}" oninput="fmtMoneyInput(this);document.getElementById('ev-pendiente').value=Math.max(0,parseFloat(document.getElementById('ev-precio').value.replace(/,/g,'')||0)-parseFloat(this.value.replace(/,/g,'')||0)).toFixed(2)">
+        <input type="text" id="ev-inicial" value="${v.inicial||0}" oninput="fmtMoneyInput(this);document.getElementById('ev-pendiente').value=fmtMoneyDisplay(Math.max(0,parseFloat(document.getElementById('ev-precio').value.replace(/,/g,'')||0)-parseFloat(this.value.replace(/,/g,'')||0)))">
       </div>
     </div>
     <div class="form-row c3">
@@ -5138,7 +5121,7 @@ function nuevaCotizacion(){
     <div id="cot-veh-info" style="display:none;background:var(--blue3);border-radius:8px;padding:10px;margin-bottom:12px;font-size:12px"></div>
     <div class="form-row c2">
       <div class="form-field"><label class="required">Monto a Cotizar</label>
-        <input type="text" id="cot-precio" placeholder="0.00" oninput="fmtMoneyInput(this)">
+        <input type="text" id="cot-precio" placeholder="0.00" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
       </div>
       <div class="form-field"><label>Moneda</label>
         <select id="cot-moneda"><option value="RD$">RD$ — Pesos</option><option value="USD">USD — Dólares</option></select>
@@ -5203,7 +5186,7 @@ function editarCotizacion(i){
       <div class="form-field"><label>Fecha</label><input type="date" id="cot-fecha" value="${c.fecha||today()}"></div>
     </div>
     <div class="form-row c3">
-      <div class="form-field"><label>Monto</label><input type="text" id="cot-precio" value="${c.precio||''}" oninput="fmtMoneyInput(this)"></div>
+      <div class="form-field"><label>Monto</label><input type="text" id="cot-precio" value="${c.precio||''}" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)"></div>
       <div class="form-field"><label>Moneda</label><select id="cot-moneda"><option value="RD$" ${(c.moneda||'RD$')==='RD$'?'selected':''}>RD$</option><option value="USD" ${c.moneda==='USD'?'selected':''}>USD</option></select></div>
       <div class="form-field"><label>Válida Hasta</label><input type="date" id="cot-vence2" value="${c.fechaVence||''}"></div>
     </div>
@@ -5316,7 +5299,7 @@ function formCliente(c){return`
       <input type="text" id="c-doc" value="${escHtml(c?.documento||'')}" maxlength="13" placeholder="${c?.tipoDoc==='RNC'?'000-00000-0':c?.tipoDoc==='Pasaporte'?'Ej: AB123456':'000-0000000-0'}" oninput="fmtDocInput('c-tipodoc','c-doc')">
     </div>
     <div class="form-field"><label>Ingresos Mensuales</label>
-      <input type="text" id="c-ingresos" value="${c?.ingresos||''}" placeholder="0.00" oninput="fmtMoneyInput(this)">
+      <input type="text" id="c-ingresos" value="${c?.ingresos||''}" placeholder="0.00" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
     </div>
   </div>
   <div class="form-row c2">
@@ -5531,11 +5514,17 @@ function fmtTelInput(el){
   el.value=v;
 }
 function fmtMoneyInput(el){
-  // Permite solo números y punto decimal, formatea con comas al salir
   let v=el.value.replace(/[^0-9.]/g,'');
   const parts=v.split('.');
   if(parts.length>2)v=parts[0]+'.'+parts.slice(1).join('');
   el.value=v;
+}
+function fmtMoneyBlur(el){
+  const n=parseFloat(el.value.replace(/,/g,'')||0);
+  if(!isNaN(n))el.value=n.toLocaleString('es-DO',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+function fmtMoneyFocus(el){
+  el.value=el.value.replace(/,/g,'');
 }
 function fmtMoneyDisplay(val){
   const n=parseFloat(val||0);
@@ -5921,7 +5910,7 @@ function calcCXPMPend(){
   const m=parseFloat((document.getElementById('cxpm-monto')?.value||'0').replace(/,/g,''));
   const a=parseFloat((document.getElementById('cxpm-abono')?.value||'0').replace(/,/g,''));
   const p=document.getElementById('cxpm-pend');
-  if(p)p.value=Math.max(0,m-a).toFixed(2);
+  if(p)p.value=fmtMoneyDisplay(Math.max(0,m-a));
 }
 function actualizarCuentasCXPM(){
   const bancoEl=document.getElementById('cxpm-banco');
@@ -6039,7 +6028,7 @@ function abonarDesdeCXP(gid){
     </div>
     <div class="form-row c2">
       <div class="form-field"><label class="required">Monto a Pagar (${esUSD?'USD':'RD$'})</label>
-        <input type="text" id="cxpp-monto" value="${g.montoPendiente||0}" oninput="fmtMoneyInput(this)" placeholder="0.00">
+        <input type="text" id="cxpp-monto" value="${g.montoPendiente||0}" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)" placeholder="0.00">
       </div>
       <div class="form-field"><label>Banco</label>
         <select id="cxpp-banco" onchange="actualizarCuentasCXPP()">
@@ -6358,7 +6347,7 @@ function renderCXC(){
         <div class="stat-ico">🔴</div>
         <div class="stat-label">Saldo Pendiente</div>
         <div class="stat-value" style="color:var(--red)">${fV(totalPend)}</div>
-        ${esUSD?`<div class="stat-sub">${fmt(totalPend*tasa)}</div>`:`<div class="stat-sub">$${(totalPend/tasa).toFixed(2)} USD</div>`}
+        ${esUSD?`<div class="stat-sub">${fmt(totalPend*tasa)}</div>`:`<div class="stat-sub">${fmtUSD(totalPend/tasa)}</div>`}
       </div>
     </div>
 
@@ -6498,7 +6487,7 @@ function calcSaldoCXC(){
   const total=parseFloat(document.getElementById('ncxc-total')?.value||0);
   const abono=parseFloat(document.getElementById('ncxc-abono')?.value||0);
   const saldo=document.getElementById('ncxc-saldo');
-  if(saldo)saldo.value=Math.max(0,total-abono).toFixed(2);
+  if(saldo)saldo.value=fmtMoneyDisplay(Math.max(0,total-abono));
   calcEquivCXC();
 }
 function guardarCXCManual(){
@@ -6563,7 +6552,7 @@ function abonarCXC(id){
     </div>
     <div class="form-row c2">
       <div class="form-field"><label class="required">Monto a Cobrar (${esUSD?'USD':'RD$'})</label>
-        <input type="text" id="cxca-monto" value="${x.saldo}" oninput="fmtMoneyInput(this)" placeholder="0.00">
+        <input type="text" id="cxca-monto" value="${x.saldo}" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)" placeholder="0.00">
       </div>
       <div class="form-field"><label>Fecha</label>
         <input type="date" id="cxca-fecha" value="${today()}">
@@ -7420,7 +7409,7 @@ function _formSeguro(s){
         <input type="text" id="sg-abonado" value="${abon||0}" oninput="fmtMoneyInput(this);calcPendSeguro()" placeholder="0.00">
       </div>
       <div class="form-field"><label>Pendiente</label>
-        <input type="text" id="sg-pendiente" value="${Math.max(0,prim-abon).toFixed(2)}" readonly style="background:#f8fafc;font-weight:700;color:var(--red)">
+        <input type="text" id="sg-pendiente" value="${fmtMoneyDisplay(Math.max(0,prim-abon))}" readonly style="background:#f8fafc;font-weight:700;color:var(--red)">
       </div>
     </div>
     <div class="form-row c3">
@@ -7438,7 +7427,7 @@ function calcPendSeguro(){
   const p=parseFloat((document.getElementById('sg-prima')?.value||'0').replace(/,/g,''));
   const a=parseFloat((document.getElementById('sg-abonado')?.value||'0').replace(/,/g,''));
   const el=document.getElementById('sg-pendiente');
-  if(el)el.value=Math.max(0,p-a).toFixed(2);
+  if(el)el.value=fmtMoneyDisplay(Math.max(0,p-a));
 }
 function nuevoSeguro(){
   openModal('🛡️ Nuevo Seguro',_formSeguro(null),
@@ -7505,7 +7494,7 @@ function abonarSeguro(id){
     </div>
     <div class="form-row c2">
       <div class="form-field"><label class="required">Monto a Pagar</label>
-        <input type="text" id="sgp-monto" value="${pendiente.toFixed(2)}" oninput="fmtMoneyInput(this)" placeholder="0.00">
+        <input type="text" id="sgp-monto" value="${fmtMoneyDisplay(pendiente)}" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)" placeholder="0.00">
       </div>
       <div class="form-field"><label>Cuenta de Pago</label>
         <select id="sgp-cuenta">${cuentas.map(c=>`<option ${c===s.cuenta?'selected':''}>${escHtml(c)}</option>`).join('')}</select>
@@ -7716,7 +7705,7 @@ function calcPendFE(){
   const m=parseFloat((document.getElementById('fe-monto')?.value||'0').replace(/,/g,''));
   const a=parseFloat((document.getElementById('fe-abono')?.value||'0').replace(/,/g,''));
   const p=document.getElementById('fe-pendiente');
-  if(p)p.value=Math.max(0,m-a).toFixed(2);
+  if(p)p.value=fmtMoneyDisplay(Math.max(0,m-a));
 }
 function guardarFacturaExterna(nFact){
   const vehiculo=document.getElementById('fe-vehiculo').value.trim();
