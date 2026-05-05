@@ -601,6 +601,8 @@ function doLogin(){
     actualizarLogoSidebar();
     showPage('dashboard');
     setTimeout(checkAlerts,1500);
+    // Iniciar presencia global al entrar (no depende del chat)
+    _iniciarPresenciaGlobal();
   };
   // Mostrar bienvenida con datos del localStorage primero
   _actualizarWelcome();
@@ -662,7 +664,18 @@ function aplicarPermisosNav(){
     nav.style.display=tiene?'':'none';
   });
 }
-function doLogout(){currentUser=null;document.getElementById('login-screen').style.display='flex';document.getElementById('app').style.display='none';document.getElementById('li-user').value='';document.getElementById('li-pass').value='';}
+function doLogout(){
+  if(currentUser){
+    try{const p=JSON.parse(localStorage.getItem('fayre_presencia')||'{}');delete p[currentUser.id];localStorage.setItem('fayre_presencia',JSON.stringify(p));}catch{}
+    if(_presenciaBC)try{_presenciaBC.postMessage({uid:currentUser.id,ts:0});}catch{}
+    if(_presenciaGlobalInterval)clearInterval(_presenciaGlobalInterval);
+  }
+  currentUser=null;
+  document.getElementById('login-screen').style.display='flex';
+  document.getElementById('app').style.display='none';
+  document.getElementById('li-user').value='';
+  document.getElementById('li-pass').value='';
+}
 
 // Modal NO cierra con click fuera ni Escape — solo con botón explícito
 
@@ -2213,8 +2226,11 @@ function renderUsuarios(){
           const mods=u.role==='admin'?['Dashboard','Nueva Venta','Ventas','Inventario','Clientes','Suplidores','Gastos','Nómina','Informes','Caja','CxC','CxP','Usuarios','Configuración']:(u.modulos||[]);
           const modsLabel=mods.map(id=>{const m=MODS.find(x=>x.id===id);return m?m.label:id;});
           const ahora=Date.now();
-          const ult=(DB.presencia||{})[u.id];
-          const enLinea=ult&&(ahora-ult)<60000;
+          // Leer presencia global (entre pestañas locales) y presencia de Firebase
+          let presenciaGlobal={};
+          try{presenciaGlobal=JSON.parse(localStorage.getItem('fayre_presencia')||'{}');}catch{}
+          const ult=presenciaGlobal[u.id]||(DB.presencia||{})[u.id]||0;
+          const enLinea=ult>0&&(ahora-ult)<30000;
           const estadoHTML=enLinea
             ?'<span style="display:inline-flex;align-items:center;gap:5px;background:#dcfce7;color:#16a34a;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700"><span style="width:7px;height:7px;border-radius:50%;background:#16a34a;display:inline-block"></span>En línea</span>'
             :'<span style="display:inline-flex;align-items:center;gap:5px;background:#f1f5f9;color:#64748b;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600"><span style="width:7px;height:7px;border-radius:50%;background:#94a3b8;display:inline-block"></span>Desconectado</span>';
@@ -3125,18 +3141,81 @@ function _chatScrollBottom(){
   setTimeout(()=>{const d=document.getElementById('chat-messages');if(d)d.scrollTop=d.scrollHeight;},50);
 }
 
+// ══ PRESENCIA GLOBAL (funciona sin servidor, entre pestañas locales) ══
+let _presenciaGlobalInterval=null;
+let _presenciaBC=null; // BroadcastChannel
+
+function _iniciarPresenciaGlobal(){
+  if(!currentUser)return;
+  // Leer presencia compartida del localStorage global (sin prefijo ds_)
+  function _leerPresenciaGlobal(){
+    try{return JSON.parse(localStorage.getItem('fayre_presencia')||'{}');}catch{return {};}
+  }
+  function _escribirPresenciaGlobal(uid,ts){
+    const p=_leerPresenciaGlobal();
+    p[uid]=ts;
+    localStorage.setItem('fayre_presencia',JSON.stringify(p));
+  }
+  // Sincronizar hacia DB.presencia desde el storage global
+  function _sincPresencia(){
+    const global=_leerPresenciaGlobal();
+    DB.presencia=Object.assign(DB.presencia||{},global);
+  }
+  // Registrar este usuario como activo
+  function _ping(){
+    if(!currentUser)return;
+    const ts=Date.now();
+    _escribirPresenciaGlobal(currentUser.id,ts);
+    if(!DB.presencia)DB.presencia={};
+    DB.presencia[currentUser.id]=ts;
+    // Broadcast a otras pestañas
+    if(_presenciaBC){try{_presenciaBC.postMessage({uid:currentUser.id,ts});}catch{}}
+  }
+  // BroadcastChannel para comunicación entre pestañas del mismo archivo
+  try{
+    if(_presenciaBC)_presenciaBC.close();
+    _presenciaBC=new BroadcastChannel('fayre_presencia');
+    _presenciaBC.onmessage=function(e){
+      if(e.data&&e.data.uid&&e.data.ts){
+        if(!DB.presencia)DB.presencia={};
+        DB.presencia[e.data.uid]=e.data.ts;
+        // Si la página de usuarios está abierta, refrescar silenciosamente
+        const pUsuarios=document.getElementById('page-usuarios');
+        if(pUsuarios&&pUsuarios.classList.contains('active')){
+          clearTimeout(window._presenciaRefreshTimer);
+          window._presenciaRefreshTimer=setTimeout(renderUsuarios,500);
+        }
+      }
+    };
+  }catch(e){console.warn('BroadcastChannel no disponible:',e.message);}
+  // Leer presencia de otras pestañas ya abiertas
+  _sincPresencia();
+  // Hacer ping inmediato
+  _ping();
+  // Ping cada 10 segundos
+  if(_presenciaGlobalInterval)clearInterval(_presenciaGlobalInterval);
+  _presenciaGlobalInterval=setInterval(()=>{
+    if(!currentUser){clearInterval(_presenciaGlobalInterval);return;}
+    _sincPresencia();
+    _ping();
+  },10000);
+  // Limpiar al cerrar/salir
+  window.addEventListener('beforeunload',()=>{
+    if(currentUser){
+      const p=_leerPresenciaGlobal();
+      delete p[currentUser.id];
+      localStorage.setItem('fayre_presencia',JSON.stringify(p));
+      if(_presenciaBC)try{_presenciaBC.postMessage({uid:currentUser.id,ts:0});}catch{}
+    }
+  },{once:true});
+}
+
 function _chatIniciarPresencia(){
-  if(!DB.presencia)DB.presencia={};
-  DB.presencia[currentUser.id]=Date.now();
-  sDB('presencia');
-  if(typeof fbGuardar==='function'&&window._fbActivo)fbGuardar('presencia').catch(()=>{});
+  // La presencia ya la maneja _iniciarPresenciaGlobal, solo actualizamos badge
+  if(!currentUser)return;
   if(_presenceInterval)clearInterval(_presenceInterval);
   _presenceInterval=setInterval(()=>{
     if(!currentUser)return;
-    if(!DB.presencia)DB.presencia={};
-    DB.presencia[currentUser.id]=Date.now();
-    sDB('presencia');
-    if(typeof fbGuardar==='function'&&window._fbActivo)fbGuardar('presencia').catch(()=>{});
     _chatActualizarBadge();
   },20000);
 }
