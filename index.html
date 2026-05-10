@@ -6,7 +6,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<title>CHINITO — Sistema de Gestión Vehicular</title>
+<title>FAYRE — Sistema de Gestión Vehicular</title>
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 :root{--navy:#0f172a;--navy2:#1e293b;--navy3:#334155;--blue:#2563eb;--blue2:#1d4ed8;--blue3:#dbeafe;--green:#16a34a;--green2:#dcfce7;--red:#dc2626;--red2:#fee2e2;--amber:#d97706;--amber2:#fef3c7;--purple:#7c3aed;--purple2:#ede9fe;--gray:#6b7280;--gray2:#f1f5f9;--gray3:#e2e8f0;--white:#ffffff;--radius:12px;--radius-sm:7px;--shadow:0 2px 8px rgba(15,23,42,.10);--shadow-lg:0 8px 40px rgba(0,0,0,.16);--sidebar-bg:#0f172a;--main-bg:#f1f5f9}
@@ -103,7 +103,6 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
 .alert-notif .notif-msg{font-size:12px;color:#64748b}
 .alert-notif .notif-close{font-size:16px;color:#94a3b8;cursor:pointer;padding:0 4px}
 @keyframes slideIn{from{opacity:0;transform:translateX(100px)}to{opacity:1;transform:translateX(0)}}
-@keyframes pulse-dot{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.4)}}
 .two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 .chart-bar-wrap{display:flex;flex-direction:column;gap:10px}
 .chart-bar-row{display:flex;align-items:center;gap:10px}
@@ -145,10 +144,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
   .btn-sm{padding:7px 10px;font-size:12px}
   .btn-row{flex-direction:column;gap:8px}
   .btn-row .btn{width:100%;justify-content:center}
-  .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:8px;overflow-y:visible}
-  *{-webkit-tap-highlight-color:transparent}
-  input,select,textarea,button{touch-action:manipulation}
-  body{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+  .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:8px}
   table{min-width:520px;font-size:12px}
   th{padding:9px 10px;font-size:10px}
   td{padding:9px 10px;font-size:12px}
@@ -180,6 +176,8 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
   .lft{display:none!important}
   .rgt{width:100%!important}
 }
+
+/* ══ CHAT ══ */
 .chat-wrap{display:grid;grid-template-columns:220px 1fr;height:calc(100vh - 160px);gap:0;border:1.5px solid var(--gray3);border-radius:var(--radius);overflow:hidden;background:#fff}
 .chat-list{border-right:1.5px solid var(--gray3);overflow-y:auto;background:var(--gray2)}
 .chat-list-header{padding:12px 14px;font-size:12px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--gray3);background:#fff}
@@ -267,13 +265,12 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
       <img id="sb-logo-img" src="" style="display:none;max-height:48px;max-width:140px;object-fit:contain;border-radius:6px">
       <span id="sb-logo-text" style="font-size:15px;font-weight:800;color:#fff"><span style="color:#60a5fa">Dealer</span>System</span>
     </div>
-    <div class="sb-user" style="cursor:pointer" onclick="abrirCambiarContrasena()" title="Cambiar contraseña">
+    <div class="sb-user">
       <div class="user-av" id="user-initials">A</div>
-      <div style="overflow:hidden;flex:1">
+      <div style="overflow:hidden">
         <div style="font-size:13px;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" id="top-username">Admin</div>
         <div style="font-size:11px;color:#94a3b8" id="top-role">Administrador</div>
       </div>
-      <div style="color:#94a3b8;font-size:14px;flex-shrink:0" title="Cambiar contraseña">🔑</div>
     </div>
     <div class="sb-sec">PRINCIPAL</div>
     <div class="nav-item active" onclick="showPage('dashboard')" id="nav-dashboard"><span class="ico">🏠</span>Inicio</div>
@@ -300,9 +297,9 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
     <div class="sb-sec">SISTEMA</div>
     <div class="nav-item" onclick="showPage('usuarios')" id="nav-usuarios"><span class="ico">👥</span>Usuarios</div>
     <div class="nav-item" onclick="showPage('alertas')" id="nav-alertas"><span class="ico">🔔</span>Alertas del Sistema</div>
-    <div class="nav-item" onclick="showPage('cuentasBancarias')" id="nav-cuentasBancarias"><span class="ico">🏦</span>Cuentas Bancarias</div>
-        <div class="nav-item" onclick="showPage('cumpleanos')" id="nav-cumpleanos"><span class="ico">🎂</span>Cumpleaños</div>
-      <div class="nav-item" id="nav-backup-btn" style="display:none;color:var(--green)" onclick="showPage('backup')"><span class="ico">💾</span>Backup</div>
+    <div class="nav-item" onclick="showPage('cumpleanos')" id="nav-cumpleanos"><span class="ico">🎂</span>Cumpleaños</div>
+    <div class="nav-item" onclick="showPage('cuentas')" id="nav-cuentas"><span class="ico">🏦</span>Cuentas</div>
+    <div class="nav-item" id="nav-backup-btn" style="display:none;color:var(--green)" onclick="showPage('backup')"><span class="ico">💾</span>Backup</div>
     <div class="nav-item" onclick="showPage('config')" id="nav-config"><span class="ico">⚙️</span>Configuración</div>
     <div style="margin-top:auto;border-top:1px solid var(--gray3)">
       <div style="padding:10px 16px 6px;font-size:10px;color:#94a3b8;text-align:center;line-height:1.5">
@@ -322,7 +319,10 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
         <div id="fb-dot" style="width:8px;height:8px;border-radius:50%;background:#64748b;flex-shrink:0"></div>
         <span id="fb-text">Local</span>
       </div>
-      <div style="font-size:13px;font-weight:600;color:#fff" id="topbar-nombre">Admin</div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div style="font-size:13px;font-weight:600;color:#fff" id="topbar-nombre">Admin</div>
+        <button onclick="cambiarMiContrasena()" title="Cambiar contraseña" style="background:rgba(255,255,255,0.12);border:none;border-radius:6px;width:28px;height:28px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;color:#fff;flex-shrink:0" onmouseover="this.style.background='rgba(255,255,255,0.22)'" onmouseout="this.style.background='rgba(255,255,255,0.12)'">🔑</button>
+      </div>
     </div>
     <div class="main">
       <div class="page active" id="page-dashboard"></div>
@@ -337,17 +337,17 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
       <div class="page" id="page-informes"></div>
       <div class="page" id="page-usuarios"></div>
       <div class="page" id="page-alertas"></div>
-      <div class="page" id="page-cuentasBancarias"></div>
       <div class="page" id="page-config"></div>
       <div class="page" id="page-gastosVeh"></div>
       <div class="page" id="page-cxp"></div>
       <div class="page" id="page-cxc"></div>
       <div class="page" id="page-autorizaciones"></div>
-      <div class="page" id="page-chat"></div>
       <div class="page" id="page-seguros"></div>
       <div class="page" id="page-facturaExterna"></div>
       <div class="page" id="page-cumpleanos"></div>
+      <div class="page" id="page-cuentas"></div>
       <div class="page" id="page-backup"></div>
+      <div class="page" id="page-chat"></div>
     </div>
   </div>
 </div>
@@ -610,6 +610,7 @@ function doLogin(){
     actualizarLogoSidebar();
     showPage('dashboard');
     setTimeout(checkAlerts,1500);
+    // Iniciar presencia global al entrar (no depende del chat)
     _iniciarPresenciaGlobal();
     setTimeout(_verificarBackupAdmin,2500);
     setTimeout(_verificarCumpleanosHoy,3500);
@@ -665,74 +666,46 @@ function aplicarPermisosNav(){
   if(!currentUser)return;
   // Ocultar nav-items de módulos sin acceso
   const MODS_NAV=['dashboard','informes','suplidores','inventario','gastosVeh','cxp',
-    'clientes','ventas','cxc','gastos','nomina','caja','cotizaciones','autorizaciones','seguros','facturaExterna','alertas','verSaldoCaja','chat','usuarios','cuentasBancarias','config','cumpleanos'];
+    'clientes','ventas','cxc','gastos','nomina','caja','cotizaciones','autorizaciones','seguros','facturaExterna','alertas','verSaldoCaja','chat','usuarios','config','cumpleanos','cuentas'];
   MODS_NAV.forEach(id=>{
     const nav=document.getElementById('nav-'+id);
     if(!nav)return;
+    // Admin ve todo, otros solo lo que tienen asignado
     const tiene=currentUser.role==='admin'||canAccess(id);
     nav.style.display=tiene?'':'none';
   });
-  // Backup solo para admin
+
   const nbk=document.getElementById('nav-backup-btn');
   if(nbk)nbk.style.display=currentUser.role==='admin'?'':'none';
 }
-
-// ══ CAMBIO DE CONTRASEÑA ══════════════════════════════════════════════════
-function abrirCambiarContrasena(userId){
-  // Si se pasa userId, es el admin reseteando la de otro usuario
-  const targetUser=userId?DB.users.find(u=>u.id===userId):currentUser;
-  if(!targetUser)return;
-  const esPropio=!userId||userId===currentUser.id;
-  const titulo=esPropio?'🔑 Cambiar mi contraseña':'🔑 Resetear contraseña — '+escHtml(targetUser.nombre);
-  openModal(titulo,`
-    <div style="margin-bottom:16px">
-      <div style="font-size:13px;color:var(--gray);margin-bottom:16px">
-        ${esPropio?'Ingresa tu contraseña actual y la nueva contraseña.':'Establece una nueva contraseña para <strong>'+escHtml(targetUser.nombre)+'</strong>.'}
-      </div>
-      ${esPropio?`
-      <div class="form-field">
-        <label class="required">Contraseña actual</label>
-        <input type="password" id="cp-actual" placeholder="••••••••">
-      </div>`:''}
-      <div class="form-field">
-        <label class="required">Nueva contraseña</label>
-        <input type="password" id="cp-nueva" placeholder="Mínimo 4 caracteres">
-      </div>
-      <div class="form-field">
-        <label class="required">Confirmar nueva contraseña</label>
-        <input type="password" id="cp-confirmar" placeholder="Repite la contraseña">
-      </div>
-    </div>`,
+function cambiarMiContrasena(){
+  openModal('🔑 Cambiar Mi Contraseña',`
+    <div class="form-field"><label>Contraseña actual</label><input type="password" id="cp-actual" placeholder="Contraseña actual" autocomplete="new-password"></div>
+    <div class="form-field"><label>Nueva contraseña</label><input type="password" id="cp-nueva" placeholder="Nueva contraseña (mínimo 6 caracteres)" autocomplete="new-password"></div>
+    <div class="form-field"><label>Confirmar nueva contraseña</label><input type="password" id="cp-confirmar" placeholder="Repite la nueva contraseña" autocomplete="new-password"></div>`,
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
-     <button class="btn btn-primary" onclick="guardarNuevaContrasena('${targetUser.id}',${esPropio})">💾 Guardar</button>`
-  );
+     <button class="btn btn-primary" onclick="guardarCambioContrasena()">💾 Guardar</button>`);
 }
-
-function guardarNuevaContrasena(uid,esPropio){
-  const nueva=document.getElementById('cp-nueva')?.value;
-  const confirmar=document.getElementById('cp-confirmar')?.value;
-  if(esPropio){
-    const actual=document.getElementById('cp-actual')?.value;
-    const user=DB.users.find(u=>u.id===uid);
-    if(!actual||user?.password!==actual){toast('La contraseña actual es incorrecta','error');return;}
-  }
-  if(!nueva||nueva.length<4){toast('La nueva contraseña debe tener al menos 4 caracteres','error');return;}
+function guardarCambioContrasena(){
+  const actual=document.getElementById('cp-actual').value;
+  const nueva=document.getElementById('cp-nueva').value;
+  const confirmar=document.getElementById('cp-confirmar').value;
+  const i=DB.users.findIndex(u=>u.id===currentUser.id);
+  if(i<0){toast('Usuario no encontrado','error');return;}
+  if(DB.users[i].password!==actual){toast('La contraseña actual es incorrecta','error');return;}
+  if(!nueva||nueva.length<6){toast('La nueva contraseña debe tener al menos 6 caracteres','error');return;}
   if(nueva!==confirmar){toast('Las contraseñas no coinciden','error');return;}
-  const i=DB.users.findIndex(u=>u.id===uid);
-  if(i<0)return;
   DB.users[i].password=nueva;
-  if(currentUser.id===uid)currentUser.password=nueva;
+  currentUser.password=nueva;
   sDB('users');
   closeModal();
-  toast('Contraseña actualizada ✓','success');
+  toast('Contraseña actualizada correctamente ✓','success');
 }
-// ══════════════════════════════════════════════════════════════════════════
-
 function doLogout(){
   if(currentUser){
     try{const p=JSON.parse(localStorage.getItem('fayre_presencia')||'{}');delete p[currentUser.id];localStorage.setItem('fayre_presencia',JSON.stringify(p));}catch{}
-    if(window._presenciaBC)try{window._presenciaBC.postMessage({uid:currentUser.id,ts:0});}catch{}
-    if(window._presenciaGlobalInterval)clearInterval(window._presenciaGlobalInterval);
+    if(_presenciaBC)try{_presenciaBC.postMessage({uid:currentUser.id,ts:0});}catch{}
+    if(_presenciaGlobalInterval)clearInterval(_presenciaGlobalInterval);
   }
   currentUser=null;
   document.getElementById('login-screen').style.display='flex';
@@ -748,13 +721,11 @@ function showPage(id){
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   const sb=document.getElementById('sidebar');const ov=document.getElementById('sidebar-overlay');
   if(sb&&window.innerWidth<=768){sb.classList.remove('open');if(ov)ov.classList.remove('open');}
-  // Limpiar intervalo de usuarios si navegamos a otra página
-  if(id!=='usuarios'&&window._usuariosRefreshInterval){clearInterval(window._usuariosRefreshInterval);window._usuariosRefreshInterval=null;}
   // Verificar acceso al módulo (solo para no-admin)
   if(id!=='dashboard'&&currentUser?.role!=='admin'&&!canAccess(id)){toast('No tienes acceso a este módulo','error');return;}
   document.getElementById('page-'+id)?.classList.add('active');
   document.getElementById('nav-'+id)?.classList.add('active');
-  const r={dashboard:renderDashboard,inventario:renderInventario,ventas:renderVentas,cotizaciones:renderCotizaciones,clientes:renderClientes,suplidores:renderSuplidores,caja:renderCaja,gastos:renderGastos,nomina:renderNomina,informes:renderInformes,usuarios:renderUsuarios,config:renderConfig,gastosVeh:renderGastosVeh,cxp:renderCXP,cxc:renderCXC,autorizaciones:renderAutorizaciones,seguros:renderSeguros,facturaExterna:renderFacturaExterna,alertas:renderAlertas,chat:renderChat,cuentasBancarias:renderCuentasBancarias,cumpleanos:renderCumpleanos,backup:renderBackup};
+  const r={dashboard:renderDashboard,inventario:renderInventario,ventas:renderVentas,cotizaciones:renderCotizaciones,clientes:renderClientes,suplidores:renderSuplidores,caja:renderCaja,gastos:renderGastos,nomina:renderNomina,informes:renderInformes,usuarios:renderUsuarios,config:renderConfig,gastosVeh:renderGastosVeh,cxp:renderCXP,cxc:renderCXC,autorizaciones:renderAutorizaciones,seguros:renderSeguros,facturaExterna:renderFacturaExterna,alertas:renderAlertas,chat:renderChat,cumpleanos:renderCumpleanos,cuentas:renderCuentas,backup:renderBackup};
   if(r[id])r[id]();
 }
 
@@ -772,8 +743,7 @@ function checkAlerts(){
   // Obtener alertas permitidas del usuario actual
   const alertasPermitidas=currentUser?.role==='admin'
     ?null // admin ve todo
-    // Solo las marcadas. Si alertasPermitidas no existe en el usuario = arreglo vacío (no ver ninguna)
-    :(currentUser?.alertasPermitidas||[]);
+    :(currentUser?.alertasPermitidas||['SIN_VIN','SIN_COSTO','CXP','CXC_VENCIDA','CXC','SIN_VENDER_6M','SIN_VENDER_1A','DOCS']);
   const puedeVer=tipo=>!alertasPermitidas||alertasPermitidas.includes(tipo);
 
   if(puedeVer('SIN_VIN')){
@@ -1013,6 +983,7 @@ function renderDashboard(){
           return`<tr><td style="font-size:11px">${fmtDate(v.fecha)}</td><td style="font-size:12px;font-weight:600">${escHtml(v.vehiculo||'—')}</td><td style="font-size:12px">${escHtml(v.cliente||'—')}</td><td><span class="badge ${esUSD?'badge-blue':'badge-green'}" style="font-size:10px">${v.moneda||'RD$'}</span></td><td style="font-weight:700;color:var(--green);font-size:12px">${esUSD?'$'+parseFloat(v.precioVenta||0).toLocaleString('en-US',{minimumFractionDigits:2}):fmt(v.precioVenta)}</td></tr>`;
         }).join('')}</tbody></table></div>`:'<div style="text-align:center;padding:24px;color:var(--gray)">Sin ventas aún</div>'}
       </div>
+    </div>
     ${currentUser?.role==='admin'?`
     <div class="card" style="margin-top:16px;border-top:4px solid var(--green)">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
@@ -1036,8 +1007,7 @@ function renderDashboard(){
         }).join('')+'</div>';
       })()}
     </div>`:''}
-
-    </div>`;
+`;
 }
 
 
@@ -1202,11 +1172,11 @@ function formVehiculo(v){
         </div>
       </div>
       <div class="form-field"><label class="required">Modelo</label><input type="text" id="v-modelo" value="${escHtml(v?.modelo||'')}" placeholder="Modelo"></div>
-      <div class="form-field"><label>Tipo</label><div style="display:flex;gap:4px"><select id="v-tipo" style="flex:1">${[...TIPOS,...(DB.config.tiposExtra||[])].map(t=>`<option ${t===v?.tipo?'selected':''}>${escHtml(t)}</option>`).join('')}</select><button type="button" class="btn btn-secondary btn-sm" onclick="agregarTipoRapido()" title="Agregar tipo nuevo">➕</button></div></div>
+      <div class="form-field"><label>Tipo</label><div style="display:flex;gap:6px;align-items:center"><select id="v-tipo" style="flex:1">${[...TIPOS,...(DB.config.tiposExtra||[])].map(t=>`<option ${t===v?.tipo?'selected':''}>${t}</option>`).join('')}</select><button type="button" onclick="agregarTipoVehiculo()" title="Agregar tipo" style="flex-shrink:0;width:32px;height:32px;border-radius:6px;border:1.5px solid var(--blue);background:#eff6ff;color:var(--blue);font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0">+</button></div></div>
     </div>
     <div class="form-row c3">
       <div class="form-field"><label class="required">Año</label><input type="number" id="v-anio" value="${v?.anio||currentYear()}" min="1990" max="${currentYear()+2}"></div>
-      <div class="form-field"><label>Color</label><div style="display:flex;gap:4px"><select id="v-color" style="flex:1"><option value="">Seleccionar...</option>${[...COLORES,...(DB.config.coloresExtra||[])].map(c=>`<option ${c===v?.color?'selected':''}>${escHtml(c)}</option>`).join('')}</select><button type="button" class="btn btn-secondary btn-sm" onclick="agregarColorRapido()" title="Agregar color nuevo">➕</button></div></div>
+      <div class="form-field"><label>Color</label><div style="display:flex;gap:6px;align-items:center"><select id="v-color" style="flex:1"><option value="">Seleccionar...</option>${[...COLORES,...(DB.config.coloresExtra||[])].map(col=>`<option ${col===v?.color?'selected':''}>${col}</option>`).join('')}</select><button type="button" onclick="agregarColorVehiculo()" title="Agregar color" style="flex-shrink:0;width:32px;height:32px;border-radius:6px;border:1.5px solid var(--blue);background:#eff6ff;color:var(--blue);font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0">+</button></div></div>
       <div class="form-field"><label>Millaje</label><input type="number" id="v-millas" value="${v?.millas||0}"></div>
     </div>
     <div class="form-row c3">
@@ -1232,7 +1202,7 @@ function formVehiculo(v){
       <div class="form-field"><label>Compañía Importadora</label>
         <select id="v-suplidor">
           <option value="">-- Sin compañía --</option>
-          ${DB.suplidores.filter(s=>s.tipoSuplidor==='importadora').map(s=>`<option value="${escHtml(s.empresa||s.nombre||'')}" ${(s.empresa||s.nombre||'')===v?.suplidor?'selected':''}>${escHtml(s.empresa||s.nombre||'')}${s.propietario?' — '+s.propietario:''}</option>`).join('')}
+          ${DB.suplidores.filter(s=>(s.tipoSuplidor||'vehiculo')==='vehiculo').map(s=>`<option value="${escHtml(s.empresa||s.nombre||'')}" ${(s.empresa||s.nombre||'')===v?.suplidor?'selected':''}>${escHtml(s.empresa||s.nombre||'')}${s.propietario?' — '+s.propietario:''}</option>`).join('')}
         </select>
       </div>
       <div class="form-field"><label>Notas</label><textarea id="v-notas" rows="1" placeholder="Notas adicionales...">${escHtml(v?.notas||'')}</textarea></div>
@@ -1313,33 +1283,29 @@ function agregarMarcaRapida(){
     sel.appendChild(opt);
   }
 }
-function agregarTipoRapido(){
+function agregarTipoVehiculo(){
   const nuevo=prompt('Ingresa el nombre del nuevo tipo de vehículo:');
   if(!nuevo||!nuevo.trim())return;
   const n=nuevo.trim();
   if(!DB.config.tiposExtra)DB.config.tiposExtra=[];
-  if([...TIPOS,...DB.config.tiposExtra].some(t=>t.toLowerCase()===n.toLowerCase())){
-    toast('Este tipo ya existe','warning');
-  } else {
-    DB.config.tiposExtra.push(n);
-    sDB('config');
-    toast('Tipo "'+n+'" agregado ✓','success');
-  }
+  const todosTipos=[...TIPOS,...(DB.config.tiposExtra||[])];
+  if(todosTipos.some(t=>t.toLowerCase()===n.toLowerCase())){toast('Este tipo ya existe','warning');return;}
+  DB.config.tiposExtra.push(n);
+  sDB('config');
+  toast('Tipo "'+n+'" agregado ✓','success');
   const sel=document.getElementById('v-tipo');
   if(sel){const opt=document.createElement('option');opt.value=n;opt.textContent=n;opt.selected=true;sel.appendChild(opt);}
 }
-function agregarColorRapido(){
+function agregarColorVehiculo(){
   const nuevo=prompt('Ingresa el nombre del nuevo color:');
   if(!nuevo||!nuevo.trim())return;
   const n=nuevo.trim();
   if(!DB.config.coloresExtra)DB.config.coloresExtra=[];
-  if([...COLORES,...DB.config.coloresExtra].some(c=>c.toLowerCase()===n.toLowerCase())){
-    toast('Este color ya existe','warning');
-  } else {
-    DB.config.coloresExtra.push(n);
-    sDB('config');
-    toast('Color "'+n+'" agregado ✓','success');
-  }
+  const todosColores=[...COLORES,...(DB.config.coloresExtra||[])];
+  if(todosColores.some(c=>c.toLowerCase()===n.toLowerCase())){toast('Este color ya existe','warning');return;}
+  DB.config.coloresExtra.push(n);
+  sDB('config');
+  toast('Color "'+n+'" agregado ✓','success');
   const sel=document.getElementById('v-color');
   if(sel){const opt=document.createElement('option');opt.value=n;opt.textContent=n;opt.selected=true;sel.appendChild(opt);}
 }
@@ -1399,8 +1365,8 @@ function gastosVehiculo(vid){
   openModal(`💸 Gastos — ${v.codigo} ${v.marca} ${v.modelo} ${v.anio}`,`
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;background:var(--gray2);padding:12px;border-radius:8px">
       <div class="form-field" style="margin:0"><label style="font-size:10px">Costo del Vehículo (RD$)</label>
-        <input type="text" id="gv-costo-veh" value="${fmtMoneyDisplay(costo||0)}" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this);actualizarCostoVeh('${vid}',parseMoney(this.value))" onfocus="fmtMoneyFocus(this)">
-        <div style="font-size:11px;color:var(--gray);margin-top:2px">USD: $${(costo/tasa).toFixed(2)}</div>
+        <input type="number" id="gv-costo-veh" value="${costo||0}" step="0.01" onchange="actualizarCostoVeh('${vid}',this.value)">
+        <div style="font-size:11px;color:var(--gray);margin-top:2px">USD: ${fmtUSD(costo/tasa)}</div>
       </div>
       <div class="form-field" style="margin:0"><label style="font-size:10px">Suplidor</label>
         <div style="display:flex;gap:6px">
@@ -1413,16 +1379,16 @@ function gastosVehiculo(vid){
       </div>
     </div>
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px">
-      <div style="text-align:center;padding:12px;background:var(--blue3);border-radius:8px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--blue)">Costo Vehículo</div><div style="font-size:16px;font-weight:800;color:var(--blue)">${fmt(costo)}</div><div style="font-size:11px;color:var(--gray)">$${(costo/tasa).toFixed(2)} USD</div></div>
-      <div style="text-align:center;padding:12px;background:var(--red2);border-radius:8px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--red)">Total Gastos</div><div style="font-size:16px;font-weight:800;color:var(--red)">${fmt(totalGastos)}</div><div style="font-size:11px;color:var(--gray)">$${(totalGastos/tasa).toFixed(2)} USD</div></div>
-      <div style="text-align:center;padding:12px;background:var(--amber2);border-radius:8px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--amber)">Total Inversión</div><div style="font-size:16px;font-weight:800;color:var(--amber)">${fmt(totalInversion)}</div><div style="font-size:11px;color:var(--gray)">$${(totalInversion/tasa).toFixed(2)} USD</div></div>
+      <div style="text-align:center;padding:12px;background:var(--blue3);border-radius:8px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--blue)">Costo Vehículo</div><div style="font-size:16px;font-weight:800;color:var(--blue)">${fmt(costo)}</div><div style="font-size:11px;color:var(--gray)">${fmtUSD(costo/tasa)}</div></div>
+      <div style="text-align:center;padding:12px;background:var(--red2);border-radius:8px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--red)">Total Gastos</div><div style="font-size:16px;font-weight:800;color:var(--red)">${fmt(totalGastos)}</div><div style="font-size:11px;color:var(--gray)">${fmtUSD(totalGastos/tasa)}</div></div>
+      <div style="text-align:center;padding:12px;background:var(--amber2);border-radius:8px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--amber)">Total Inversión</div><div style="font-size:16px;font-weight:800;color:var(--amber)">${fmt(totalInversion)}</div><div style="font-size:11px;color:var(--gray)">${fmtUSD(totalInversion/tasa)}</div></div>
     </div>
     <div style="background:var(--gray2);border-radius:8px;padding:12px;margin-bottom:14px">
       <div style="font-size:13px;font-weight:700;margin-bottom:10px">➕ Agregar Gasto</div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">
         <div class="form-field" style="margin:0"><label style="font-size:10px">Tipo de Gasto</label><select id="gv-tipo">${TIPOS_GASTO_VEH.map(t=>`<option>${t}</option>`).join('')}</select></div>
         <div class="form-field" style="margin:0"><label style="font-size:10px">Descripción</label><input type="text" id="gv-desc" placeholder="Detalle"></div>
-        <div class="form-field" style="margin:0"><label style="font-size:10px">Monto (RD$)</label><input type="text" id="gv-monto" placeholder="0.00" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)"></div>
+        <div class="form-field" style="margin:0"><label style="font-size:10px">Monto (RD$)</label><input type="number" id="gv-monto" placeholder="0.00" step="0.01"></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px">
         <div class="form-field" style="margin:0"><label style="font-size:10px">Forma de Pago</label><select id="gv-forma"><option value="CONTADO">Contado</option><option value="CREDITO">Crédito</option></select></div>
@@ -1449,7 +1415,7 @@ function agregarSuplidorRapido(vid){
   toast('Suplidor agregado ✓','success');
 }
 function agregarGastoVeh(vid){
-  const monto=parseMoney(document.getElementById('gv-monto').value);
+  const monto=parseFloat(document.getElementById('gv-monto').value||0);
   if(!monto){toast('Ingresa el monto','error');return;}
   if(!DB.gastosVehiculos)DB.gastosVehiculos=[];
   const g={id:uid(),vehiculoId:vid,fecha:document.getElementById('gv-fecha').value,tipo:document.getElementById('gv-tipo').value,descripcion:document.getElementById('gv-desc').value,monto,formaPago:document.getElementById('gv-forma').value,cuenta:document.getElementById('gv-cuenta').value};
@@ -1687,7 +1653,6 @@ function renderCaja(){
   document.getElementById('caja-mes').value=mes;
   document.getElementById('caja-tab').value=tab;
 }
-
 function exportarCajaPDF(){
   const mesEl=document.getElementById('caja-mes');
   const mes=mesEl?mesEl.value:(new Date().toISOString().slice(0,7));
@@ -1809,7 +1774,7 @@ function agregarCatCaja(tipo){
   toast('Categoría agregada ✓','success');
 }
 function guardarCajaMov(tipo){
-  const monto=parseMoney(document.getElementById('cj-monto')?.value);
+  const monto=parseFloat((document.getElementById('cj-monto')?.value||'0').replace(/,/g,''));
   const desc=document.getElementById('cj-desc').value.trim();
   if(!monto||!desc){toast('Monto y descripción son requeridos','error');return;}
   const banco=document.getElementById('cj-banco')?.value||'';
@@ -1871,7 +1836,7 @@ function editarGasto(i){
   const catList=['Mantenimiento','Publicidad','Oficina','Transporte','Servicios','Seguro','Legal','Salarios','Otro'];
   openModal('Editar Gasto',`
     <div class="form-row c2"><div class="form-field"><label>Fecha</label><input type="date" id="g-fecha" value="${g.fecha||today()}"></div><div class="form-field"><label>Categoría</label><select id="g-cat">${catList.map(c=>`<option ${c===g.categoria?'selected':''}>${c}</option>`).join('')}</select></div></div>
-    <div class="form-row c2"><div class="form-field"><label>Suplidor</label><select id="g-sup"><option value="">Sin suplidor</option>${DB.suplidores.map(s=>`<option ${s.nombre===g.suplidor?'selected':''}>${escHtml(s.nombre)}</option>`).join('')}</select></div><div class="form-field"><label>Monto</label><input type="text" id="g-monto" value="${fmtMoneyDisplay(g.monto||0)}" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)"></div></div>
+    <div class="form-row c2"><div class="form-field"><label>Suplidor</label><select id="g-sup"><option value="">Sin suplidor</option>${DB.suplidores.map(s=>`<option ${s.nombre===g.suplidor?'selected':''}>${escHtml(s.nombre)}</option>`).join('')}</select></div><div class="form-field"><label>Monto</label><input type="number" id="g-monto" value="${g.monto||0}" step="0.01"></div></div>
     <div class="form-row c2"><div class="form-field"><label>Forma de Pago</label><select id="g-forma"><option value="CONTADO" ${(g.formaPago||'CONTADO')==='CONTADO'?'selected':''}>Contado</option><option value="CREDITO" ${g.formaPago==='CREDITO'?'selected':''}>Crédito</option></select></div><div class="form-field"><label>Estado</label><select id="g-status"><option value="SALDADO" ${(g.statusGasto||'SALDADO')==='SALDADO'?'selected':''}>Saldado</option><option value="ABONADO" ${g.statusGasto==='ABONADO'?'selected':''}>Abonado</option><option value="PENDIENTE" ${g.statusGasto==='PENDIENTE'?'selected':''}>Pendiente</option></select></div></div>
     <div class="form-field"><label>Descripción</label><input type="text" id="g-desc" value="${escHtml(g.descripcion||'')}"></div>`,
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="guardarEditGasto(${i})">💾 Guardar</button>`);
@@ -1880,7 +1845,7 @@ function guardarEditGasto(i){
   DB.gastos[i].fecha=document.getElementById('g-fecha').value;
   DB.gastos[i].categoria=document.getElementById('g-cat').value;
   DB.gastos[i].suplidor=document.getElementById('g-sup').value;
-  DB.gastos[i].monto=parseMoney(document.getElementById('g-monto').value);
+  DB.gastos[i].monto=parseFloat(document.getElementById('g-monto').value||0);
   DB.gastos[i].formaPago=document.getElementById('g-forma').value;
   DB.gastos[i].statusGasto=document.getElementById('g-status').value;
   DB.gastos[i].descripcion=document.getElementById('g-desc').value;
@@ -1901,7 +1866,7 @@ function imprimirGastos(){
 function nuevoGasto(){
   const cats=DB.config.categoriasGastos||['Alquiler','Servicios','Salarios','Papelería','Mantenimiento','Publicidad','Combustible','Impuestos','Otros'];
   // Solo suplidores de empresa
-  const supsEmp=(DB.suplidores||[]).filter(s=>s.tipoSuplidor==='empresa'||(s.tipoSuplidor==null&&!s.tipoSuplidor));
+  const supsEmp=(DB.suplidores||[]).filter(s=>s.tipoSuplidor==='empresa'||s.tipoSuplidor==='importadora'||(s.tipoSuplidor==null&&!s.tipoSuplidor));
   const supsOpts=supsEmp.map(s=>`<option value="${escHtml(s.empresa||s.nombre)}">${escHtml(s.empresa||s.nombre)}</option>`).join('');
   const bcs=DB.config.bancoCuentas||[];
   const bancoOpts=bcs.map(b=>`<option value="${escHtml(b.banco)}">${escHtml(b.banco)}</option>`).join('')||'<option value="Caja General">Caja General</option>';
@@ -1992,8 +1957,8 @@ function agregarCatGasto(){
   toast('Categoría "'+n+'" agregada ✓','success');
 }
 function calcPendienteGasto(){
-  const factura=parseMoney(document.getElementById('g-monto-factura')?.value);
-  const abonado=parseMoney(document.getElementById('g-monto-abonado')?.value);
+  const factura=parseFloat(document.getElementById('g-monto-factura')?.value||0);
+  const abonado=parseFloat(document.getElementById('g-monto-abonado')?.value||0);
   const pend=document.getElementById('g-monto-pendiente');
   if(pend)pend.value=fmtMoneyDisplay(Math.max(0,factura-abonado));
   // Actualizar estado automático
@@ -2007,9 +1972,9 @@ function calcPendienteGasto(){
 }
 function guardarGasto(idx){
   const desc=document.getElementById('g-desc').value.trim();
-  const montoFactura=parseMoney(document.getElementById('g-monto-factura')?.value||document.getElementById('g-monto')?.value);
+  const montoFactura=parseFloat(document.getElementById('g-monto-factura')?.value||document.getElementById('g-monto')?.value||0);
   if(!montoFactura||!desc){toast('Monto y descripción son requeridos','error');return;}
-  const montoAbonado=parseMoney(document.getElementById('g-monto-abonado')?.value);
+  const montoAbonado=parseFloat(document.getElementById('g-monto-abonado')?.value||0);
   const montoPendiente=Math.max(0,montoFactura-montoAbonado);
   const g={
     id:idx!==undefined?DB.gastos[idx].id:uid(),
@@ -2142,13 +2107,14 @@ function selNomPago(id,tr){
   if(tr)tr.style.background='#e8f0fe';
   const b=document.getElementById('nom-btn-elim-pago');
   if(b){b.disabled=false;b.style.cssText='';}
+
   const be=document.getElementById('nom-btn-edit-pago');
   if(be){be.disabled=false;be.style.cssText='';}
 }
 function nomAccion(accion){
   if(accion==='editar-pago'){
     if(!nomPagoSelectedId){toast('Selecciona un pago','error');return;}
-    if(!canDo('editar')&&currentUser?.role!=='admin'){toast('No tienes permiso para editar','error');return;}
+    if(!canDo('editar')&&currentUser?.role!=='admin'){toast('No tienes permiso','error');return;}
     const p=(DB.nominaPagos||[]).find(x=>x.id===nomPagoSelectedId);
     if(!p)return;
     const emp=DB.nomina.find(e=>e.id===p.empleadoId);
@@ -2210,7 +2176,7 @@ function registrarPagoNomina(i){
     </div>
     <div class="form-row c2">
       <div class="form-field"><label class="required">Monto</label>
-        <input type="text" id="np-monto" value="${fmtMoneyDisplay(salario)}" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
+        <input type="number" id="np-monto" value="${(salario).toFixed(2)}" step="0.01">
       </div>
       <div class="form-field"><label>Cuenta</label>
         <select id="np-cuenta">${(DB.config.cuentas||['Caja General']).map(c=>`<option>${escHtml(c)}</option>`).join('')}</select>
@@ -2227,7 +2193,7 @@ function calcMontoNomina(salario){
   if(inp)inp.value=fmtMoneyDisplay(m);
 }
 function guardarPagoNomina(i){
-  const monto=parseMoney(document.getElementById('np-monto').value);
+  const monto=parseFloat(document.getElementById('np-monto').value||0);
   if(!monto){toast('Ingresa el monto','error');return;}
   const e=DB.nomina[i];
   const mes=document.getElementById('np-mes').value;
@@ -2357,56 +2323,10 @@ function renderInformes(){
 }
 
 // ══ USUARIOS ══
-
-// Actualiza SOLO los badges de estado en línea en la página usuarios
-// sin re-renderizar el formulario (evita perder el foco al escribir)
-function _actualizarBadgesOnlineUsuarios(){
-  const pU=document.getElementById('page-usuarios');
-  if(!pU||!pU.classList.contains('active'))return;
-  const ahora=Date.now();
-  let presGlobal={};try{presGlobal=JSON.parse(localStorage.getItem('fayre_presencia')||'{}');}catch{}
-  // Actualizar badge contador de en línea
-  const badge=document.getElementById('usuarios-online-badge');
-  if(badge){
-    const en=(DB.users||[]).filter(u=>{
-      const ult=presGlobal[u.id]||(DB.presencia||{})[u.id]||0;
-      return ult>0&&(ahora-ult)<30000;
-    }).length;
-    const span=badge.querySelector('span:last-child')||badge;
-    // Solo actualizar el número, no el HTML completo
-    const txt=badge.textContent;
-    const newTxt=txt.replace(/^\d+/,en.toString());
-    if(txt!==newTxt)badge.childNodes.forEach(n=>{if(n.nodeType===3&&/\d/.test(n.textContent))n.textContent=n.textContent.replace(/\d+/,en.toString());});
-  }
-  // Actualizar cada fila de estado en la tabla
-  (DB.users||[]).forEach((u,i)=>{
-    const cell=document.getElementById('user-status-'+u.id);
-    if(!cell)return;
-    const ult=presGlobal[u.id]||(DB.presencia||{})[u.id]||0;
-    const enLinea=ult>0&&(ahora-ult)<30000;
-    cell.innerHTML=enLinea
-      ?'<span style="display:inline-flex;align-items:center;gap:5px;background:#dcfce7;color:#16a34a;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700"><span style="width:7px;height:7px;border-radius:50%;background:#16a34a;display:inline-block"></span>En línea</span>'
-      :'<span style="display:inline-flex;align-items:center;gap:5px;background:#f1f5f9;color:#64748b;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600"><span style="width:7px;height:7px;border-radius:50%;background:#94a3b8;display:inline-block"></span>Desconectado</span>';
-  });
-}
 function renderUsuarios(){
   if(currentUser?.role!=='admin'){
     document.getElementById('page-usuarios').innerHTML='<div style="text-align:center;padding:48px;color:var(--gray)">🔒 Solo el administrador puede gestionar usuarios</div>';
     return;
-  }
-  // Auto-refresh de presencia cada 15s — SIN re-renderizar el form completo
-  clearInterval(window._usuariosRefreshInterval);
-  window._usuariosRefreshInterval=setInterval(()=>{
-    const pU=document.getElementById('page-usuarios');
-    if(!pU||!pU.classList.contains('active')){clearInterval(window._usuariosRefreshInterval);return;}
-    _sincPresencia();
-    // Solo actualizar badges de estado en línea, no re-renderizar todo
-    _actualizarBadgesOnlineUsuarios();
-  },15000);
-  // Asegurar que el usuario actual esté marcado en línea antes de renderizar
-  if(currentUser){
-    _pingPresencia();
-    _sincPresencia();
   }
   const roles=DB.config.roles||[{id:'dueno',nombre:'Dueño'},{id:'secretaria',nombre:'Secretaria'},{id:'asistente',nombre:'Asistente'},{id:'tecnico',nombre:'Técnico'}];
   const MODS=[
@@ -2416,21 +2336,14 @@ function renderUsuarios(){
     {id:'ventas',label:'Ventas'},{id:'cxc',label:'Cuentas por Cobrar'},
     {id:'suplidores',label:'Suplidores'},{id:'gastos',label:'Gastos Empresa'},
     {id:'nomina',label:'Nómina'},{id:'caja',label:'Caja'},
-    {id:'cotizaciones',label:'Cotizaciones'},{id:'autorizaciones',label:'Autorización Compra'},
-    {id:'seguros',label:'Seguros'},{id:'facturaExterna',label:'Facturas Externas'},
-    {id:'alertas',label:'Alertas'},{id:'verSaldoCaja',label:'💰 Saldo Caja'},
-    {id:'chat',label:'💬 Chat'},{id:'usuarios',label:'Usuarios'},
-    {id:'cuentasBancarias',label:'🏦 Cuentas Bancarias'},{id:'config',label:'Configuración'},
-    {id:'cumpleanos',label:'🎂 Cumpleaños'},
+    {id:'cotizaciones',label:'Cotizaciones'},{id:'autorizaciones',label:'Autorización Compra'},{id:'seguros',label:'Seguros'},{id:'facturaExterna',label:'Facturas Externas'},{id:'alertas',label:'Alertas'},{id:'verSaldoCaja',label:'💰 Saldo Caja'},{id:'chat',label:'💬 Chat'},
+    {id:'usuarios',label:'Usuarios'},{id:'config',label:'Configuración'},
   ];
   const BORRAR=[
     {id:'ventas',label:'Borrar Ventas'},{id:'clientes',label:'Borrar Clientes'},
     {id:'suplidores',label:'Borrar Suplidores'},{id:'gastos',label:'Borrar Gastos'},
     {id:'nomina',label:'Borrar Nómina'},{id:'gastosVeh',label:'Borrar Gastos Vehículo'},
     {id:'cxc',label:'Borrar Cobros'},{id:'inventario',label:'Borrar Vehículos'},
-    {id:'cotizaciones',label:'Borrar Cotizaciones'},{id:'cxp',label:'Borrar CxP'},
-    {id:'seguros',label:'Borrar Seguros'},{id:'facturaExterna',label:'Borrar Facturas Externas'},
-    {id:'caja',label:'Borrar Caja'},{id:'autorizaciones',label:'Borrar Autorizaciones'},
   ];
   document.getElementById('page-usuarios').innerHTML=`
     <div class="page-header"><div><h1>👥 Usuarios</h1></div></div>
@@ -2492,13 +2405,7 @@ function renderUsuarios(){
 
     <!-- TABLA USUARIOS -->
     <div class="card">
-      <div class="card-title" style="justify-content:space-between">
-        <span>👥 Usuarios del sistema</span>
-        <span id="usuarios-online-badge" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--green);background:var(--green2);border-radius:20px;padding:4px 12px">
-          <span style="width:7px;height:7px;border-radius:50%;background:var(--green);display:inline-block;animation:pulse-dot 1.5s infinite"></span>
-          ${(()=>{const ahora=Date.now();const en=(DB.users||[]).filter(u=>{let p={};try{p=JSON.parse(localStorage.getItem('fayre_presencia')||'{}');}catch{}const ult=p[u.id]||(DB.presencia||{})[u.id]||0;return ult>0&&(ahora-ult)<30000;});return en.length;})()}  en línea — actualización en vivo
-        </span>
-      </div>
+      <div class="card-title">👥 Usuarios del sistema</div>
       <div class="table-wrap"><table>
         <thead><tr>
           <th>Nombre</th><th>Usuario</th><th>Rol</th><th>Estado</th>
@@ -2509,8 +2416,10 @@ function renderUsuarios(){
           const mods=u.role==='admin'?['Dashboard','Nueva Venta','Ventas','Inventario','Clientes','Suplidores','Gastos','Nómina','Informes','Caja','CxC','CxP','Usuarios','Configuración']:(u.modulos||[]);
           const modsLabel=mods.map(id=>{const m=MODS.find(x=>x.id===id);return m?m.label:id;});
           const ahora=Date.now();
-          let presGlobal={};try{presGlobal=JSON.parse(localStorage.getItem('fayre_presencia')||'{}');}catch{}
-          const ult=presGlobal[u.id]||(DB.presencia||{})[u.id]||0;
+          // Leer presencia global (entre pestañas locales) y presencia de Firebase
+          let presenciaGlobal={};
+          try{presenciaGlobal=JSON.parse(localStorage.getItem('fayre_presencia')||'{}');}catch{}
+          const ult=presenciaGlobal[u.id]||(DB.presencia||{})[u.id]||0;
           const enLinea=ult>0&&(ahora-ult)<30000;
           const estadoHTML=enLinea
             ?'<span style="display:inline-flex;align-items:center;gap:5px;background:#dcfce7;color:#16a34a;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700"><span style="width:7px;height:7px;border-radius:50%;background:#16a34a;display:inline-block"></span>En línea</span>'
@@ -2519,7 +2428,7 @@ function renderUsuarios(){
             <td style="font-weight:600">${escHtml(u.nombre)}</td>
             <td class="mono" style="font-size:12px">${escHtml(u.username)}</td>
             <td><span class="badge ${u.role==='admin'?'badge-purple':'badge-blue'}">${escHtml(rolLabel)}</span></td>
-            <td id="user-status-${u.id}">${estadoHTML}</td>
+            <td>${estadoHTML}</td>
             <td style="max-width:320px">
               <div style="display:flex;flex-wrap:wrap;gap:3px">
                 ${modsLabel.map(m=>`<span class="badge badge-green" style="font-size:10px">${escHtml(m)}</span>`).join('')}
@@ -2528,7 +2437,6 @@ function renderUsuarios(){
             <td><div style="display:flex;gap:4px">
               <button class="btn btn-secondary btn-sm" onclick="editarUsuarioPag(${i})">✏️ Editar</button>
               <button class="btn btn-amber btn-sm" onclick="editarUsuario(${i})">🔑 Permisos</button>
-              ${currentUser?.role==='admin'?`<button class="btn btn-sm" style="background:#7c3aed;color:#fff" onclick="abrirCambiarContrasena(DB.users[${i}].id)">🔐 Contraseña</button>`:''}
               ${u.id!=='u1'?`<button class="btn btn-red btn-sm" onclick="eliminarUsuario(${i})">✕</button>`:''}
             </div></td>
           </tr>`;
@@ -2548,8 +2456,8 @@ function crearUsuarioNuevo(){
   const role=document.getElementById('nu-role')?.value;
   if(!nombre||!user||!pass){toast('Complete nombre, usuario y contraseña','error');return;}
   if(DB.users.find(u=>u.username===user)){toast('El usuario ya existe','error');return;}
-  const MODS_IDS=['dashboard','informes','inventario','gastosVeh','cxp','clientes','ventas','cxc','suplidores','gastos','nomina','caja','cotizaciones','autorizaciones','seguros','facturaExterna','alertas','verSaldoCaja','chat','usuarios','cuentasBancarias','config','cumpleanos'];
-  const DEL_IDS=['ventas','clientes','suplidores','gastos','nomina','gastosVeh','cxc','inventario','cotizaciones','cxp','seguros','facturaExterna'];
+  const MODS_IDS=['dashboard','informes','inventario','gastosVeh','cxp','clientes','ventas','cxc','suplidores','gastos','nomina','caja','cotizaciones','autorizaciones','seguros','facturaExterna','alertas','verSaldoCaja','chat','usuarios','config','cuentas','cumpleanos'];
+  const DEL_IDS=['ventas','clientes','suplidores','gastos','nomina','gastosVeh','cxc','inventario'];
   const modulos=role==='admin'?MODS_IDS:MODS_IDS.filter(id=>document.getElementById('nu-mod-'+id)?.checked);
   const puedeEliminar=role==='admin'||DEL_IDS.some(id=>document.getElementById('nu-del-'+id)?.checked);
   const puedeEditar=role==='admin'||DEL_IDS.some(id=>document.getElementById('nu-edit-'+id)?.checked);
@@ -2640,8 +2548,7 @@ function editarUsuario(i){
     {id:'cxc',label:'📬 Cuentas por Cobrar'},{id:'gastos',label:'🏢 Gastos Empresa'},
     {id:'nomina',label:'👷 Nómina'},{id:'caja',label:'💳 Caja'},
     {id:'cotizaciones',label:'📋 Cotizaciones'},{id:'autorizaciones',label:'📝 Autorización Compra'},
-    {id:'seguros',label:'🛡️ Seguros'},{id:'facturaExterna',label:'🧾 Facturas Externas'},{id:'alertas',label:'🔔 Alertas'},{id:'verSaldoCaja',label:'💰 Ver Saldo Caja'},{id:'chat',label:'💬 Chat Interno'},{id:'cuentasBancarias',label:'🏦 Cuentas Bancarias'},
-    {id:'cumpleanos',label:'🎂 Cumpleaños'},
+    {id:'seguros',label:'🛡️ Seguros'},{id:'facturaExterna',label:'🧾 Facturas Externas'},{id:'alertas',label:'🔔 Alertas'},{id:'verSaldoCaja',label:'💰 Ver Saldo Caja'},{id:'chat',label:'💬 Chat Interno'},
   ];
   const mods=u.modulos||[];
   const perms=u.permisos||{};
@@ -2678,11 +2585,11 @@ function editarUsuario(i){
       </div>
       <div style="font-size:11px;font-weight:700;margin-bottom:6px;color:var(--gray);text-transform:uppercase">✏️ Permisos de Editar por módulo:</div>
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-bottom:10px">
-        ${[{k:'editarVentas',l:'Ventas'},{k:'editarClientes',l:'Clientes'},{k:'editarSuplidores',l:'Suplidores'},{k:'editarGastos',l:'Gastos'},{k:'editarNomina',l:'Nómina'},{k:'editarGastosVeh',l:'Gastos Vehículo'},{k:'editarCobros',l:'CxC Cobros'},{k:'editarCxP',l:'CxP Pagos'},{k:'editarVehiculos',l:'Vehículos'},{k:'editarCaja',l:'Caja'},{k:'editarCotizaciones',l:'Cotizaciones'},{k:'editarAutorizaciones',l:'Autorizaciones'},{k:'editarSeguros',l:'Seguros'},{k:'editarFacturas',l:'Facturas Ext.'}].map(p=>`<label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;padding:4px 6px;background:#eff6ff;border-radius:5px;border:1px solid #bfdbfe"><input type="checkbox" id="u-perm-${p.k}" ${(perms[p.k]||u.role==='admin')?'checked':''} style="accent-color:var(--blue)"> ${p.l}</label>`).join('')}
+        ${[{k:'editarVentas',l:'Ventas'},{k:'editarClientes',l:'Clientes'},{k:'editarSuplidores',l:'Suplidores'},{k:'editarGastos',l:'Gastos'},{k:'editarNomina',l:'Nómina'},{k:'editarGastosVeh',l:'Gastos Vehículo'},{k:'editarCobros',l:'CxC Cobros'},{k:'editarCxp',l:'CxP Pagos'},{k:'editarVehiculos',l:'Vehículos'},{k:'editarCaja',l:'Caja'},{k:'editarCotizaciones',l:'Cotizaciones'},{k:'editarAutorizaciones',l:'Autorizaciones'},{k:'editarSeguros',l:'Seguros'},{k:'editarFacturas',l:'Facturas Ext.'}].map(p=>`<label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;padding:4px 6px;background:#eff6ff;border-radius:5px;border:1px solid #bfdbfe"><input type="checkbox" id="u-perm-${p.k}" ${(perms[p.k]||u.role==='admin')?'checked':''} style="accent-color:var(--blue)"> ${p.l}</label>`).join('')}
       </div>
       <div style="font-size:11px;font-weight:700;margin-bottom:6px;color:var(--gray);text-transform:uppercase">🗑 Permisos de Borrar por módulo:</div>
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px">
-        ${[{k:'borrarVentas',l:'Ventas'},{k:'borrarClientes',l:'Clientes'},{k:'borrarSuplidores',l:'Suplidores'},{k:'borrarGastos',l:'Gastos'},{k:'borrarNomina',l:'Nómina'},{k:'borrarGastosVeh',l:'Gastos Vehículo'},{k:'borrarCobros',l:'CxC Cobros'},{k:'borrarCxP',l:'CxP Pagos'},{k:'borrarVehiculos',l:'Vehículos'},{k:'borrarCaja',l:'Caja'},{k:'borrarCotizaciones',l:'Cotizaciones'},{k:'borrarAutorizaciones',l:'Autorizaciones'},{k:'borrarSeguros',l:'Seguros'},{k:'borrarFacturas',l:'Facturas Ext.'}].map(p=>`<label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;padding:4px 6px;background:#fff1f2;border-radius:5px;border:1px solid #fecdd3"><input type="checkbox" id="u-perm-${p.k}" ${(perms[p.k]||u.role==='admin')?'checked':''} style="accent-color:var(--red)"> ${p.l}</label>`).join('')}
+        ${[{k:'borrarVentas',l:'Ventas'},{k:'borrarClientes',l:'Clientes'},{k:'borrarSuplidores',l:'Suplidores'},{k:'borrarGastos',l:'Gastos'},{k:'borrarNomina',l:'Nómina'},{k:'borrarGastosVeh',l:'Gastos Vehículo'},{k:'borrarCobros',l:'CxC Cobros'},{k:'borrarCxp',l:'CxP Pagos'},{k:'borrarVehiculos',l:'Vehículos'},{k:'borrarCaja',l:'Caja'},{k:'borrarCotizaciones',l:'Cotizaciones'},{k:'borrarAutorizaciones',l:'Autorizaciones'},{k:'borrarSeguros',l:'Seguros'},{k:'borrarFacturas',l:'Facturas Ext.'}].map(p=>`<label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;padding:4px 6px;background:#fff1f2;border-radius:5px;border:1px solid #fecdd3"><input type="checkbox" id="u-perm-${p.k}" ${(perms[p.k]||u.role==='admin')?'checked':''} style="accent-color:var(--red)"> ${p.l}</label>`).join('')}
       </div>
     </div>`,
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="guardarUsuario(${i})">💾 Actualizar</button>`);
@@ -2692,7 +2599,7 @@ function nuevoEmpleado(){
   openModal('Nuevo Empleado',`
     <div class="form-row c2"><div class="form-field"><label class="required">Nombre Completo</label><input type="text" id="e-nombre"></div><div class="form-field"><label>Cargo / Función</label><input type="text" id="e-cargo"></div></div>
     <div class="form-row c3"><div class="form-field"><label>Documento (Cédula)</label><input type="text" id="e-doc" maxlength="13" placeholder="000-0000000-0" oninput="fmtCedulaInput(this)"></div><div class="form-field"><label>Teléfono</label><input type="text" id="e-tel" maxlength="12" placeholder="000-000-0000" oninput="fmtTelInput(this)"></div><div class="form-field"><label>Fecha Ingreso</label><input type="date" id="e-ingreso" value="${today()}"></div></div>
-    <div class="form-row c3"><div class="form-field"><label>Forma de Pago</label><select id="e-pago"><option>Mensual</option><option>Quincenal</option><option>Semanal</option></select></div><div class="form-field"><label class="required">Salario Base</label><input type="text" id="e-salario" placeholder="0.00" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)"></div><div class="form-field"><label>Estado</label><select id="e-activo"><option value="true">Activo</option><option value="false">Inactivo</option></select></div></div>
+    <div class="form-row c3"><div class="form-field"><label>Forma de Pago</label><select id="e-pago"><option>Mensual</option><option>Quincenal</option><option>Semanal</option></select></div><div class="form-field"><label class="required">Salario Base</label><input type="number" id="e-salario" step="0.01"></div><div class="form-field"><label>Estado</label><select id="e-activo"><option value="true">Activo</option><option value="false">Inactivo</option></select></div></div>
     <div class="form-row c2">
       <div class="form-field"><label>📷 Doc. Frente</label><input type="file" id="e-doc-f" accept="image/*" onchange="previewFoto('e-doc-f','e-doc-f-prev')"><img id="e-doc-f-prev" style="display:none;width:100%;max-height:80px;object-fit:cover;border-radius:4px;margin-top:4px"></div>
       <div class="form-field"><label>📷 Doc. Dorso</label><input type="file" id="e-doc-d" accept="image/*" onchange="previewFoto('e-doc-d','e-doc-d-prev')"><img id="e-doc-d-prev" style="display:none;width:100%;max-height:80px;object-fit:cover;border-radius:4px;margin-top:4px"></div>
@@ -2701,7 +2608,7 @@ function nuevoEmpleado(){
 }
 function guardarEmpleado(idx){
   const nombre=document.getElementById('e-nombre').value.trim();
-  const salario=parseMoney(document.getElementById('e-salario').value);
+  const salario=parseFloat(document.getElementById('e-salario').value||0);
   if(!nombre||!salario){toast('Nombre y salario son requeridos','error');return;}
   const fEl=document.getElementById('e-doc-f-prev');const dEl=document.getElementById('e-doc-d-prev');
   const activoVal=document.getElementById('e-activo')?.value;
@@ -2713,7 +2620,7 @@ function editarEmpleado(i){
   const e=DB.nomina[i];
   openModal('Editar Empleado',`
     <div class="form-row c2"><div class="form-field"><label class="required">Nombre</label><input type="text" id="e-nombre" value="${escHtml(e.nombre||'')}"></div><div class="form-field"><label>Cargo</label><input type="text" id="e-cargo" value="${escHtml(e.cargo||'')}"></div></div>
-    <div class="form-row c3"><div class="form-field"><label>Fecha Inicio</label><input type="date" id="e-ingreso" value="${e.fechaIngreso||today()}"></div><div class="form-field"><label>Forma de Pago</label><select id="e-pago">${['Mensual','Quincenal','Semanal'].map(p=>`<option ${p===e.formaPago?'selected':''}>${p}</option>`).join('')}</select></div><div class="form-field"><label class="required">Salario</label><input type="text" id="e-salario" value="${fmtMoneyDisplay(e.salario||0)}" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)"></div></div>
+    <div class="form-row c3"><div class="form-field"><label>Fecha Inicio</label><input type="date" id="e-ingreso" value="${e.fechaIngreso||today()}"></div><div class="form-field"><label>Forma de Pago</label><select id="e-pago">${['Mensual','Quincenal','Semanal'].map(p=>`<option ${p===e.formaPago?'selected':''}>${p}</option>`).join('')}</select></div><div class="form-field"><label class="required">Salario</label><input type="number" id="e-salario" value="${e.salario||0}" step="0.01"></div></div>
     <div class="form-field"><label>Teléfono</label><input type="text" id="e-tel" value="${escHtml(e.telefono||'')}" maxlength="12" placeholder="000-000-0000" oninput="fmtTelInput(this)"></div>`,
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="guardarEmpleado(${i})">💾 Actualizar</button>`);
 }
@@ -2730,55 +2637,136 @@ function guardarUsuario(idx){
   const pass=document.getElementById('u-pass').value;
   if(!nombre||!user||(!pass&&idx===undefined)){toast('Complete todos los campos','error');return;}
   if(idx===undefined&&DB.users.find(u=>u.username===user)){toast('El usuario ya existe','error');return;}
-  const MODS_IDS=['dashboard','informes','suplidores','inventario','gastosVeh','cxp','clientes','ventas','cxc','gastos','nomina','caja','cotizaciones','autorizaciones','seguros','facturaExterna','alertas','verSaldoCaja','chat','cuentasBancarias','cumpleanos'];
+  const MODS_IDS=['dashboard','informes','suplidores','inventario','gastosVeh','cxp','clientes','ventas','cxc','gastos','nomina','caja','cotizaciones','autorizaciones','seguros','facturaExterna','alertas','verSaldoCaja','chat','cuentas','cumpleanos'];
   const nuevosMods=MODS_IDS.filter(m=>{const el=document.getElementById('u-mod-'+m);return el&&el.checked;});
-  const permKeys=['editar','eliminar','imprimir','pdf','editarVentas','editarClientes','editarSuplidores','editarGastos','editarNomina','editarGastosVeh','editarCobros','editarCxP','editarVehiculos','editarCaja','editarCotizaciones','editarAutorizaciones','editarSeguros','editarFacturas','borrarVentas','borrarClientes','borrarSuplidores','borrarGastos','borrarNomina','borrarGastosVeh','borrarCobros','borrarCxP','borrarVehiculos','borrarCaja','borrarCotizaciones','borrarAutorizaciones','borrarSeguros','borrarFacturas'];
+  const permKeys=['editar','eliminar','imprimir','pdf','editarVentas','editarClientes','editarSuplidores','editarGastos','editarNomina','editarGastosVeh','editarCobros','editarCxp','editarVehiculos','editarCaja','editarCotizaciones','editarAutorizaciones','editarSeguros','editarFacturas','borrarVentas','borrarClientes','borrarSuplidores','borrarGastos','borrarNomina','borrarGastosVeh','borrarCobros','borrarCxp','borrarVehiculos','borrarCaja','borrarCotizaciones','borrarAutorizaciones','borrarSeguros','borrarFacturas'];
   const nuevosPerms={};permKeys.forEach(k=>{const el=document.getElementById('u-perm-'+k);if(el)nuevosPerms[k]=el.checked;});
-  if(idx!==undefined){
-    DB.users[idx].nombre=nombre;
-    DB.users[idx].username=user;
-    DB.users[idx].role=document.getElementById('u-role').value;
-    if(pass)DB.users[idx].password=pass;
-    DB.users[idx].modulos=nuevosMods;
-    DB.users[idx].permisos=nuevosPerms;
-    // Si el usuario editado es el que está logueado → actualizar currentUser en memoria
-    if(currentUser.id===DB.users[idx].id){
-      currentUser=Object.assign({},DB.users[idx]);
-      // Actualizar sidebar inmediatamente
-      aplicarPermisosNav();
-      document.getElementById('top-username').textContent=currentUser.nombre;
-      document.getElementById('top-role').textContent=_getRolLabel(currentUser.role);
-      const initials=(currentUser.nombre||'U').split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase();
-      const av=document.getElementById('user-initials');if(av)av.textContent=initials;
-    }
-  } else {
-    DB.users.push({id:uid(),nombre,username:user,password:pass,role:document.getElementById('u-role').value,activo:true,modulos:nuevosMods,permisos:nuevosPerms});
-  }
+  if(idx!==undefined){DB.users[idx].nombre=nombre;DB.users[idx].username=user;DB.users[idx].role=document.getElementById('u-role').value;if(pass)DB.users[idx].password=pass;DB.users[idx].modulos=nuevosMods;DB.users[idx].permisos=nuevosPerms;if(currentUser.id===DB.users[idx].id){currentUser=DB.users[idx];}}
+  else DB.users.push({id:uid(),nombre,username:user,password:pass,role:document.getElementById('u-role').value,activo:true,modulos:nuevosMods,permisos:nuevosPerms});
   sDB('users');
   if(typeof fbGuardar==='function'&&window._fbActivo)fbGuardar('users').catch(()=>{});
-  closeModal();
-  toast('Permisos guardados ✓','success');
-  renderUsuarios();
-  // Re-renderizar página activa para reflejar permisos al instante
-  setTimeout(()=>{
-    const _ap=document.querySelector('.page.active');
-    if(!_ap)return;
-    const _pid=_ap.id.replace('page-','');
-    const _rm={dashboard:renderDashboard,inventario:renderInventario,ventas:renderVentas,
+  closeModal();toast('Usuario guardado ✓','success');renderUsuarios();
+  // Re-renderizar página activa para que permisos apliquen de inmediato
+  const _ap2=document.querySelector('.page.active');
+  if(_ap2){
+    const _pid2=_ap2.id.replace('page-','');
+    const _rm2={dashboard:renderDashboard,inventario:renderInventario,ventas:renderVentas,
       clientes:renderClientes,suplidores:renderSuplidores,gastos:renderGastos,
       nomina:renderNomina,cxc:renderCXC,cxp:renderCXP,caja:renderCaja,
       gastosVeh:renderGastosVeh,cotizaciones:renderCotizaciones,
-      autorizaciones:renderAutorizaciones,seguros:renderSeguros,
-      facturaExterna:renderFacturaExterna,alertas:renderAlertas,
-      cuentasBancarias:renderCuentasBancarias,informes:renderInformes,config:renderConfig};
-    if(_rm[_pid])_rm[_pid]();
-  },100);
+      autorizaciones:renderAutorizaciones,usuarios:renderUsuarios,
+      informes:renderInformes,config:renderConfig};
+    if(_rm2[_pid2])setTimeout(_rm2[_pid2],150);
+  }
 }
 
 
 
 // ══ MÓDULO DE ALERTAS ══
 let alertasSeleccionadas=new Set();
+function renderBackup(){
+  if(currentUser?.role!=='admin'){
+    document.getElementById('page-backup').innerHTML='<div style="text-align:center;padding:48px"><div style="font-size:48px;margin-bottom:12px">🔒</div><div style="font-size:18px;font-weight:700;color:var(--navy)">Acceso restringido</div><p style="color:var(--gray);margin-top:8px">Solo el administrador puede acceder al backup.</p></div>';
+    return;
+  }
+  const lastStr=DB.config._lastBackup||null;
+  const hoy=new Date();
+  let diasSinBackup=null;
+  let lastFmt='Nunca realizado';
+  let statusColor='var(--red)';
+  let statusIcon='🔴';
+  if(lastStr){
+    const last=new Date(lastStr);
+    diasSinBackup=Math.floor((hoy-last)/(1000*60*60*24));
+    const pad=n=>String(n).padStart(2,'0');
+    const d=last;
+    lastFmt=`${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    if(diasSinBackup<5){statusColor='var(--green)';statusIcon='✅';}
+    else if(diasSinBackup<10){statusColor='var(--amber)';statusIcon='🟡';}
+    else{statusColor='var(--red)';statusIcon='🔴';}
+  }
+  const diasMsg=diasSinBackup===null?'Nunca se ha realizado un backup':
+    diasSinBackup===0?'Backup realizado hoy':
+    diasSinBackup===1?'Hace 1 día':
+    `Hace ${diasSinBackup} días`;
+
+  // Conteo de datos actuales en memoria
+  const resumen=[
+    {label:'Vehículos',val:(DB.vehiculos||[]).length,ico:'🚗'},
+    {label:'Clientes',val:(DB.clientes||[]).length,ico:'👤'},
+    {label:'Ventas',val:(DB.ventas||[]).length,ico:'💰'},
+    {label:'Gastos Vehículo',val:(DB.gastosVehiculos||[]).length,ico:'💸'},
+    {label:'CxC',val:(DB.cxc||[]).length,ico:'📬'},
+    {label:'CxP',val:(DB.cxp||[]).length,ico:'📑'},
+    {label:'Gastos Empresa',val:(DB.gastos||[]).length,ico:'🏢'},
+    {label:'Nómina',val:(DB.nomina||[]).length,ico:'👷'},
+    {label:'Caja',val:(DB.caja||[]).length,ico:'💳'},
+    {label:'Suplidores',val:(DB.suplidores||[]).length,ico:'🏭'},
+    {label:'Cotizaciones',val:(DB.cotizaciones||[]).length,ico:'📋'},
+    {label:'Seguros',val:(DB.seguros||[]).length,ico:'🛡️'},
+  ];
+
+  document.getElementById('page-backup').innerHTML=`
+    <div class="page-header">
+      <div><h1>💾 Backup del Sistema</h1><p>Respaldo de todos los datos del sistema</p></div>
+    </div>
+
+    <!-- Estado del backup -->
+    <div class="card" style="border-top:4px solid ${statusColor}">
+      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+        <div style="font-size:48px">${statusIcon}</div>
+        <div style="flex:1">
+          <div style="font-size:16px;font-weight:800;color:${statusColor}">${diasMsg}</div>
+          <div style="font-size:13px;color:var(--gray);margin-top:4px">Último backup: <strong>${lastFmt}</strong></div>
+          <div style="font-size:12px;color:var(--gray);margin-top:2px">Se recomienda hacer backup cada 5 días</div>
+        </div>
+        <button class="btn btn-primary" onclick="_hacerBackup()" style="font-size:15px;padding:12px 24px">
+          💾 Hacer Backup Ahora
+        </button>
+      </div>
+    </div>
+
+    <!-- Datos que se incluirán en el backup -->
+    <div class="card">
+      <div class="card-title">📊 Datos que incluye el backup</div>
+      <p style="font-size:12px;color:var(--gray);margin-bottom:16px">
+        Estos son los registros actuales en el sistema que serán guardados en el archivo de backup.
+        ${!window._fbCargado?'<span style="color:var(--red);font-weight:700">⚠️ Firebase aún cargando — espera antes de hacer backup.</span>':'<span style="color:var(--green);font-weight:600">✅ Firebase conectado — datos listos.</span>'}
+      </p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px">
+        ${resumen.map(r=>`
+          <div style="background:var(--gray2);border-radius:10px;padding:14px;text-align:center;border:1px solid var(--gray3)">
+            <div style="font-size:24px;margin-bottom:6px">${r.ico}</div>
+            <div style="font-size:22px;font-weight:800;color:var(--navy)">${r.val}</div>
+            <div style="font-size:11px;color:var(--gray);font-weight:600;text-transform:uppercase;letter-spacing:.3px">${r.label}</div>
+          </div>`).join('')}
+      </div>
+    </div>
+
+    <!-- Instrucciones -->
+    <div class="card">
+      <div class="card-title">ℹ️ ¿Qué es el backup y para qué sirve?</div>
+      <div style="display:flex;flex-direction:column;gap:10px;font-size:13px;color:var(--navy)">
+        <div style="display:flex;gap:10px;align-items:flex-start">
+          <span style="font-size:18px;flex-shrink:0">📥</span>
+          <div><strong>¿Qué descarga?</strong> Un archivo <code style="background:var(--gray2);padding:2px 6px;border-radius:4px">.json</code> con todos tus datos — vehículos, clientes, ventas, gastos, nómina y más.</div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:flex-start">
+          <span style="font-size:18px;flex-shrink:0">💻</span>
+          <div><strong>¿Dónde se guarda?</strong> En tu computadora, en la carpeta de Descargas. Guárdalo en un lugar seguro.</div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:flex-start">
+          <span style="font-size:18px;flex-shrink:0">🔒</span>
+          <div><strong>¿Para qué sirve?</strong> Si algo se pierde en Firebase o se borra accidentalmente, el administrador del sistema puede recuperar los datos desde ese archivo.</div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:flex-start">
+          <span style="font-size:18px;flex-shrink:0">📅</span>
+          <div><strong>¿Cada cuánto hacerlo?</strong> Se recomienda cada 5 días. El sistema te avisará automáticamente cuando sea necesario.</div>
+        </div>
+      </div>
+    </div>`;
+}
+
 // ══ MÓDULO CUMPLEAÑOS ══
 function renderCumpleanos(){
   const esAdmin=currentUser?.role==='admin';
@@ -3035,109 +3023,6 @@ function eliminarCuentaBancoCuentas(bi,ci){
   sDB('config');toast('Cuenta eliminada','success');renderCuentas();
 }
 
-function renderBackup(){
-  if(currentUser?.role!=='admin'){
-    document.getElementById('page-backup').innerHTML='<div style="text-align:center;padding:48px"><div style="font-size:48px;margin-bottom:12px">🔒</div><div style="font-size:18px;font-weight:700;color:var(--navy)">Acceso restringido</div><p style="color:var(--gray);margin-top:8px">Solo el administrador puede acceder al backup.</p></div>';
-    return;
-  }
-  const lastStr=DB.config._lastBackup||null;
-  const hoy=new Date();
-  let diasSinBackup=null;
-  let lastFmt='Nunca realizado';
-  let statusColor='var(--red)';
-  let statusIcon='🔴';
-  if(lastStr){
-    const last=new Date(lastStr);
-    diasSinBackup=Math.floor((hoy-last)/(1000*60*60*24));
-    const pad=n=>String(n).padStart(2,'0');
-    const d=last;
-    lastFmt=`${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-    if(diasSinBackup<5){statusColor='var(--green)';statusIcon='✅';}
-    else if(diasSinBackup<10){statusColor='var(--amber)';statusIcon='🟡';}
-    else{statusColor='var(--red)';statusIcon='🔴';}
-  }
-  const diasMsg=diasSinBackup===null?'Nunca se ha realizado un backup':
-    diasSinBackup===0?'Backup realizado hoy':
-    diasSinBackup===1?'Hace 1 día':
-    `Hace ${diasSinBackup} días`;
-
-  // Conteo de datos actuales en memoria
-  const resumen=[
-    {label:'Vehículos',val:(DB.vehiculos||[]).length,ico:'🚗'},
-    {label:'Clientes',val:(DB.clientes||[]).length,ico:'👤'},
-    {label:'Ventas',val:(DB.ventas||[]).length,ico:'💰'},
-    {label:'Gastos Vehículo',val:(DB.gastosVehiculos||[]).length,ico:'💸'},
-    {label:'CxC',val:(DB.cxc||[]).length,ico:'📬'},
-    {label:'CxP',val:(DB.cxp||[]).length,ico:'📑'},
-    {label:'Gastos Empresa',val:(DB.gastos||[]).length,ico:'🏢'},
-    {label:'Nómina',val:(DB.nomina||[]).length,ico:'👷'},
-    {label:'Caja',val:(DB.caja||[]).length,ico:'💳'},
-    {label:'Suplidores',val:(DB.suplidores||[]).length,ico:'🏭'},
-    {label:'Cotizaciones',val:(DB.cotizaciones||[]).length,ico:'📋'},
-    {label:'Seguros',val:(DB.seguros||[]).length,ico:'🛡️'},
-  ];
-
-  document.getElementById('page-backup').innerHTML=`
-    <div class="page-header">
-      <div><h1>💾 Backup del Sistema</h1><p>Respaldo de todos los datos del sistema</p></div>
-    </div>
-
-    <!-- Estado del backup -->
-    <div class="card" style="border-top:4px solid ${statusColor}">
-      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
-        <div style="font-size:48px">${statusIcon}</div>
-        <div style="flex:1">
-          <div style="font-size:16px;font-weight:800;color:${statusColor}">${diasMsg}</div>
-          <div style="font-size:13px;color:var(--gray);margin-top:4px">Último backup: <strong>${lastFmt}</strong></div>
-          <div style="font-size:12px;color:var(--gray);margin-top:2px">Se recomienda hacer backup cada 5 días</div>
-        </div>
-        <button class="btn btn-primary" onclick="_hacerBackup()" style="font-size:15px;padding:12px 24px">
-          💾 Hacer Backup Ahora
-        </button>
-      </div>
-    </div>
-
-    <!-- Datos que se incluirán en el backup -->
-    <div class="card">
-      <div class="card-title">📊 Datos que incluye el backup</div>
-      <p style="font-size:12px;color:var(--gray);margin-bottom:16px">
-        Estos son los registros actuales en el sistema que serán guardados en el archivo de backup.
-        ${!window._fbCargado?'<span style="color:var(--red);font-weight:700">⚠️ Firebase aún cargando — espera antes de hacer backup.</span>':'<span style="color:var(--green);font-weight:600">✅ Firebase conectado — datos listos.</span>'}
-      </p>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px">
-        ${resumen.map(r=>`
-          <div style="background:var(--gray2);border-radius:10px;padding:14px;text-align:center;border:1px solid var(--gray3)">
-            <div style="font-size:24px;margin-bottom:6px">${r.ico}</div>
-            <div style="font-size:22px;font-weight:800;color:var(--navy)">${r.val}</div>
-            <div style="font-size:11px;color:var(--gray);font-weight:600;text-transform:uppercase;letter-spacing:.3px">${r.label}</div>
-          </div>`).join('')}
-      </div>
-    </div>
-
-    <!-- Instrucciones -->
-    <div class="card">
-      <div class="card-title">ℹ️ ¿Qué es el backup y para qué sirve?</div>
-      <div style="display:flex;flex-direction:column;gap:10px;font-size:13px;color:var(--navy)">
-        <div style="display:flex;gap:10px;align-items:flex-start">
-          <span style="font-size:18px;flex-shrink:0">📥</span>
-          <div><strong>¿Qué descarga?</strong> Un archivo <code style="background:var(--gray2);padding:2px 6px;border-radius:4px">.json</code> con todos tus datos — vehículos, clientes, ventas, gastos, nómina y más.</div>
-        </div>
-        <div style="display:flex;gap:10px;align-items:flex-start">
-          <span style="font-size:18px;flex-shrink:0">💻</span>
-          <div><strong>¿Dónde se guarda?</strong> En tu computadora, en la carpeta de Descargas. Guárdalo en un lugar seguro.</div>
-        </div>
-        <div style="display:flex;gap:10px;align-items:flex-start">
-          <span style="font-size:18px;flex-shrink:0">🔒</span>
-          <div><strong>¿Para qué sirve?</strong> Si algo se pierde en Firebase o se borra accidentalmente, el administrador del sistema puede recuperar los datos desde ese archivo.</div>
-        </div>
-        <div style="display:flex;gap:10px;align-items:flex-start">
-          <span style="font-size:18px;flex-shrink:0">📅</span>
-          <div><strong>¿Cada cuánto hacerlo?</strong> Se recomienda cada 5 días. El sistema te avisará automáticamente cuando sea necesario.</div>
-        </div>
-      </div>
-    </div>`;
-}
-
 function renderAlertas(){
   // Verificar si el usuario tiene acceso al módulo de alertas
   const esAdmin=currentUser?.role==='admin';
@@ -3236,7 +3121,7 @@ function guardarPermisosUsuarioConfig(i){
   if(currentUser?.role!=='admin'){toast('Solo el administrador puede editar usuarios','error');return;}
   const u=DB.users[i];
   if(!u)return;
-  const MODS_IDS=['dashboard','informes','suplidores','inventario','gastosVeh','cxp','clientes','ventas','cxc','gastos','nomina','caja','cotizaciones','autorizaciones','seguros','facturaExterna','alertas','verSaldoCaja','chat'];
+  const MODS_IDS=['dashboard','informes','suplidores','inventario','gastosVeh','cxp','clientes','ventas','cxc','gastos','nomina','caja','cotizaciones','autorizaciones','seguros','facturaExterna','alertas','verSaldoCaja','chat','cuentas','cumpleanos'];
   const ALERT_IDS=['SIN_VIN','SIN_COSTO','CXP','CXC_VENCIDA','CXC','SIN_VENDER_6M','SIN_VENDER_1A','DOCS'];
   if(u.role!=='admin'){
     const mods=MODS_IDS.filter(id=>document.getElementById(`cfg-mod-${i}-${id}`)?.checked);
@@ -3247,236 +3132,60 @@ function guardarPermisosUsuarioConfig(i){
     DB.users[i].modulos=mods;
     DB.users[i].alertasPermitidas=alertas;
     DB.users[i].permisos={editar:puedeEditar,eliminar:puedeEliminar,imprimir:puedeImprimir};
-    if(currentUser.id===u.id){
-      currentUser=Object.assign({},DB.users[i]);
-      aplicarPermisosNav();
-      document.getElementById('top-username').textContent=currentUser.nombre;
-      document.getElementById('top-role').textContent=_getRolLabel(currentUser.role);
-    }
+    if(currentUser.id===u.id){currentUser=DB.users[i];}
   }
   sDB('users');
   toast(`Usuario ${escHtml(u.nombre)} actualizado ✓`,'success');
   if(typeof fbGuardar==='function'&&window._fbActivo)fbGuardar('users').catch(()=>{});
   // Re-renderizar página activa para reflejar permisos inmediatamente
-  setTimeout(()=>{
-    const _ap=document.querySelector('.page.active');
-    if(!_ap)return;
+  const _ap=document.querySelector('.page.active');
+  if(_ap){
     const _pid=_ap.id.replace('page-','');
     const _rm={dashboard:renderDashboard,inventario:renderInventario,ventas:renderVentas,
       clientes:renderClientes,suplidores:renderSuplidores,gastos:renderGastos,
       nomina:renderNomina,cxc:renderCXC,cxp:renderCXP,caja:renderCaja,
       gastosVeh:renderGastosVeh,cotizaciones:renderCotizaciones,
-      autorizaciones:renderAutorizaciones,seguros:renderSeguros,
-      facturaExterna:renderFacturaExterna,alertas:renderAlertas,
-      cuentasBancarias:renderCuentasBancarias,informes:renderInformes,config:renderConfig};
-    if(_rm[_pid])_rm[_pid]();
-  },100);
+      autorizaciones:renderAutorizaciones,usuarios:renderUsuarios,
+      informes:renderInformes,config:renderConfig};
+    if(_rm[_pid])setTimeout(_rm[_pid],100);
+  }
 }
 
-
-// ══ MÓDULO: CUENTAS BANCARIAS ══════════════════════════════════════════════
-function renderCuentasBancarias(){
-  const pg=document.getElementById('page-cuentasBancarias');
-  if(!pg)return;
-  const esAdmin=currentUser?.role==='admin';
-  const tieneAcceso=esAdmin||canAccess('cuentasBancarias');
-  if(!tieneAcceso){
-    pg.innerHTML='<div style="text-align:center;padding:64px"><div style="font-size:48px;margin-bottom:12px">🔒</div><div style="font-size:18px;font-weight:700;color:var(--navy)">Acceso restringido</div><p style="color:var(--gray);margin-top:8px">Solo el dueño o un usuario autorizado puede gestionar las cuentas bancarias.</p></div>';
-    return;
-  }
+function eliminarBancoConfig(bi){
+  if(!confirm('¿Eliminar este banco y todas sus cuentas?'))return;
   const bcs=DB.config.bancoCuentas||[];
-  // Aplanar bancos→cuentas en lista plana para la tabla
-  const filas=[];
-  bcs.forEach((b,bi)=>(b.cuentas||[]).forEach((c,ci)=>filas.push({banco:b.banco,bi,ci,...c})));
-
-  const filaHTML=filas.length ? filas.map(f=>{
-    const esUSD=f.tipo&&f.tipo.includes('USD');
-    const esAhorro=f.tipo&&f.tipo.toLowerCase().includes('ahorro');
-    return `<tr>
-      <td style="font-weight:700">${escHtml(f.banco)}</td>
-      <td style="font-family:monospace">${escHtml(f.numero||'—')}</td>
-      <td><span class="badge ${esAhorro?'badge-green':'badge-blue'}">${esAhorro?'Ahorros':'Corriente'}</span></td>
-      <td><span class="badge ${esUSD?'badge-amber':'badge-purple'}">${esUSD?'USD':'RD$'}</span></td>
-      <td><div style="display:flex;gap:4px">
-        <button class="btn btn-secondary btn-sm" onclick="cbEditarCuenta(${f.bi},${f.ci})">✏️ Editar</button>
-        <button class="btn btn-red btn-sm" onclick="cbEliminarCuenta(${f.bi},${f.ci})">🗑</button>
-      </div></td>
-    </tr>`;
-  }).join('') : '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--gray)">No hay cuentas registradas. Haz clic en ➕ Agregar Cuenta.</td></tr>';
-
-  // Resumen por moneda
-  const totalRD=filas.filter(f=>!f.tipo?.includes('USD')).length;
-  const totalUSD=filas.filter(f=>f.tipo?.includes('USD')).length;
-
-  pg.innerHTML=`
-    <div class="page-header">
-      <div><h1>🏦 Cuentas Bancarias</h1><p>Bancos y cuentas disponibles en el sistema</p></div>
-      <button class="btn btn-primary" onclick="cbNuevaCuenta()">➕ Agregar Cuenta</button>
-    </div>
-    <div class="stats-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:20px">
-      <div class="stat-card blue"><div class="stat-ico">🏦</div><div class="stat-label">Total Cuentas</div><div class="stat-value">${filas.length}</div></div>
-      <div class="stat-card purple"><div class="stat-ico">🇩🇴</div><div class="stat-label">Cuentas RD$</div><div class="stat-value">${totalRD}</div></div>
-      <div class="stat-card amber"><div class="stat-ico">🇺🇸</div><div class="stat-label">Cuentas USD</div><div class="stat-value">${totalUSD}</div></div>
-    </div>
-    <div class="card">
-      <div class="card-title">💳 Cuentas registradas</div>
-      <div class="table-wrap"><table>
-        <thead><tr><th>Banco</th><th>Número de Cuenta</th><th>Tipo</th><th>Moneda</th><th>Acciones</th></tr></thead>
-        <tbody>${filaHTML}</tbody>
-      </table></div>
-    </div>`;
-}
-
-// Formulario compartido (nuevo y editar)
-function _cbFormHTML(banco,numero,tipo){
-  const bancos=['Banco Popular Dominicano','BHD León','BanReservas','Scotiabank',
-    'Citibank','Banco Santa Cruz','Banco López de Haro','Banco Vimenca',
-    'Asociación Popular de Ahorros y Préstamos','Otro'];
-  const existentes=(DB.config.bancoCuentas||[]).map(b=>b.banco);
-  const todosLista=[...new Set([...bancos,...existentes])];
-  return `
-    <div class="form-field">
-      <label class="required">Banco</label>
-      <select id="cb-banco" onchange="cbToggleBancoCustom(this)">
-        <option value="">-- Seleccionar banco --</option>
-        ${todosLista.map(b=>`<option value="${escHtml(b)}" ${b===banco?'selected':''}>${escHtml(b)}</option>`).join('')}
-        <option value="__otro__" ${!todosLista.includes(banco)&&banco?'selected':''}>✏️ Escribir otro...</option>
-      </select>
-      <input type="text" id="cb-banco-custom" placeholder="Nombre del banco"
-        value="${!todosLista.includes(banco)&&banco?escHtml(banco):''}"
-        style="margin-top:8px;display:${!todosLista.includes(banco)&&banco?'block':'none'}">
-    </div>
-    <div class="form-field" style="margin-top:12px">
-      <label class="required">Número de Cuenta</label>
-      <input type="text" id="cb-numero" placeholder="Ej: 123-456789-0" value="${escHtml(numero||'')}">
-    </div>
-    <div class="form-row c2" style="margin-top:12px">
-      <div class="form-field">
-        <label class="required">Tipo de Cuenta</label>
-        <select id="cb-tipocuenta">
-          <option value="Corriente" ${(tipo||'Corriente').includes('Corriente')?'selected':''}>Corriente</option>
-          <option value="Ahorro" ${(tipo||'').includes('Ahorro')?'selected':''}>Ahorros</option>
-        </select>
-      </div>
-      <div class="form-field">
-        <label class="required">Moneda</label>
-        <select id="cb-moneda">
-          <option value="RD$" ${!(tipo||'').includes('USD')?'selected':''}>🇩🇴 Pesos (RD$)</option>
-          <option value="USD" ${(tipo||'').includes('USD')?'selected':''}>🇺🇸 Dólares (USD)</option>
-        </select>
-      </div>
-    </div>`;
-}
-
-function cbToggleBancoCustom(sel){
-  const custom=document.getElementById('cb-banco-custom');
-  if(custom)custom.style.display=sel.value==='__otro__'?'block':'none';
-}
-
-function _cbGetBancoVal(){
-  const sel=document.getElementById('cb-banco');
-  if(sel.value==='__otro__'||sel.value===''){
-    return (document.getElementById('cb-banco-custom')?.value||'').trim();
-  }
-  return sel.value;
-}
-
-function _cbGetTipoVal(){
-  const tc=document.getElementById('cb-tipocuenta')?.value||'Corriente';
-  const mon=document.getElementById('cb-moneda')?.value||'RD$';
-  return `${tc} ${mon}`;
-}
-
-function cbNuevaCuenta(){
-  openModal('➕ Nueva Cuenta Bancaria',_cbFormHTML('','',''),`
-    <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
-    <button class="btn btn-primary" onclick="cbGuardarNueva()">💾 Guardar</button>`);
-}
-
-function cbGuardarNueva(){
-  const banco=_cbGetBancoVal();
-  const numero=document.getElementById('cb-numero')?.value.trim();
-  const tipo=_cbGetTipoVal();
-  if(!banco){toast('Selecciona o escribe el nombre del banco','error');return;}
-  if(!numero){toast('El número de cuenta es requerido','error');return;}
-  if(!DB.config.bancoCuentas)DB.config.bancoCuentas=[];
-  // Buscar si ya existe el banco
-  let bi=DB.config.bancoCuentas.findIndex(b=>b.banco.toLowerCase()===banco.toLowerCase());
-  if(bi<0){DB.config.bancoCuentas.push({banco,cuentas:[]});bi=DB.config.bancoCuentas.length-1;}
-  // Verificar cuenta duplicada (mismo número en mismo banco)
-  const dup=DB.config.bancoCuentas[bi].cuentas.find(c=>c.numero===numero);
-  if(dup){toast('Ese número de cuenta ya existe en este banco','error');return;}
-  DB.config.bancoCuentas[bi].cuentas.push({numero,tipo});
-  DB.config.bancos=DB.config.bancoCuentas.map(b=>b.banco);
+  bcs.splice(bi,1);
+  DB.config.bancoCuentas=bcs;
   sDB('config');
-  closeModal();
-  toast('Cuenta agregada ✓','success');
-  renderCuentasBancarias();
+  renderConfig();
+  toast('Banco eliminado','success');
 }
-
-function cbEditarCuenta(bi,ci){
-  const b=DB.config.bancoCuentas[bi];
-  const c=b.cuentas[ci];
-  openModal('✏️ Editar Cuenta Bancaria',_cbFormHTML(b.banco,c.numero,c.tipo),`
-    <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
-    <button class="btn btn-primary" onclick="cbGuardarEdicion(${bi},${ci})">💾 Actualizar</button>`);
+function eliminarCuentaBanco(bi,ci){
+  const bcs=DB.config.bancoCuentas||[];
+  if(bcs[bi]&&bcs[bi].cuentas){bcs[bi].cuentas.splice(ci,1);DB.config.bancoCuentas=bcs;sDB('config');renderConfig();toast('Cuenta eliminada','success');}
 }
-
-function cbGuardarEdicion(bi,ci){
-  const banco=_cbGetBancoVal();
-  const numero=document.getElementById('cb-numero')?.value.trim();
-  const tipo=_cbGetTipoVal();
-  if(!banco){toast('Selecciona o escribe el nombre del banco','error');return;}
-  if(!numero){toast('El número de cuenta es requerido','error');return;}
-  const bcs=DB.config.bancoCuentas;
-  // Si cambió el banco, mover la cuenta al nuevo banco
-  if(bcs[bi].banco.toLowerCase()!==banco.toLowerCase()){
-    bcs[bi].cuentas.splice(ci,1);
-    if(!bcs[bi].cuentas.length)bcs.splice(bi,1);
-    let nbi=bcs.findIndex(b=>b.banco.toLowerCase()===banco.toLowerCase());
-    if(nbi<0){bcs.push({banco,cuentas:[]});nbi=bcs.length-1;}
-    bcs[nbi].cuentas.push({numero,tipo});
-  } else {
-    bcs[bi].cuentas[ci]={numero,tipo};
-  }
-  DB.config.bancos=bcs.map(b=>b.banco);
+function guardarBancosConfig(){
+  const bcs=[];
+  document.querySelectorAll('[id^="cf-banco-nombre-"]').forEach(inp=>{
+    const bi=inp.id.replace('cf-banco-nombre-','');
+    const banco=inp.value.trim();
+    if(!banco)return;
+    const cuentas=[];
+    document.querySelectorAll('[id^="cf-banco-cuenta-'+bi+'-"]').forEach(cinp=>{
+      const suffix=cinp.id.replace('cf-banco-cuenta-'+bi+'-','');
+      const tipo=document.getElementById('cf-banco-tipo-'+bi+'-'+suffix)?.value||'Ahorro';
+      const moneda=document.getElementById('cf-banco-moneda-'+bi+'-'+suffix)?.value||'RD$';
+      const numero=cinp.value.trim();
+      if(numero)cuentas.push({tipo,moneda,numero,banco});
+    });
+    bcs.push({banco,cuentas});
+  });
+  DB.config.bancoCuentas=bcs;
   sDB('config');
-  closeModal();
-  toast('Cuenta actualizada ✓','success');
-  renderCuentasBancarias();
+  if(typeof fbGuardar==='function'&&window._fbActivo)fbGuardar('config').catch(()=>{});
+  toast('✅ Bancos y cuentas guardados','success');
+  renderConfig();
 }
-
-function cbEliminarCuenta(bi,ci){
-  const b=DB.config.bancoCuentas[bi];
-  const c=b.cuentas[ci];
-  const esUSD=c.tipo?.includes('USD');
-  const esAhorro=c.tipo?.toLowerCase().includes('ahorro');
-  openModal('🗑 Eliminar Cuenta',`
-    <p style="margin-bottom:12px">¿Eliminar esta cuenta?</p>
-    <div style="background:var(--gray2);border-radius:8px;padding:14px">
-      <div style="font-weight:700;font-size:15px">${escHtml(b.banco)}</div>
-      <div style="font-family:monospace;color:var(--gray);margin-top:4px">${escHtml(c.numero)}</div>
-      <div style="margin-top:6px;display:flex;gap:6px">
-        <span class="badge ${esAhorro?'badge-green':'badge-blue'}">${esAhorro?'Ahorros':'Corriente'}</span>
-        <span class="badge ${esUSD?'badge-amber':'badge-purple'}">${esUSD?'USD':'RD$'}</span>
-      </div>
-    </div>
-    <p style="margin-top:12px;font-size:12px;color:var(--red)">⚠️ Esta acción no se puede deshacer.</p>`,`
-    <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
-    <button class="btn btn-red" onclick="cbConfirmarEliminar(${bi},${ci})">🗑 Eliminar</button>`);
-}
-
-function cbConfirmarEliminar(bi,ci){
-  const bcs=DB.config.bancoCuentas;
-  bcs[bi].cuentas.splice(ci,1);
-  if(!bcs[bi].cuentas.length)bcs.splice(bi,1);
-  DB.config.bancos=bcs.map(b=>b.banco);
-  sDB('config');
-  closeModal();
-  toast('Cuenta eliminada','success');
-  renderCuentasBancarias();
-}
-// ════════════════════════════════════════════════════════════════════════════
 
 function renderConfig(){
   const c=DB.config;
@@ -3623,6 +3332,21 @@ function renderConfig(){
         <button class="btn btn-green" onclick="guardarColores()">💾 Guardar Colores</button>
       </div>
     </div>
+    <!-- BANCOS Y CUENTAS -->
+    <div class="card" style="margin-top:16px">
+      <div class="card-title">🏦 Bancos y Cuentas</div>
+      <p style="font-size:13px;color:var(--gray);margin-bottom:12px">Configure los bancos y sus cuentas. Estos aparecerán en todos los registros de dinero (gastos, ventas, caja, nómina, etc.).</p>
+      <div id="cf-bancos-list" style="display:flex;flex-direction:column;gap:12px">
+        ${(DB.config.bancoCuentas||[]).map((b,bi)=>{
+          const cuentasHTML=(b.cuentas||[]).map((ct,ci)=>'<div style="display:flex;gap:6px;align-items:center"><select id="cf-banco-tipo-'+bi+'-'+ci+'" style="width:140px"><option value="Ahorro" '+(ct.tipo==='Ahorro'?'selected':'')+'>Ahorro</option><option value="Corriente" '+(ct.tipo==='Corriente'?'selected':'')+'>Corriente</option><option value="Caja" '+(ct.tipo==='Caja'?'selected':'')+'>Caja</option></select><select id="cf-banco-moneda-'+bi+'-'+ci+'" style="width:120px"><option value="RD$" '+((ct.moneda||'RD$')==='RD$'?'selected':'')+'>RD$ Pesos</option><option value="USD" '+(ct.moneda==='USD'?'selected':'')+'>USD Dólares</option></select><input type="text" id="cf-banco-cuenta-'+bi+'-'+ci+'" value="'+escHtml(ct.numero||'')+'" placeholder="Número de cuenta" style="flex:1"><button class="btn btn-red btn-sm" onclick="eliminarCuentaBanco('+bi+','+ci+')">🗑</button></div>').join('');
+          return '<div style="border:1.5px solid var(--blue3);border-radius:8px;padding:12px;background:#f8fafc;margin-bottom:8px"><div style="display:flex;gap:8px;align-items:center;margin-bottom:8px"><input type="text" id="cf-banco-nombre-'+bi+'" value="'+escHtml(b.banco||'')+'" placeholder="Nombre del banco" style="flex:1;font-weight:700"><button class="btn btn-red btn-sm" onclick="eliminarBancoConfig('+bi+')">🗑 Eliminar</button></div><div id="cf-banco-cuentas-'+bi+'" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">'+cuentasHTML+'</div><button class="btn btn-secondary btn-sm" onclick="agregarCuentaBanco('+bi+')">➕ Agregar Cuenta</button></div>';
+        }).join('')}
+      </div>
+      <div style="margin-top:12px;display:flex;gap:8px">
+        <button class="btn btn-secondary btn-sm" onclick="agregarBancoConfig()">➕ Agregar Banco</button>
+        <button class="btn btn-primary" onclick="guardarBancosConfig()">💾 Guardar Bancos</button>
+      </div>
+    </div>
     <!-- COMPAÑÍAS DE SEGUROS -->
     <div class="card">
       <div class="card-title">🛡️ Compañías de Seguros</div>
@@ -3739,7 +3463,7 @@ function renderConfig(){
       <p style="font-size:13px;color:var(--gray);margin-bottom:12px">El administrador puede editar módulos, permisos y alertas de cada usuario. Los cambios se guardan de inmediato.</p>
       <div style="display:flex;flex-direction:column;gap:12px">
         ${DB.users.map((u,ui)=>{
-          const MODS_LIST=[{id:'dashboard',label:'Inicio'},{id:'informes',label:'Informe'},{id:'suplidores',label:'Suplidores'},{id:'inventario',label:'Reg. Vehículo'},{id:'gastosVeh',label:'Gastos Veh.'},{id:'cxp',label:'CxP'},{id:'clientes',label:'Clientes'},{id:'ventas',label:'Ventas'},{id:'cxc',label:'CxC'},{id:'gastos',label:'Gastos Emp.'},{id:'nomina',label:'Nómina'},{id:'caja',label:'Caja'},{id:'cotizaciones',label:'Cotizaciones'},{id:'autorizaciones',label:'Autorizaciones'},{id:'seguros',label:'Seguros'},{id:'facturaExterna',label:'Facturas Ext.'},{id:'alertas',label:'Alertas'},{id:'chat',label:'Chat'},{id:'cuentasBancarias',label:'🏦 C. Bancarias'},{id:'cumpleanos',label:'🎂 Cumpleaños'}];
+          const MODS_LIST=[{id:'dashboard',label:'Inicio'},{id:'informes',label:'Informe'},{id:'suplidores',label:'Suplidores'},{id:'inventario',label:'Reg. Vehículo'},{id:'gastosVeh',label:'Gastos Veh.'},{id:'cxp',label:'CxP'},{id:'clientes',label:'Clientes'},{id:'ventas',label:'Ventas'},{id:'cxc',label:'CxC'},{id:'gastos',label:'Gastos Emp.'},{id:'nomina',label:'Nómina'},{id:'caja',label:'Caja'},{id:'cotizaciones',label:'Cotizaciones'},{id:'autorizaciones',label:'Autorización Compra'},{id:'seguros',label:'Seguros'},{id:'facturaExterna',label:'Facturas Externas'},{id:'alertas',label:'Alertas'},{id:'verSaldoCaja',label:'💰 Ver Saldo Caja'},{id:'chat',label:'💬 Chat'},{id:'cuentas',label:'🏦 Cuentas'},{id:'cumpleanos',label:'🎂 Cumpleaños'}];
           const ALERT_TYPES=[{id:'SIN_VIN',label:'Sin VIN'},{id:'SIN_COSTO',label:'Sin costos'},{id:'CXP',label:'CxP pendientes'},{id:'CXC_VENCIDA',label:'CxC vencidas'},{id:'CXC',label:'CxC pendientes'},{id:'SIN_VENDER_6M',label:'6m sin vender'},{id:'SIN_VENDER_1A',label:'1 año sin vender'},{id:'DOCS',label:'Docs pendientes'}];
           const mods=u.modulos||[];
           const alertas=u.alertasPermitidas||ALERT_TYPES.map(a=>a.id);
@@ -3847,6 +3571,8 @@ function cargarLogoConfig(input){
   reader.readAsDataURL(file);
 }
 
+
+// ══ CHAT INTERNO ══
 let _chatWith=null;
 let _presenceInterval=null;
 
@@ -3870,16 +3596,16 @@ function renderChat(){
     const unread=unreadCount(u.id);
     const online=isOnline(u.id);
     const ac=_chatWith===u.id?' active':'';
-    const pr='<div class="chat-presence '+(online?'online':'offline')+'"></div>';
+    const pr=esAdmin?'<div class="chat-presence '+(online?'online':'offline')+'"></div>':'';
     const ur=unread>0?'<div class="chat-unread">'+unread+'</div>':'';
     return '<div class="chat-user-item'+ac+'" data-uid="'+u.id+'" onclick="_chatAbrirCon(this.dataset.uid)">'+pr+'<div class="chat-user-name">'+escHtml(u.nombre)+'</div>'+ur+'</div>';
   }).join('');
 
   const mainHTML=_chatWith?
     '<div class="chat-header">'+
-      '<div class="chat-presence '+(isOnline(_chatWith)?'online':'offline')+'"></div>'+
+      (esAdmin?'<div class="chat-presence '+(isOnline(_chatWith)?'online':'offline')+'"></div>':'')+
       '<div style="font-weight:700;font-size:14px;color:var(--navy)">'+escHtml(_chatNombre(_chatWith))+'</div>'+
-      (isOnline(_chatWith)?'<div style="font-size:11px;color:var(--green);margin-left:4px">● En línea</div>':'')+
+      (esAdmin&&isOnline(_chatWith)?'<div style="font-size:11px;color:var(--green);margin-left:4px">● En línea</div>':'')+
     '</div>'+
     '<div class="chat-messages" id="chat-messages">'+_renderMensajes()+'</div>'+
     '<div class="chat-input-area">'+
@@ -3965,83 +3691,82 @@ function _chatScrollBottom(){
 }
 
 // ══ PRESENCIA GLOBAL (funciona sin servidor, entre pestañas locales) ══
-function _leerPresenciaGlobal(){try{return JSON.parse(localStorage.getItem('fayre_presencia')||'{}');}catch{return {};}}
-function _escribirPresenciaGlobal(uid,ts){const p=_leerPresenciaGlobal();p[uid]=ts;localStorage.setItem('fayre_presencia',JSON.stringify(p));}
-function _sincPresencia(){
-  const g=_leerPresenciaGlobal();
-  DB.presencia=Object.assign(DB.presencia||{},g);
-  // Si Firebase está activo, leer presencia global para ver otros dispositivos
-  if(window._fbActivo&&typeof _fbDB!=='undefined'){
-    try{
-      _fbDB.collection(_fbCol).doc('presencia').get().then(doc=>{
-        if(doc&&doc.exists){
-          let fp={};try{fp=JSON.parse(doc.data().valor||'{}');}catch{}
-          DB.presencia=Object.assign(DB.presencia||{},fp);
-        }
-      }).catch(()=>{});
-    }catch(e){}
-  }
-}
-function _pingPresencia(){
-  if(!currentUser)return;
-  const ts=Date.now();
-  _escribirPresenciaGlobal(currentUser.id,ts);
-  if(!DB.presencia)DB.presencia={};
-  DB.presencia[currentUser.id]=ts;
-  if(window._presenciaBC){try{window._presenciaBC.postMessage({uid:currentUser.id,ts});}catch{}}
-  // Sincronizar presencia a Firebase para visibilidad entre dispositivos
-  if(window._fbActivo&&typeof _fbDB!=='undefined'){
-    try{
-      const presObj={};
-      Object.keys(DB.presencia||{}).forEach(k=>{if(DB.presencia[k]>0)presObj[k]=DB.presencia[k];});
-      _fbDB.collection(_fbCol).doc('presencia').set({valor:JSON.stringify(presObj)}).catch(()=>{});
-    }catch(e){}
-  }
-}
+let _presenciaGlobalInterval=null;
+let _presenciaBC=null; // BroadcastChannel
+
 function _iniciarPresenciaGlobal(){
   if(!currentUser)return;
+  // Leer presencia compartida del localStorage global (sin prefijo ds_)
+  function _leerPresenciaGlobal(){
+    try{return JSON.parse(localStorage.getItem('fayre_presencia')||'{}');}catch{return {};}
+  }
+  function _escribirPresenciaGlobal(uid,ts){
+    const p=_leerPresenciaGlobal();
+    p[uid]=ts;
+    localStorage.setItem('fayre_presencia',JSON.stringify(p));
+  }
+  // Sincronizar hacia DB.presencia desde el storage global
+  function _sincPresencia(){
+    const global=_leerPresenciaGlobal();
+    DB.presencia=Object.assign(DB.presencia||{},global);
+  }
+  // Registrar este usuario como activo
+  function _ping(){
+    if(!currentUser)return;
+    const ts=Date.now();
+    _escribirPresenciaGlobal(currentUser.id,ts);
+    if(!DB.presencia)DB.presencia={};
+    DB.presencia[currentUser.id]=ts;
+    // Broadcast a otras pestañas
+    if(_presenciaBC){try{_presenciaBC.postMessage({uid:currentUser.id,ts});}catch{}}
+  }
+  // BroadcastChannel para comunicación entre pestañas del mismo archivo
   try{
-    if(window._presenciaBC)window._presenciaBC.close();
-    window._presenciaBC=new BroadcastChannel('fayre_presencia');
-    window._presenciaBC.onmessage=function(e){
-      if(e.data&&e.data.uid){
+    if(_presenciaBC)_presenciaBC.close();
+    _presenciaBC=new BroadcastChannel('fayre_presencia');
+    _presenciaBC.onmessage=function(e){
+      if(e.data&&e.data.uid&&e.data.ts){
         if(!DB.presencia)DB.presencia={};
-        if(e.data.ts===0){
-          delete DB.presencia[e.data.uid];
-          const p=_leerPresenciaGlobal();delete p[e.data.uid];localStorage.setItem('fayre_presencia',JSON.stringify(p));
-        } else {
-          DB.presencia[e.data.uid]=e.data.ts;
-          _escribirPresenciaGlobal(e.data.uid,e.data.ts);
+        DB.presencia[e.data.uid]=e.data.ts;
+        // Si la página de usuarios está abierta, refrescar silenciosamente
+        const pUsuarios=document.getElementById('page-usuarios');
+        if(pUsuarios&&pUsuarios.classList.contains('active')){
+          clearTimeout(window._presenciaRefreshTimer);
+          window._presenciaRefreshTimer=setTimeout(renderUsuarios,500);
         }
-        const pU=document.getElementById('page-usuarios');
-        if(pU&&pU.classList.contains('active')){clearTimeout(window._presenciaRefreshTimer);window._presenciaRefreshTimer=setTimeout(_actualizarBadgesOnlineUsuarios,400);}
       }
     };
   }catch(e){console.warn('BroadcastChannel no disponible:',e.message);}
+  // Leer presencia de otras pestañas ya abiertas
   _sincPresencia();
-  _pingPresencia();
-  if(window._presenciaGlobalInterval)clearInterval(window._presenciaGlobalInterval);
-  window._presenciaGlobalInterval=setInterval(()=>{
-    if(!currentUser){clearInterval(window._presenciaGlobalInterval);return;}
+  // Hacer ping inmediato
+  _ping();
+  // Ping cada 10 segundos
+  if(_presenciaGlobalInterval)clearInterval(_presenciaGlobalInterval);
+  _presenciaGlobalInterval=setInterval(()=>{
+    if(!currentUser){clearInterval(_presenciaGlobalInterval);return;}
     _sincPresencia();
-    _pingPresencia();
-    // Refrescar usuarios y chat si están activos para mostrar estado actualizado
-    const pU=document.getElementById('page-usuarios');
-    if(pU&&pU.classList.contains('active')){clearTimeout(window._presenciaRefreshTimer);window._presenciaRefreshTimer=setTimeout(_actualizarBadgesOnlineUsuarios,200);}
-  },8000);
+    _ping();
+  },10000);
+  // Limpiar al cerrar/salir
   window.addEventListener('beforeunload',()=>{
     if(currentUser){
-      const p=_leerPresenciaGlobal();delete p[currentUser.id];localStorage.setItem('fayre_presencia',JSON.stringify(p));
-      if(window._presenciaBC)try{window._presenciaBC.postMessage({uid:currentUser.id,ts:0});}catch{}
+      const p=_leerPresenciaGlobal();
+      delete p[currentUser.id];
+      localStorage.setItem('fayre_presencia',JSON.stringify(p));
+      if(_presenciaBC)try{_presenciaBC.postMessage({uid:currentUser.id,ts:0});}catch{}
     }
   },{once:true});
 }
 
 function _chatIniciarPresencia(){
-  // Presencia ya manejada por _iniciarPresenciaGlobal — solo actualizamos badge
+  // La presencia ya la maneja _iniciarPresenciaGlobal, solo actualizamos badge
   if(!currentUser)return;
   if(_presenceInterval)clearInterval(_presenceInterval);
-  _presenceInterval=setInterval(()=>{if(!currentUser)return;_chatActualizarBadge();},20000);
+  _presenceInterval=setInterval(()=>{
+    if(!currentUser)return;
+    _chatActualizarBadge();
+  },20000);
 }
 
 // ══ GUARDAR POR SECCIÓN ══
@@ -4293,7 +4018,7 @@ function renderGastosVeh(){
     </div>
 
     <div class="card" style="margin-bottom:16px">
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr 1fr;gap:10px;flex-wrap:wrap">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px">
         <div style="display:flex;flex-direction:column;gap:4px">
           <label style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--gray)">Vehículo</label>
           <select id="gveh-filtro-veh" onchange="renderGastosVeh()" style="padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
@@ -4325,9 +4050,9 @@ function renderGastosVeh(){
           <label style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--gray)">Hasta</label>
           <input type="date" id="gveh-filtro-hasta" onchange="renderGastosVeh()" style="padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
         </div>
-        <div style="display:flex;gap:8px;align-items:flex-end">
-          <button class="btn btn-secondary btn-sm" onclick="limpiarFiltrosGastosVeh()" style="width:50%">🔄</button>
-          <button class="btn btn-secondary btn-sm" onclick="exportarGastosVehPDF()" style="width:100%">📄 PDF</button>
+        <div style="display:flex;gap:6px;align-items:flex-end">
+          <button class="btn btn-secondary btn-sm" onclick="limpiarFiltrosGastosVeh()" style="flex-shrink:0">🔄</button>
+          <button class="btn btn-secondary btn-sm" onclick="exportarGastosVehPDF()">📄 PDF</button>
         </div>
       </div>
     </div>
@@ -4440,7 +4165,9 @@ function nuevoGastoVeh(){
           <option value="USD">USD — Dólares</option>
         </select>
       </div>
-
+      <div class="form-field" id="ngv-tasa-wrap" style="display:none"><label>Tasa de Cambio (RD$ x USD)</label>
+        <input type="number" id="ngv-tasa" value="${DB.config.tasaCambio||60}" step="0.01" oninput="calcPendienteGVeh()">
+      </div>
     </div>
     <div class="form-row c2" id="ngv-banco-wrap">
       <div class="form-field"><label class="required">Banco</label>
@@ -4456,13 +4183,13 @@ function nuevoGastoVeh(){
     </div>
     <div class="form-row c3">
       <div class="form-field"><label class="required">Monto Factura</label>
-        <input type="text" id="ngv-factura" value="" placeholder="0.00" oninput="fmtMoneyInput(this);calcPendienteGVeh()" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
+        <input type="text" id="ngv-factura" value="0" oninput="fmtMoneyInput(this);calcPendienteGVeh()" placeholder="0.00">
       </div>
       <div class="form-field"><label>Abono Inicial</label>
-        <input type="text" id="ngv-abono" value="" placeholder="0.00" oninput="fmtMoneyInput(this);calcPendienteGVeh()" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
+        <input type="text" id="ngv-abono" value="0" oninput="fmtMoneyInput(this);calcPendienteGVeh()" placeholder="0.00">
       </div>
       <div class="form-field"><label>Pendiente</label>
-        <input type="text" id="ngv-pendiente" value="0.00" readonly style="background:#f8fafc;font-weight:700;color:var(--red)">
+        <input type="number" id="ngv-pendiente" value="0" readonly style="background:#f8fafc;font-weight:700;color:var(--red)">
       </div>
     </div>
     <div class="form-row c2">
@@ -4478,7 +4205,9 @@ function nuevoGastoVeh(){
 }
 
 function toggleGVehMoneda(){
-  // Tasa de cambio ya no se muestra en el formulario
+  const moneda=document.getElementById('ngv-moneda')?.value;
+  const tasaWrap=document.getElementById('ngv-tasa-wrap');
+  if(tasaWrap)tasaWrap.style.display=moneda==='USD'?'block':'none';
 }
 function actualizarCuentasNGV(){
   const bancoEl=document.getElementById('ngv-banco');
@@ -4492,15 +4221,14 @@ function mostrarTipoSuplidor(nombre,infoId){
   const inf=document.getElementById(infoId);if(!inf)return;
   const sup=DB.suplidores.find(s=>(s.empresa||s.nombre||'')===nombre);
   if(!sup){inf.textContent='';return;}
-  inf.textContent=sup.tipoSuplidor==='vehiculo'?'Tipo: 🚗 Suplidor de Vehículos':sup.tipoSuplidor==='empresa'?'Tipo: 🏢 Suplidor de Empresa':'';
+  inf.textContent=sup.tipoSuplidor==='vehiculo'?'Tipo: 🚗 Suplidor de Vehículos':sup.tipoSuplidor==='importadora'?'Tipo: 🏦 Compañía Importadora':sup.tipoSuplidor==='empresa'?'Tipo: 🏢 Suplidor de Empresa':'';
 }
 
 function calcPendienteGVeh(){
-  const f=parseMoney(document.getElementById('ngv-factura')?.value);
-  const a=parseMoney(document.getElementById('ngv-abono')?.value);
+  const f=parseFloat((document.getElementById('ngv-factura')?.value||'0').replace(/,/g,''));
+  const a=parseFloat((document.getElementById('ngv-abono')?.value||'0').replace(/,/g,''));
   const p=document.getElementById('ngv-pendiente');
-  const pend=Math.max(0,f-a);
-  if(p)p.value=fmtMoneyDisplay(pend);
+  if(p)p.value=fmtMoneyDisplay(f-a);
 }
 
 function guardarNuevoGastoVeh(){
@@ -4514,9 +4242,9 @@ function guardarNuevoGastoVeh(){
     return;
   }
   if(!tipo){toast('Selecciona el tipo de gasto','error');return;}
-  const factura=parseMoney(document.getElementById('ngv-factura').value);
+  const factura=parseFloat((document.getElementById('ngv-factura').value||'0').replace(/,/g,''));
   if(!factura){toast('El monto de factura es requerido','error');return;}
-  const abono=parseMoney(document.getElementById('ngv-abono').value);
+  const abono=parseFloat((document.getElementById('ngv-abono').value||'0').replace(/,/g,''));
   const pendiente=factura-abono;
   const moneda=document.getElementById('ngv-moneda').value;
   const tasaUsada=moneda==='USD'?parseFloat(document.getElementById('ngv-tasa')?.value||DB.config.tasaCambio||60):parseFloat(DB.config.tasaCambio||60);
@@ -4573,7 +4301,7 @@ function abonarGastoVeh(gid){
     </div>
     <div class="form-row c2">
       <div class="form-field"><label class="required">Monto a Pagar</label>
-        <input type="text" id="abgv-monto" value="${fmtMoneyDisplay(g.montoPendiente||0)}" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
+        <input type="number" id="abgv-monto" value="${g.montoPendiente||0}" step="0.01" max="${g.montoPendiente||0}">
       </div>
       <div class="form-field"><label>Cuenta de Salida</label>
         <select id="abgv-cuenta">${cuentas.map(c=>`<option ${c===g.cuenta?'selected':''}>${escHtml(c)}</option>`).join('')}</select>
@@ -4589,7 +4317,7 @@ function abonarGastoVeh(gid){
 }
 
 function confirmarAbonoGastoVeh(i){
-  const monto=parseMoney(document.getElementById('abgv-monto').value);
+  const monto=parseFloat(document.getElementById('abgv-monto').value||0);
   if(!monto||monto<=0){toast('Ingresa un monto válido','error');return;}
   const g=DB.gastosVehiculos[i];
   if(monto>parseFloat(g.montoPendiente||0)){toast('El monto no puede superar el pendiente','error');return;}
@@ -4610,7 +4338,7 @@ function confirmarAbonoGastoVeh(i){
 }
 
 function editarGastoVeh(gid){
-  if(currentUser?.role!=='admin'&&!canDo('editar')){toast('No tienes permiso para editar','error');return;}
+  if(currentUser?.role!=='admin'){toast('Solo el administrador puede editar','error');return;}
   const gastos=DB.gastosVehiculos||[];
   const i=gastos.findIndex(g=>g.id===gid);
   if(i<0)return;
@@ -4635,12 +4363,16 @@ function editarGastoVeh(gid){
         </select>
       </div>
     </div>
-    <div class="form-row c3">
+    <div class="form-row c2">
       <div class="form-field"><label>Tipo de Gasto</label>
         <select id="egv-tipo">${tiposGasto.map(t=>`<option ${t===g.tipo?'selected':''}>${t}</option>`).join('')}</select>
       </div>
+    <div class="form-row c3">
       <div class="form-field"><label>Moneda</label>
         <select id="egv-moneda"><option value="RD$" ${(g.moneda||'RD$')==='RD$'?'selected':''}>RD$</option><option value="USD" ${g.moneda==='USD'?'selected':''}>USD</option></select>
+      </div>
+      <div class="form-field"><label>Cuenta Salida</label>
+        <select id="egv-cuenta">${cuentas.map(c=>`<option ${c===g.cuenta?'selected':''}>${escHtml(c)}</option>`).join('')}</select>
       </div>
       <div class="form-field"><label>Fecha</label>
         <input type="date" id="egv-fecha" value="${g.fecha||today()}">
@@ -4648,16 +4380,11 @@ function editarGastoVeh(gid){
     </div>
     <div class="form-row c3">
       <div class="form-field"><label>Monto Factura</label>
-        <input type="text" id="egv-factura" value="${fmtMoneyDisplay(g.montoFactura||0)}" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)" placeholder="0.00">
+        <input type="number" id="egv-factura" value="${g.montoFactura||0}" step="0.01">
       </div>
       <div class="form-field"><label>Monto Pagado</label>
-        <input type="text" id="egv-pagado" value="${fmtMoneyDisplay(g.montoPagado||0)}" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)" placeholder="0.00">
+        <input type="number" id="egv-pagado" value="${g.montoPagado||0}" step="0.01">
       </div>
-      <div class="form-field"><label>Cuenta Salida</label>
-        <select id="egv-cuenta">${cuentas.map(c=>`<option ${c===g.cuenta?'selected':''}>${escHtml(c)}</option>`).join('')}</select>
-      </div>
-    </div>
-    <div class="form-row c2">
       <div class="form-field"><label>Fecha de Pago</label>
         <input type="date" id="egv-fechapago" value="${g.fechaPago||''}">
       </div>
@@ -4667,9 +4394,9 @@ function editarGastoVeh(gid){
 }
 
 function guardarEditGastoVeh(i){
-  if(currentUser?.role!=='admin'&&!canDo('editar')){toast('No tienes permiso para editar','error');return;}
-  const factura=parseMoney(document.getElementById('egv-factura').value);
-  const pagado=parseMoney(document.getElementById('egv-pagado').value);
+  if(currentUser?.role!=='admin'){toast('Solo el administrador puede editar','error');return;}
+  const factura=parseFloat(document.getElementById('egv-factura').value||0);
+  const pagado=parseFloat(document.getElementById('egv-pagado').value||0);
   const pendiente=factura-pagado;
   const egvVid=document.getElementById('egv-veh')?.value||DB.gastosVehiculos[i].vehiculoId;
   if(egvVid){
@@ -4737,8 +4464,7 @@ function gvehAccion(accion){
 }
 
 function limpiarFiltrosGastosVeh(){
-  const ids=['gveh-filtro-veh','gveh-filtro-sup','gveh-filtro-status','gveh-filtro-desde','gveh-filtro-hasta'];
-  ids.forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  ['gveh-filtro-veh','gveh-filtro-sup','gveh-filtro-status','gveh-filtro-desde','gveh-filtro-hasta'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   renderGastosVeh();
 }
 function exportarGastosVehPDF(){
@@ -4815,7 +4541,7 @@ function _generarPDFGastosVeh(gastos,tasa,filtroSup,filtroVeh,soloUnVeh){
       ${tel?`<div style="font-size:11px;color:#475569">Tel: ${escHtml(tel)}</div>`:''}
       ${dir?`<div style="font-size:11px;color:#475569">${escHtml(dir)}</div>`:''}
       <h3 style="margin-top:6px">REPORTE DE GASTOS DE VEHÍCULO — ${filtroLabel}</h3>
-      <div style="color:#6b7280;font-size:11px">Fecha: ${fmtDate(today())} | Tasa USD: RD$ ${tasa}${filtroDesde||filtroHasta?' | Período: '+(filtroDesde?fmtDate(filtroDesde):'inicio')+' al '+(filtroHasta?fmtDate(filtroHasta):'hoy'):''}</div>
+      <div style="color:#6b7280;font-size:11px">Fecha: ${fmtDate(today())} | Tasa USD aplicada: RD$ ${tasa}</div>
     </div>
     <div style="text-align:right;font-size:11px;color:#6b7280">${gastos.length} registro(s)</div>
   </div>
@@ -5370,8 +5096,8 @@ function llenarInfoVenta(vid){
 }
 
 function calcPend(){
-  const p=parseMoney(document.getElementById('sv-precio')?.value);
-  const i=parseMoney(document.getElementById('sv-inicial')?.value);
+  const p=parseFloat((document.getElementById('sv-precio')?.value||'0').replace(/,/g,''));
+  const i=parseFloat((document.getElementById('sv-inicial')?.value||'0').replace(/,/g,''));
   const rec=parseFloat((document.getElementById('sv-rec-monto')?.value||'0').replace(/,/g,''));
   const pd=document.getElementById('sv-pendiente');
   if(pd)pd.value=fmtMoneyDisplay(Math.max(0,p-i-rec));
@@ -5391,7 +5117,7 @@ function calcPend(){
 }
 
 function confirmarVenta(nf){
-  const precio=parseMoney(document.getElementById('sv-precio').value);
+  const precio=parseFloat((document.getElementById('sv-precio').value||'0').replace(/,/g,''));
   if(!precio){toast('Ingresa el precio de venta','error');return;}
   const vid=document.getElementById('sv-veh').value;
   if(!vid){toast('Selecciona un vehículo','error');return;}
@@ -5400,7 +5126,7 @@ function confirmarVenta(nf){
   const cli=DB.clientes.find(c=>c.id===cliId);
   const cliNombre=cli?.nombre||'Cliente';
   const v=DB.vehiculos.find(x=>x.id===vid);
-  const inicial=parseMoney(document.getElementById('sv-inicial').value);
+  const inicial=parseFloat((document.getElementById('sv-inicial').value||'0').replace(/,/g,''));
   const montoRecibido=document.getElementById('sv-tiene-recibido')?.checked?parseFloat((document.getElementById('sv-rec-monto')?.value||'0').replace(/,/g,'')):0;
   const pendiente=Math.max(0,precio-inicial-montoRecibido);
   const banco=document.getElementById('sv-banco')?.value||'';
@@ -5610,7 +5336,7 @@ function abonarVenta(vid){
 }
 
 function confirmarAbVenta(vid){
-  const monto=parseMoney(document.getElementById('ab-monto').value);
+  const monto=parseFloat((document.getElementById('ab-monto').value||'0').replace(/,/g,''));
   if(!monto||monto<=0){toast('Ingresa un monto válido','error');return;}
   const i=DB.ventas.findIndex(x=>x.id===vid);if(i<0)return;
   if(monto>DB.ventas[i].pendiente){toast('El monto no puede superar el pendiente','error');return;}
@@ -5678,8 +5404,8 @@ function editarVenta(vid){
 function guardarEditarVenta(vid){
   if(currentUser?.role!=='admin'){toast('Solo el administrador puede editar','error');return;}
   const i=DB.ventas.findIndex(x=>x.id===vid);if(i<0)return;
-  const precio=parseMoney(document.getElementById('ev-precio').value);
-  const inicial=parseMoney(document.getElementById('ev-inicial').value);
+  const precio=parseFloat((document.getElementById('ev-precio').value||'0').replace(/,/g,''));
+  const inicial=parseFloat((document.getElementById('ev-inicial').value||'0').replace(/,/g,''));
   const pendiente=Math.max(0,precio-inicial);
   DB.ventas[i].precioVenta=precio;DB.ventas[i].inicial=inicial;DB.ventas[i].pendiente=pendiente;
   DB.ventas[i].ganancia=precio-parseFloat(DB.ventas[i].costoVehiculo||0);
@@ -6001,8 +5727,25 @@ function eliminarCliente(i){if(currentUser?.role!=='admin'&&!canDo('eliminar')){
 
 
 // ══ COTIZACIONES (funciones) ══
+
+function agregarBancoCotRapido(){
+  const nombre=prompt('Nombre del banco a agregar:');
+  if(!nombre||!nombre.trim())return;
+  const n=nombre.trim();
+  if(!DB.config.bancoCuentas)DB.config.bancoCuentas=[];
+  if(DB.config.bancoCuentas.find(b=>b.banco.toLowerCase()===n.toLowerCase())){
+    toast('Ese banco ya existe','error');return;
+  }
+  DB.config.bancoCuentas.push({banco:n,cuentas:[]});
+  sDB('config');
+  if(typeof fbGuardar==='function'&&window._fbActivo)fbGuardar('config').catch(()=>{});
+  const sel=document.getElementById('cot-banco');
+  if(sel){const opt=document.createElement('option');opt.value=n;opt.textContent=n;opt.selected=true;sel.appendChild(opt);}
+  toast('Banco "'+n+'" agregado ✓','success');
+}
+
 function nuevaCotizacion(){
-  const bancos=DB.config.bancos||['Banco Popular','BHD León','Banreservas','Scotiabank','Banco Santa Cruz','Otro'];
+  const _bcOpts=(DB.config.cuentas||['Caja General']).map(c=>`<option value="${escHtml(c)}">${escHtml(c)}</option>`).join('');
   openModal('Nueva Cotización',`
     <div class="form-row c3">
       <div class="form-field"><label class="required">Nombre del Cliente / Empresa</label><input type="text" id="cot-cli"></div>
@@ -6018,7 +5761,7 @@ function nuevaCotizacion(){
     <div class="form-row c3">
       <div class="form-field"><label>Teléfono</label><input type="text" id="cot-tel" maxlength="12" placeholder="000-000-0000" oninput="fmtTelInput(this)"></div>
       <div class="form-field"><label class="required">Entidad Bancaria</label>
-        <select id="cot-banco"><option value="">Seleccionar...</option>${bancos.map(b=>`<option>${escHtml(b)}</option>`).join('')}</select>
+        <div style="display:flex;gap:6px"><select id="cot-banco" style="flex:1"><option value="">Seleccionar...</option>${_bcOpts}</select><button type="button" class="btn btn-secondary btn-sm" onclick="agregarBancoCotRapido()" title="Agregar banco">➕</button></div>
       </div>
       <div class="form-field"><label>Fecha</label><input type="date" id="cot-fecha" value="${today()}"></div>
     </div>
@@ -6060,7 +5803,7 @@ function guardarCotizacion(idx){
   const cli=document.getElementById('cot-cli').value.trim();
   const doc=document.getElementById('cot-doc').value.trim();
   const banco=document.getElementById('cot-banco').value;
-  const precio=parseMoney(document.getElementById('cot-precio').value);
+  const precio=parseFloat((document.getElementById('cot-precio').value||'0').replace(/,/g,''));
   if(!cli){toast('El nombre es requerido','error');return;}
   if(!doc){toast('El documento es requerido','error');return;}
   if(!banco){toast('Selecciona la entidad bancaria','error');return;}
@@ -6084,7 +5827,7 @@ function guardarCotizacion(idx){
 function editarCotizacion(i){
   if(currentUser?.role!=='admin'){toast('Solo el administrador puede editar','error');return;}
   const c=DB.cotizaciones[i];
-  const bancos=DB.config.bancos||['Banco Popular','BHD León','Banreservas','Scotiabank','Banco Santa Cruz','Otro'];
+  const _bcOpts2=(DB.config.cuentas||['Caja General']).map(ct=>`<option value="${escHtml(ct)}" ${ct===c.banco?'selected':''}>${escHtml(ct)}</option>`).join('');
   openModal('Editar Cotización',`
     <div class="form-row c3">
       <div class="form-field"><label>Cliente / Empresa</label><input type="text" id="cot-cli" value="${escHtml(c.cliente||'')}"></div>
@@ -6095,7 +5838,7 @@ function editarCotizacion(i){
     </div>
     <div class="form-row c3">
       <div class="form-field"><label>Teléfono</label><input type="text" id="cot-tel" value="${escHtml(c.telefono||'')}" maxlength="12" oninput="fmtTelInput(this)"></div>
-      <div class="form-field"><label>Banco</label><select id="cot-banco">${bancos.map(b=>`<option ${b===c.banco?'selected':''}>${escHtml(b)}</option>`).join('')}</select></div>
+      <div class="form-field"><label>Banco</label><div style="display:flex;gap:6px"><select id="cot-banco" style="flex:1"><option value="">Seleccionar...</option>${_bcOpts2}</select><button type="button" class="btn btn-secondary btn-sm" onclick="agregarBancoCotRapido()" title="Agregar banco">➕</button></div></div>
       <div class="form-field"><label>Fecha</label><input type="date" id="cot-fecha" value="${c.fecha||today()}"></div>
     </div>
     <div class="form-row c3">
@@ -6316,6 +6059,7 @@ function exportarSuplidoresPDF(tabActivo){
   win.document.close();
 }
 
+// ══ EXPORTAR PDF — CAJA ══
 function renderSuplidores(tabActivo){
   tabActivo=tabActivo||'vehiculo';
   const ds='background:#e2e8f0;color:#adb5bd;cursor:not-allowed;border:1px solid #dee2e6';
@@ -6372,9 +6116,9 @@ function renderSuplidores(tabActivo){
 function nuevoSuplidor(tipoCtx){
   tipoCtx=tipoCtx||'vehiculo';
   const nextId='SUP-'+String(DB.suplidores.length+1).padStart(4,'0');
-  const tipoLabel=tipoCtx==='vehiculo'?'🚗 Suplidor de Vehículos':'🏢 Suplidor de Empresa';
-  const tipoBg=tipoCtx==='vehiculo'?'var(--blue3)':'var(--green2)';
-  const tipoColor=tipoCtx==='vehiculo'?'var(--blue)':'var(--green)';
+  const tipoLabel=tipoCtx==='vehiculo'?'🚗 Suplidor de Vehículos':tipoCtx==='importadora'?'🏦 Compañía Importadora':'🏢 Suplidor de Empresa';
+  const tipoBg=tipoCtx==='vehiculo'?'var(--blue3)':tipoCtx==='importadora'?'#fef3c7':'var(--green2)';
+  const tipoColor=tipoCtx==='vehiculo'?'var(--blue)':tipoCtx==='importadora'?'#b45309':'var(--green)';
   openModal('Nuevo '+tipoLabel,`
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;padding:10px 14px;background:${tipoBg};border-radius:var(--radius-sm);border:2px solid ${tipoColor}">
       <div style="font-weight:800;font-size:14px;color:${tipoColor}">${tipoLabel}</div>
@@ -6441,6 +6185,7 @@ function editarSuplidor(i){
         <select id="s-tipo-suplidor" style="border:2px solid var(--blue);font-weight:700">
           <option value="vehiculo" ${(s.tipoSuplidor||'vehiculo')==='vehiculo'?'selected':''}>🚗 Suplidor de Vehículos</option>
           <option value="empresa" ${s.tipoSuplidor==='empresa'?'selected':''}>🏢 Suplidor de Empresa</option>
+          <option value="importadora" ${s.tipoSuplidor==='importadora'?'selected':''}>🏦 Compañía Importadora</option>
         </select>
       </div>
     </div>
@@ -6470,43 +6215,21 @@ function fmtTelInput(el){
   el.value=v;
 }
 function fmtMoneyInput(el){
-  // Guardar posición del cursor
-  const sel=el.selectionStart;
-  const before=el.value.substring(0,sel).replace(/[^0-9.]/g,'').length;
-  // Limpiar todo excepto dígitos y punto
   let v=el.value.replace(/[^0-9.]/g,'');
-  // Solo un punto decimal
   const parts=v.split('.');
   if(parts.length>2)v=parts[0]+'.'+parts.slice(1).join('');
-  // Separar entero y decimal
-  const intPart=parts[0].replace(/\B(?=(\d{3})+(?!\d))/g,',');
-  const decPart=parts.length>1?'.'+parts[1]:'';
-  el.value=intPart+decPart;
-  // Restaurar cursor aproximado
-  try{
-    let newPos=0,cnt=0;
-    for(let i=0;i<el.value.length;i++){
-      if(/[0-9.]/.test(el.value[i]))cnt++;
-      if(cnt>=before){newPos=i+1;break;}
-    }
-    el.setSelectionRange(newPos,newPos);
-  }catch(e){}
+  el.value=v;
 }
 function fmtMoneyBlur(el){
   const n=parseFloat(el.value.replace(/,/g,'')||0);
   if(!isNaN(n))el.value=n.toLocaleString('es-DO',{minimumFractionDigits:2,maximumFractionDigits:2});
 }
 function fmtMoneyFocus(el){
-  // Al enfocar quitar decimales .00 si es cero para facilitar escritura
-  const n=parseFloat(el.value.replace(/,/g,'')||0);
-  if(n===0)el.value='';else el.value=el.value.replace(/,/g,'');
+  el.value=el.value.replace(/,/g,'');
 }
 function fmtMoneyDisplay(val){
   const n=parseFloat(val||0);
   return n.toLocaleString('es-DO',{minimumFractionDigits:2,maximumFractionDigits:2});
-}
-function parseMoney(val){
-  return parseFloat((val||'0').toString().replace(/,/g,'')||0)||0;
 }
 function fmtPlaca(el){
   // Formato RD: 1 letra + 6 dígitos = A000000, máx 7 caracteres
@@ -6786,10 +6509,10 @@ function editarCXP(gid, origen){
     </div>
     <div class="form-row c3">
       <div class="form-field"><label>Monto Factura</label>
-        <input type="text" id="ecxp-factura" value="${fmtMoneyDisplay(g.montoFactura||0)}" oninput="fmtMoneyInput(this);calcECXPPend()" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
+        <input type="number" id="ecxp-factura" value="${g.montoFactura||0}" step="0.01">
       </div>
       <div class="form-field"><label>Monto Pagado</label>
-        <input type="text" id="ecxp-pagado" value="${fmtMoneyDisplay(g.montoPagado||0)}" oninput="fmtMoneyInput(this);calcECXPPend()" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
+        <input type="number" id="ecxp-pagado" value="${g.montoPagado||0}" step="0.01">
       </div>
       <div class="form-field"><label>Fecha</label>
         <input type="date" id="ecxp-fecha" value="${g.fecha||today()}">
@@ -6799,19 +6522,13 @@ function editarCXP(gid, origen){
      <button class="btn btn-primary" onclick="guardarEditCXP('${gid}','${origen}')">💾 Actualizar</button>`);
 }
 
-function calcECXPPend(){
-  const f=parseMoney(document.getElementById('ecxp-factura')?.value);
-  const p=parseMoney(document.getElementById('ecxp-pagado')?.value);
-  const pend=document.getElementById('ecxp-pendiente');
-  if(pend){pend.value=fmtMoneyDisplay(Math.max(0,f-p));pend.style.color=f-p>0?'var(--red)':'var(--green)';}
-}
 function guardarEditCXP(gid, origen){
   const arr = origen==='manual' ? (DB.cxp||[]) : (DB.gastosVehiculos||[]);
   const i = arr.findIndex(g=>g.id===gid);
   if(i<0)return;
   const vid = document.getElementById('ecxp-veh')?.value||'';
-  const factura=parseMoney(document.getElementById('ecxp-factura').value);
-  const pagado=parseMoney(document.getElementById('ecxp-pagado').value);
+  const factura = parseFloat(document.getElementById('ecxp-factura').value||0);
+  const pagado = parseFloat(document.getElementById('ecxp-pagado').value||0);
   const pendiente = Math.max(0, factura-pagado);
   if(vid){
     const vRef = DB.vehiculos.find(x=>x.id===vid);
@@ -6945,7 +6662,7 @@ function abonarCXPManual(gid){
     </div>
     <div class="form-row c2">
       <div class="form-field"><label class="required">Monto a Pagar</label>
-        <input type="text" id="cxpm-pay-monto" value="${fmtMoneyDisplay(g.montoPendiente||0)}" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
+        <input type="number" id="cxpm-pay-monto" value="${g.montoPendiente||0}" step="0.01" max="${g.montoPendiente||0}">
       </div>
       <div class="form-field"><label>Fecha de Pago</label>
         <input type="date" id="cxpm-pay-fecha" value="${today()}">
@@ -6971,7 +6688,7 @@ function actualizarCuentasPagoManual(){
   cuentaEl.innerHTML=(b?b.cuentas:[]).map(c=>`<option value="${escHtml(c.tipo+' \u2014 '+c.numero)}">${escHtml(c.tipo)} \u2014 ${escHtml(c.numero)}</option>`).join('')||'<option value="Caja General">Caja General</option>';
 }
 function confirmarPagoCXPManual(i){
-  const monto=parseMoney(document.getElementById('cxpm-pay-monto')?.value);
+  const monto=parseFloat(document.getElementById('cxpm-pay-monto')?.value||0);
   if(!monto||monto<=0){toast('Ingresa un monto v\u00e1lido','error');return;}
   const g=DB.cxp[i];
   if(monto>parseFloat(g.montoPendiente||0)){toast('El monto no puede superar el pendiente','error');return;}
@@ -7039,7 +6756,7 @@ function abonarDesdeCXP(gid){
 }
 
 function confirmarPagoCXP(i){
-  const monto=parseMoney(document.getElementById('cxpp-monto').value);
+  const monto=parseFloat((document.getElementById('cxpp-monto').value||'0').replace(/,/g,''));
   if(!monto||monto<=0){toast('Ingresa un monto válido','error');return;}
   const g=DB.gastosVehiculos[i];
   if(monto>parseFloat(g.montoPendiente||0)){toast('El monto no puede superar el pendiente','error');return;}
@@ -7331,7 +7048,7 @@ function renderCXC(){
         <div class="stat-ico">🔴</div>
         <div class="stat-label">Saldo Pendiente</div>
         <div class="stat-value" style="color:var(--red)">${fV(totalPend)}</div>
-        ${esUSD?`<div class="stat-sub">${fmt(totalPend*tasa)}</div>`:`<div class="stat-sub">$${(totalPend/tasa).toFixed(2)} USD</div>`}
+        ${esUSD?`<div class="stat-sub">${fmt(totalPend*tasa)}</div>`:`<div class="stat-sub">${fmtUSD(totalPend/tasa)}</div>`}
       </div>
     </div>
 
@@ -7405,13 +7122,13 @@ function nuevaCXCManual(){
     </div>
     <div class="form-row c3">
       <div class="form-field"><label class="required">Monto Total</label>
-        <input type="text" id="ncxc-total" placeholder="0.00" oninput="fmtMoneyInput(this);calcSaldoCXC();calcEquivCXC()" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
+        <input type="number" id="ncxc-total" step="0.01" placeholder="0.00" oninput="calcSaldoCXC();calcEquivCXC()">
       </div>
       <div class="form-field"><label>Monto Inicial / Abono</label>
-        <input type="text" id="ncxc-abono" value="" placeholder="0.00" oninput="fmtMoneyInput(this);calcSaldoCXC()" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
+        <input type="number" id="ncxc-abono" step="0.01" value="0" placeholder="0.00" oninput="calcSaldoCXC()">
       </div>
       <div class="form-field"><label>Saldo Pendiente</label>
-        <input type="text" id="ncxc-saldo" readonly style="background:#f1f5f9;font-weight:700;color:var(--red)">
+        <input type="number" id="ncxc-saldo" step="0.01" readonly style="background:#f1f5f9;font-weight:700">
       </div>
     </div>
     <div class="form-row c3">
@@ -7453,7 +7170,7 @@ function toggleTasaCXC(){
 }
 function calcEquivCXC(){
   const moneda=document.getElementById('ncxc-moneda')?.value;
-  const total=parseMoney(document.getElementById('ncxc-total')?.value);
+  const total=parseFloat(document.getElementById('ncxc-total')?.value||0);
   const tasa=parseFloat(document.getElementById('ncxc-tasa')?.value||DB.config.tasaCambio||60);
   const equiv=document.getElementById('ncxc-equiv');
   if(equiv&&moneda==='USD'&&total>0)equiv.value='RD$ '+fmt(total*tasa);
@@ -7468,8 +7185,8 @@ function actualizarCuentasCXCManual(){
   cuentaEl.innerHTML=(b&&b.cuentas&&b.cuentas.length)?b.cuentas.map(c=>`<option value="${escHtml(c.tipo+' — '+c.numero)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`).join(''):'<option value="Caja General">Caja General</option>';
 }
 function calcSaldoCXC(){
-  const total=parseMoney(document.getElementById('ncxc-total')?.value);
-  const abono=parseMoney(document.getElementById('ncxc-abono')?.value);
+  const total=parseFloat(document.getElementById('ncxc-total')?.value||0);
+  const abono=parseFloat(document.getElementById('ncxc-abono')?.value||0);
   const saldo=document.getElementById('ncxc-saldo');
   if(saldo)saldo.value=fmtMoneyDisplay(Math.max(0,total-abono));
   calcEquivCXC();
@@ -7477,12 +7194,12 @@ function calcSaldoCXC(){
 function guardarCXCManual(){
   const cliId=document.getElementById('ncxc-cli').value;
   const concepto=document.getElementById('ncxc-concepto').value.trim();
-  const total=parseMoney(document.getElementById('ncxc-total').value);
+  const total=parseFloat(document.getElementById('ncxc-total').value||0);
   if(!cliId){toast('Selecciona un cliente','error');return;}
   if(!concepto){toast('Ingresa el concepto','error');return;}
   if(!total){toast('Ingresa el monto total','error');return;}
   const cli=DB.clientes.find(x=>x.id===cliId);
-  const abono=parseMoney(document.getElementById('ncxc-abono').value);
+  const abono=parseFloat(document.getElementById('ncxc-abono').value||0);
   const saldo=Math.max(0,total-abono);
   const cuenta=document.getElementById('ncxc-cuenta').value;
   const banco=document.getElementById('ncxc-banco')?.value||'';
@@ -7570,7 +7287,7 @@ function actualizarCuentasCXCA(){
 }
 
 function confirmarAbonarCXC(id){
-  const monto=parseMoney(document.getElementById('cxca-monto').value);
+  const monto=parseFloat((document.getElementById('cxca-monto').value||'0').replace(/,/g,''));
   if(!monto||monto<=0){toast('Ingresa un monto válido','error');return;}
   const i=DB.cxc.findIndex(x=>x.id===id);if(i<0)return;
   if(monto>parseFloat(DB.cxc[i].saldo||0)){toast('El monto no puede superar el saldo pendiente','error');return;}
@@ -8422,8 +8139,8 @@ function guardarSeguro(id){
   const vid=document.getElementById('sg-veh').value;
   const comp=document.getElementById('sg-comp').value;
   const cliente=document.getElementById('sg-cliente').value.trim();
-  const prima=parseMoney(document.getElementById('sg-prima').value);
-  const abonado=parseMoney(document.getElementById('sg-abonado').value);
+  const prima=parseFloat((document.getElementById('sg-prima').value||'0').replace(/,/g,''));
+  const abonado=parseFloat((document.getElementById('sg-abonado').value||'0').replace(/,/g,''));
   if(!vid){toast('Selecciona un vehículo','error');return;}
   if(!cliente){toast('Ingresa el nombre del asegurado','error');return;}
   if(!prima){toast('Ingresa la prima del seguro','error');return;}
@@ -8492,7 +8209,7 @@ function pagarSeguro(id){abonarSeguro(id);}
 function confirmarPagoSeguro(id){confirmarAbonoSeguro(id);}
 function confirmarAbonoSeguro(id){
   const i=DB.seguros.findIndex(x=>x.id===id);if(i<0)return;
-  const monto=parseMoney(document.getElementById('sgp-monto').value);
+  const monto=parseFloat((document.getElementById('sgp-monto').value||'0').replace(/,/g,''));
   if(!monto||monto<=0){toast('Ingresa un monto válido','error');return;}
   const cuenta=document.getElementById('sgp-cuenta').value;
   const fecha=document.getElementById('sgp-fecha').value;
@@ -8687,16 +8404,16 @@ function nuevaFacturaExterna(){
 }
 function calcPendFE(){
   const m=parseFloat((document.getElementById('fe-monto')?.value||'0').replace(/,/g,''));
-  const a=parseMoney(document.getElementById('fe-abono')?.value);
+  const a=parseFloat((document.getElementById('fe-abono')?.value||'0').replace(/,/g,''));
   const p=document.getElementById('fe-pendiente');
   if(p)p.value=fmtMoneyDisplay(Math.max(0,m-a));
 }
 function guardarFacturaExterna(nFact){
   const vehiculo=document.getElementById('fe-vehiculo').value.trim();
-  const monto=parseMoney(document.getElementById('fe-monto').value);
+  const monto=parseFloat((document.getElementById('fe-monto').value||'0').replace(/,/g,''));
   if(!vehiculo){toast('Ingresa los datos del vehículo','error');return;}
   if(!monto){toast('Ingresa el monto','error');return;}
-  const abono=parseMoney(document.getElementById('fe-abono').value);
+  const abono=parseFloat((document.getElementById('fe-abono').value||'0').replace(/,/g,''));
   const f={
     id:uid(),numero:nFact,
     vehiculo,
@@ -9088,7 +8805,6 @@ function aplicarColoresSistema(){
 
 // Aplicar colores al cargar
 document.addEventListener('DOMContentLoaded',()=>{
-  // Autocomplete OFF en todos los campos
   document.querySelectorAll('input:not([type=password]),select,textarea').forEach(el=>{el.setAttribute('autocomplete','off');});
   const _acObs=new MutationObserver(ms=>{ms.forEach(m=>{m.addedNodes.forEach(n=>{if(n.querySelectorAll){n.querySelectorAll('input:not([type=password]),select,textarea').forEach(el=>{if(!el.getAttribute('autocomplete'))el.setAttribute('autocomplete','off');});}});});});
   _acObs.observe(document.body,{childList:true,subtree:true});
@@ -9126,95 +8842,96 @@ window.addEventListener('load', ()=>{
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <script>
 const firebaseConfig = {
-  apiKey: "AIzaSyCVknlpW8WvOS82i4-uA-yMFV7PDxcOqUE",
-  authDomain: "chinito-auto.firebaseapp.com",
-  projectId: "chinito-auto",
-  storageBucket: "chinito-auto.firebasestorage.app",
-  messagingSenderId: "116490569983",
-  appId: "1:116490569983:web:d6e30e6fb663c25d61a4ca"
+  apiKey: "AIzaSyC9Hi0ti_7vq6OGWErEKzn3UJCpUqFA8zo",
+  authDomain: "fayre-auto.firebaseapp.com",
+  projectId: "fayre-auto",
+  storageBucket: "fayre-auto.firebasestorage.app",
+  messagingSenderId: "420798410670",
+  appId: "1:420798410670:web:c2d74bee477d0f2858e23f"
 };
 firebase.initializeApp(firebaseConfig);
 const _fbDB = firebase.firestore();
-const _fbCol = 'chinito';
+const _fbCol = 'fayre';
 
-// ══ BACKUP AUTOMÁTICO DIARIO ══
+
 function _hacerBackup(){
-  if(!window._fbActivo||!window._fbCargado){toast('⚠️ Espera a que Firebase termine de cargar','warning');return;}
-  fbCargar().then(()=>{_ejecutarBackup();}).catch(()=>{_ejecutarBackup();});
+  // Verificar que Firebase esté cargado y haya datos
+  if(!window._fbActivo||!window._fbCargado){
+    toast('⚠️ Espera a que Firebase termine de cargar antes de hacer backup','warning');
+    return;
+  }
+  // Recargar desde Firebase antes de hacer backup para asegurar datos actualizados
+  fbCargar().then(()=>{
+    _ejecutarBackup();
+  }).catch(()=>{
+    // Si falla recarga, usar lo que hay en memoria
+    _ejecutarBackup();
+  });
 }
 function _ejecutarBackup(){
-  try{
-    const ahora=new Date();
-    const pad=n=>String(n).padStart(2,'0');
-    const meses=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    const fechaCorta=`${pad(ahora.getDate())}-${meses[ahora.getMonth()]}-${ahora.getFullYear()}`;
-    const empresa=(DB.config.empresa||'Sistema').replace(/[^a-zA-Z0-9\s]/g,'').trim().replace(/\s+/g,'_').replace(/_+/g,'_');
-    const filename=`BACKUP_${empresa}_${fechaCorta}.json`;
-    const datos={
-      _backupInfo:{empresa:DB.config.empresa||'',fecha:ahora.toISOString(),version:'dealer_v14',
-        resumen:{vehiculos:(DB.vehiculos||[]).length,clientes:(DB.clientes||[]).length,ventas:(DB.ventas||[]).length}},
-      config:DB.config,users:DB.users,vehiculos:DB.vehiculos||[],clientes:DB.clientes||[],
-      suplidores:DB.suplidores||[],ventas:DB.ventas||[],cotizaciones:DB.cotizaciones||[],
-      caja:DB.caja||[],gastos:DB.gastos||[],nomina:DB.nomina||[],nominaPagos:DB.nominaPagos||[],
-      gastosVehiculos:DB.gastosVehiculos||[],cxp:DB.cxp||[],cxc:DB.cxc||[],
-      autorizaciones:DB.autorizaciones||[],seguros:DB.seguros||[],
-      facturasExternas:DB.facturasExternas||[],cumpleanosMensajes:DB.cumpleanosMensajes||{}
-    };
-    const blob=new Blob([JSON.stringify(datos,null,2)],{type:'application/json'});
-    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=filename;
-    document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(a.href);
-    DB.config._lastBackup=ahora.toISOString();
-    if(window._fbActivo)fbGuardar('config').catch(()=>{});
-    toast('💾 Backup descargado: '+filename,'success');
-    const av=document.getElementById('backup-aviso');if(av)av.remove();
-  }catch(e){
-    toast('⚠️ No se pudo hacer el backup. Hazlo manualmente desde 💾 Backup','warning');
-  }
-}
-function _ejecutarBackupAuto(){
-  try{
-    const ahora=new Date();
-    const pad=n=>String(n).padStart(2,'0');
-    const meses=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    const fechaCorta=`${pad(ahora.getDate())}-${meses[ahora.getMonth()]}-${ahora.getFullYear()}`;
-    const empresa=(DB.config.empresa||'Sistema').replace(/[^a-zA-Z0-9\s]/g,'').trim().replace(/\s+/g,'_').replace(/_+/g,'_');
-    const filename=`BACKUP_${empresa}_${fechaCorta}.json`;
-    const datos={
-      _backupInfo:{empresa:DB.config.empresa||'',fecha:ahora.toISOString(),version:'dealer_v14',
-        resumen:{vehiculos:(DB.vehiculos||[]).length,clientes:(DB.clientes||[]).length,ventas:(DB.ventas||[]).length}},
-      config:DB.config,users:DB.users,vehiculos:DB.vehiculos||[],clientes:DB.clientes||[],
-      suplidores:DB.suplidores||[],ventas:DB.ventas||[],cotizaciones:DB.cotizaciones||[],
-      caja:DB.caja||[],gastos:DB.gastos||[],nomina:DB.nomina||[],nominaPagos:DB.nominaPagos||[],
-      gastosVehiculos:DB.gastosVehiculos||[],cxp:DB.cxp||[],cxc:DB.cxc||[],
-      autorizaciones:DB.autorizaciones||[],seguros:DB.seguros||[],
-      facturasExternas:DB.facturasExternas||[],cumpleanosMensajes:DB.cumpleanosMensajes||{}
-    };
-    const blob=new Blob([JSON.stringify(datos,null,2)],{type:'application/json'});
-    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=filename;
-    document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(a.href);
-    DB.config._lastBackup=ahora.toISOString();
-    if(window._fbActivo)fbGuardar('config').catch(()=>{});
-    toast('💾 Backup automático: '+filename,'success');
-  }catch(e){
-    toast('⚠️ No se pudo hacer el backup automático. Hazlo manualmente.','warning');
-  }
-}
-function _verificarBackupAdmin(){
-  if(!currentUser||currentUser.role!=='admin')return;
-  const hoy=new Date();
-  const diaSemana=hoy.getDay();
-  const esDiaHabil=(diaSemana>=1&&diaSemana<=6);
-  if(!esDiaHabil)return;
-  const fechaHoy=hoy.toISOString().slice(0,10);
-  const lastBackupFecha=(DB.config._lastBackup||'').slice(0,10);
-  if(lastBackupFecha===fechaHoy)return;
-  setTimeout(()=>{
-    if(!window._fbActivo||!window._fbCargado)return;
-    fbCargar().then(()=>{_ejecutarBackupAuto();}).catch(()=>{_ejecutarBackupAuto();});
-  },4000);
+  const ahora=new Date();
+  const pad=n=>String(n).padStart(2,'0');
+  const fecha=`${ahora.getFullYear()}-${pad(ahora.getMonth()+1)}-${pad(ahora.getDate())}`;
+  const hora=`${pad(ahora.getHours())}-${pad(ahora.getMinutes())}`;
+  // Nombre limpio: solo letras, números y guion bajo, sin dobles guiones
+  const empresa=(DB.config.empresa||'Sistema')
+    .replace(/[^a-zA-Z0-9\s]/g,'')
+    .trim()
+    .replace(/\s+/g,'_')
+    .replace(/_+/g,'_');
+  const filename=`${empresa}_Backup_${fecha}_${hora}.json`;
+  const totalVeh=(DB.vehiculos||[]).length;
+  const totalCli=(DB.clientes||[]).length;
+  const totalVen=(DB.ventas||[]).length;
+  const datos={
+    _backupInfo:{
+      empresa:DB.config.empresa||'',
+      fecha:ahora.toISOString(),
+      version:'dealer_v14',
+      resumen:{
+        vehiculos:totalVeh,
+        clientes:totalCli,
+        ventas:totalVen,
+        gastosVehiculos:(DB.gastosVehiculos||[]).length,
+        cxc:(DB.cxc||[]).length,
+        cxp:(DB.cxp||[]).length,
+        nomina:(DB.nomina||[]).length,
+        caja:(DB.caja||[]).length
+      }
+    },
+    config:DB.config,
+    users:DB.users,
+    vehiculos:DB.vehiculos||[],
+    clientes:DB.clientes||[],
+    suplidores:DB.suplidores||[],
+    ventas:DB.ventas||[],
+    cotizaciones:DB.cotizaciones||[],
+    caja:DB.caja||[],
+    gastos:DB.gastos||[],
+    nomina:DB.nomina||[],
+    nominaPagos:DB.nominaPagos||[],
+    gastosVehiculos:DB.gastosVehiculos||[],
+    cxp:DB.cxp||[],
+    cxc:DB.cxc||[],
+    autorizaciones:DB.autorizaciones||[],
+    seguros:DB.seguros||[],
+    facturasExternas:DB.facturasExternas||[],
+    cumpleanosMensajes:DB.cumpleanosMensajes||{}
+  };
+  const blob=new Blob([JSON.stringify(datos,null,2)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=filename;
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  URL.revokeObjectURL(a.href);
+  // Guardar fecha en Firebase
+  DB.config._lastBackup=ahora.toISOString();
+  if(window._fbActivo)fbGuardar('config').catch(()=>{});
+  toast(`✅ Backup descargado: ${filename} (${totalVeh} vehículos, ${totalCli} clientes, ${totalVen} ventas)`,'success');
+  // Ocultar aviso si estaba visible
+  const av=document.getElementById('backup-aviso');if(av)av.remove();
 }
 
-// ══ ALERTA CUMPLEAÑOS DEL DÍA ══
 function _verificarCumpleanosHoy(){
   const hoy=new Date();
   const hoyInicio=new Date(hoy.getFullYear(),hoy.getMonth(),hoy.getDate());
@@ -9247,7 +8964,66 @@ function _verificarCumpleanosHoy(){
     </div>`;
   document.body.appendChild(av);
 }
-
+function _verificarBackupAdmin(){
+  if(!currentUser||currentUser.role!=='admin')return;
+  const hoy=new Date();
+  const diaSemana=hoy.getDay(); // 0=dom,1=lun,...,6=sab
+  const esDiaHabil=(diaSemana>=1&&diaSemana<=6);
+  if(!esDiaHabil)return; // domingo no hace backup
+  const fechaHoy=hoy.toISOString().slice(0,10);
+  const lastBackupFecha=(DB.config._lastBackup||'').slice(0,10);
+  if(lastBackupFecha===fechaHoy)return; // ya se hizo hoy
+  // Hacer backup automático en segundo plano
+  setTimeout(()=>{
+    if(!window._fbActivo||!window._fbCargado)return;
+    fbCargar().then(()=>{_ejecutarBackupAuto();}).catch(()=>{_ejecutarBackupAuto();});
+  },4000);
+}
+function _ejecutarBackupAuto(){
+  try{
+    const ahora=new Date();
+    const pad=n=>String(n).padStart(2,'0');
+    const meses=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const fechaCorta=`${pad(ahora.getDate())}-${meses[ahora.getMonth()]}-${ahora.getFullYear()}`;
+    const filename=`BACKUP_Maedig_${fechaCorta}.json`;
+    const datos={
+      _backupInfo:{empresa:DB.config.empresa||'',fecha:ahora.toISOString(),version:'dealer_v14',
+        resumen:{vehiculos:(DB.vehiculos||[]).length,clientes:(DB.clientes||[]).length,ventas:(DB.ventas||[]).length}},
+      config:DB.config,users:DB.users,vehiculos:DB.vehiculos||[],clientes:DB.clientes||[],
+      suplidores:DB.suplidores||[],ventas:DB.ventas||[],cotizaciones:DB.cotizaciones||[],
+      caja:DB.caja||[],gastos:DB.gastos||[],nomina:DB.nomina||[],nominaPagos:DB.nominaPagos||[],
+      gastosVehiculos:DB.gastosVehiculos||[],cxp:DB.cxp||[],cxc:DB.cxc||[],
+      autorizaciones:DB.autorizaciones||[],seguros:DB.seguros||[],
+      facturasExternas:DB.facturasExternas||[],cumpleanosMensajes:DB.cumpleanosMensajes||{}
+    };
+    const blob=new Blob([JSON.stringify(datos,null,2)],{type:'application/json'});
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=filename;
+    document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(a.href);
+    DB.config._lastBackup=ahora.toISOString();
+    if(window._fbActivo)fbGuardar('config').catch(()=>{});
+    toast('💾 Backup automático descargado: '+filename,'success');
+  }catch(e){
+    toast('⚠️ No se pudo hacer el backup automático. Hazlo manualmente desde 💾 Backup','warning');
+  }
+  // Mostrar aviso si hace más de 2 días sin backup (para cuando falla el auto)
+  const lastStr=DB.config._lastBackup||null;
+  const hoy=new Date();
+  let diasSinBackup=999;
+  if(lastStr){const last=new Date(lastStr);diasSinBackup=Math.floor((hoy-last)/(1000*60*60*24));}
+  if(diasSinBackup<2)return;
+  setTimeout(()=>{
+    if(document.getElementById('backup-aviso'))return;
+    const av=document.createElement('div');
+    av.id='backup-aviso';
+    const msg=diasSinBackup>=999?'⚠️ No se ha realizado ningún backup del sistema.'
+      :'⚠️ Han pasado <strong>'+diasSinBackup+' días</strong> sin backup. Hazlo desde el menú 💾 Backup.';
+    const isMobile=window.innerWidth<=768;
+    av.style.cssText='position:fixed;top:'+(isMobile?'52':'56')+'px;left:'+(isMobile?'0':'220')+'px;right:0;background:#f59e0b;color:#fff;padding:9px 20px;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:space-between;z-index:150;box-shadow:0 2px 8px rgba(0,0,0,.15)';
+    av.innerHTML=`<span>${msg}</span>
+      <button onclick="document.getElementById('backup-aviso').remove()" style="padding:4px 10px;background:rgba(0,0,0,.2);color:#fff;border:none;border-radius:6px;font-size:13px;cursor:pointer;flex-shrink:0;margin-left:12px">✕</button>`;
+    document.body.appendChild(av);
+  },3000);
+}
 async function fbGuardar(key){
   try {
     let val=DB[key]!==undefined?DB[key]:(key==='config'?{}:[]);
@@ -9309,7 +9085,7 @@ window._fbActivo = false;
 window._fbCargado = false;
 // Firebase OBLIGATORIO — sin Firebase no se guarda nada
 window.sDB = function(key){
-  try { _sDB_orig(key); } catch(e){}  // localStorage solo como caché de lectura
+  try { _sDB_orig(key); } catch(e){}
   const dot=document.getElementById('fb-dot');
   const txt=document.getElementById('fb-text');
   if(!window._fbActivo){
@@ -9360,7 +9136,7 @@ function _mostrarErrorFirebase(){
 function fbActivarListeners(){
   const keys=['config','config_logo','users','vehiculos','clientes','suplidores',
     'ventas','cotizaciones','caja','gastos','nomina','nominaPagos',
-    'gastosVehiculos','cxp','cxc','autorizaciones','presencia'];
+    'gastosVehiculos','cxp','cxc','autorizaciones'];
   
   keys.forEach(key=>{
     _fbDB.collection(_fbCol).doc(key).onSnapshot(snap=>{
@@ -9376,18 +9152,6 @@ function fbActivarListeners(){
             if(!merged.find(u=>u.id===lu.id))merged.push(lu);
           });
           DB.users=merged.length>0?merged:DB.users;
-        } else if(key==='presencia'&&typeof val==='object'&&val!==null){
-          // Merge presencia remota con local
-          DB.presencia=Object.assign(DB.presencia||{},val);
-          // Escribir en localStorage para coherencia local
-          localStorage.setItem('fayre_presencia',JSON.stringify(DB.presencia));
-          // Refrescar tabla de usuarios si está activa (sin afectar otras páginas)
-          const pU=document.getElementById('page-usuarios');
-          if(pU&&pU.classList.contains('active')){
-            clearTimeout(window._presenciaRefreshTimer);
-            window._presenciaRefreshTimer=setTimeout(_actualizarBadgesOnlineUsuarios,300);
-          }
-          return; // No ejecutar el renderMap genérico
         } else if(key==='config_logo'){
           const logoVal=typeof val==='string'?val:(val&&val.logoData?val.logoData:'');
           if(logoVal&&logoVal.startsWith('data:')){
@@ -9441,7 +9205,7 @@ function fbActivarListeners(){
           caja:['caja'],gastosVeh:['gastosVehiculos','vehiculos'],
           cotizaciones:['cotizaciones','clientes'],
           autorizaciones:['autorizaciones'],
-          usuarios:['users','presencia'],config:[],
+          usuarios:['users'],config:[],
           informes:['ventas','gastos','cxc','gastosVehiculos','nomina'],
         };
         const afecta=keysParaPagina[pid]||[];
