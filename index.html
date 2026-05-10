@@ -6101,7 +6101,7 @@ function renderSuplidores(tabActivo){
         <td>
           <div style="display:flex;gap:4px">
             <button class="btn btn-sm" style="background:var(--blue3);color:var(--blue);padding:4px 8px" onclick="event.stopPropagation();supAccionDirecta('editar','${s.id}')" title="Editar">✏️</button>
-            ${currentUser?.role==='admin'?`<button class="btn btn-sm" style="background:var(--red2);color:var(--red);padding:4px 8px" onclick="event.stopPropagation();supAccionDirecta('eliminar','${s.id}')" title="Eliminar">🗑</button>`:''}
+            ${(currentUser?.role==='admin'||canDo('eliminar'))?`<button class="btn btn-sm" style="background:var(--red2);color:var(--red);padding:4px 8px" onclick="event.stopPropagation();supAccionDirecta('eliminar','${s.id}')" title="Eliminar">🗑</button>`:''}
           </div>
         </td>
       </tr>`;
@@ -6112,7 +6112,7 @@ function renderSuplidores(tabActivo){
       <div><h1>🏭 Suplidores</h1><p>${DB.suplidores.length} suplidor(es) — Vehículos: ${supVeh.length} | Empresa: ${supEmp.length} | Importadora: ${supImp.length}</p></div>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
         <button id="sup-btn-editar" disabled class="btn btn-sm" style="${ds}" onclick="supAccion('editar')">✏️ Editar</button>
-        ${currentUser?.role==='admin'?`<button id="sup-btn-eliminar" disabled class="btn btn-sm" style="${ds}" onclick="supAccion('eliminar')">🗑 Eliminar</button>`:''}
+        ${(currentUser?.role==='admin'||canDo('eliminar'))?`<button id="sup-btn-eliminar" disabled class="btn btn-sm" style="${ds}" onclick="supAccion('eliminar')">🗑 Eliminar</button>`:''}
         <button class="btn btn-secondary btn-sm" onclick="exportarSuplidoresPDF('${tabActivo}')">📄 PDF</button>
         <button class="btn btn-primary" onclick="nuevoSuplidor('${tabActivo}')">➕ Nuevo ${tabActivo==='vehiculo'?'Suplidor Vehículo':tabActivo==='importadora'?'Importadora':'Suplidor Empresa'}</button>
       </div>
@@ -6312,7 +6312,7 @@ function selSupl(id,tr){
   const s=DB.suplidores.find((x,i)=>(x.id||String(i))===id)||DB.suplidores[parseInt(id)];
   const actB=(bid,bg,c)=>{const b=document.getElementById(bid);if(b){b.disabled=false;b.style.cssText='background:'+bg+';color:'+c+';cursor:pointer;';}};
   actB('sup-btn-editar','#475569','#fff');
-  if(currentUser?.role==='admin')actB('sup-btn-eliminar','#dc2626','#fff');
+  if(currentUser?.role==='admin'||canDo('eliminar'))actB('sup-btn-eliminar','#dc2626','#fff');
 }
 function supAccion(accion){
   if(!supSelectedId)return;
@@ -7043,7 +7043,7 @@ function renderCXC(){
         <div style="width:1px;height:28px;background:var(--gray3);margin:0 2px"></div>
         <button id="cxc-btn-cobrar" disabled class="btn btn-sm" style="${ds}" onclick="cxcAccion('cobrar')">💵 Registrar Cobro</button>
         <button id="cxc-btn-historial" disabled class="btn btn-sm" style="${ds}" onclick="cxcAccion('historial')">👁 Historial</button>
-        ${currentUser?.role==='admin'?`<button id="cxc-btn-eliminar" disabled class="btn btn-sm" style="${ds}" onclick="cxcAccion('eliminar')">🗑 Eliminar</button>`:''}
+        ${(currentUser?.role==='admin'||canDo('eliminar'))?`<button id="cxc-btn-eliminar" disabled class="btn btn-sm" style="${ds}" onclick="cxcAccion('eliminar')">🗑 Eliminar</button>`:''}
         <div style="width:1px;height:28px;background:var(--gray3);margin:0 2px"></div>
         <button class="btn btn-secondary btn-sm" onclick="imprimirCXC()">📄 PDF</button>
         ${(currentUser?.role==='admin'||canDo('editar'))?`<button class="btn btn-primary" onclick="nuevaCXCManual()">➕ Nueva CxC</button>`:''}
@@ -7112,7 +7112,7 @@ function selCXC(id,tr){
   const actB=(bid,bg,c)=>{const b=document.getElementById(bid);if(b){b.disabled=false;b.style.cssText='background:'+bg+';color:'+c+';cursor:pointer;border:none;';}};
   if(x?.status!=='SALDADO')actB('cxc-btn-cobrar','#16a34a','#fff');
   actB('cxc-btn-historial','#475569','#fff');
-  if(currentUser?.role==='admin')actB('cxc-btn-eliminar','#dc2626','#fff');
+  if(currentUser?.role==='admin'||canDo('eliminar'))actB('cxc-btn-eliminar','#dc2626','#fff');
 }
 
 function nuevaCXCManual(){
@@ -8082,7 +8082,7 @@ function renderSeguros(){
               <div style="display:flex;gap:4px;flex-wrap:wrap">
                 ${(s.status||'PENDIENTE')!=='PAGADO'?`<button class="btn btn-green btn-sm" onclick="abonarSeguro('${s.id}')">💵 Abonar</button>`:''}
                 <button class="btn btn-secondary btn-sm" onclick="editarSeguro('${s.id}')">✏️</button>
-                ${currentUser?.role==='admin'?`<button class="btn btn-red btn-sm" onclick="eliminarSeguro('${s.id}')">🗑</button>`:''}
+                ${(currentUser?.role==='admin'||canDo('eliminar'))?`<button class="btn btn-red btn-sm" onclick="eliminarSeguro('${s.id}')">🗑</button>`:''}
               </div>
             </td>
           </tr>`;
