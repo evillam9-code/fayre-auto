@@ -317,7 +317,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
       <div style="flex:1"></div>
       <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:#94a3b8;margin-right:12px">
         <div id="fb-dot" style="width:8px;height:8px;border-radius:50%;background:#64748b;flex-shrink:0"></div>
-        <span id="fb-text">Local</span>
+        <span id="fb-text">Conectando...</span>
       </div>
       <div style="display:flex;align-items:center;gap:8px">
         <div style="font-size:13px;font-weight:600;color:#fff" id="topbar-nombre">Admin</div>
@@ -9117,7 +9117,7 @@ window.sDB = function(key){
     if(dot)dot.style.background='#22c55e';
     if(txt)txt.textContent='✓ Guardado';
     clearTimeout(window._fbTxtTimer);
-    window._fbTxtTimer=setTimeout(()=>{const t=document.getElementById('fb-text');if(t)t.textContent='En línea';},2500);
+    window._fbTxtTimer=setTimeout(()=>{const t=document.getElementById('fb-text');if(t)t.textContent='✓ Firebase';},2500);
   }).catch((e)=>{
     if(dot)dot.style.background='#ef4444';
     if(e&&(e.code==='permission-denied'||e.code==='unauthenticated')){
