@@ -2909,14 +2909,16 @@ function confirmarBorrarClienteCumple(id){
 // ══ MÓDULO CUENTAS ══
 function renderCuentas(){
   const esAdmin=currentUser?.role==='admin';
+  const puedeEditar=esAdmin||canDo('editar')||(currentUser?.permisos?.editarCuentas);
+  const puedeBorrar=esAdmin||canDo('eliminar')||(currentUser?.permisos?.borrarCuentas);
   const bcs=DB.config.bancoCuentas||[];
   const total=bcs.reduce((a,b)=>(a+(b.cuentas||[]).length),0);
   document.getElementById('page-cuentas').innerHTML=`
     <div class="page-header">
       <div><h1>🏦 Cuentas Bancarias</h1><p>${bcs.length} banco(s) — ${total} cuenta(s) registradas</p></div>
-      ${esAdmin?`<button class="btn btn-primary" onclick="nuevoBancoCuenta()">➕ Agregar Banco</button>`:''}
+      ${puedeEditar?`<button class="btn btn-primary" onclick="nuevoBancoCuenta()">➕ Agregar Banco</button>`:''}
     </div>
-    ${bcs.length===0?`<div class="card" style="text-align:center;padding:48px"><div style="font-size:48px;margin-bottom:12px">🏦</div><div style="font-size:16px;font-weight:700;color:var(--navy)">Sin cuentas bancarias</div><p style="color:var(--gray);margin-top:8px">Agrega un banco para empezar</p>${esAdmin?`<div style="margin-top:16px"><button class="btn btn-primary" onclick="nuevoBancoCuenta()">➕ Agregar Banco</button></div>`:''}</div>`:`
+    ${bcs.length===0?`<div class="card" style="text-align:center;padding:48px"><div style="font-size:48px;margin-bottom:12px">🏦</div><div style="font-size:16px;font-weight:700;color:var(--navy)">Sin cuentas bancarias</div><p style="color:var(--gray);margin-top:8px">Agrega un banco para empezar</p>${puedeEditar?`<div style="margin-top:16px"><button class="btn btn-primary" onclick="nuevoBancoCuenta()">➕ Agregar Banco</button></div>`:''}</div>`:`
     <div style="display:flex;flex-direction:column;gap:16px">
       ${bcs.map((b,bi)=>`
         <div class="card" style="margin-bottom:0">
@@ -2925,10 +2927,10 @@ function renderCuentas(){
               <div style="font-size:28px">🏦</div>
               <div><div style="font-size:16px;font-weight:800">${escHtml(b.banco)}</div><div style="font-size:12px;color:var(--gray)">${(b.cuentas||[]).length} cuenta(s)</div></div>
             </div>
-            ${esAdmin?`<div style="display:flex;gap:6px">
-              <button class="btn btn-secondary btn-sm" onclick="agregarCuentaABanco(${bi})">➕ Cuenta</button>
-              <button class="btn btn-sm" style="background:var(--red2);color:var(--red)" onclick="eliminarBancoCuentas(${bi})">🗑</button>
-            </div>`:''}
+            <div style="display:flex;gap:6px">
+              ${puedeEditar?`<button class="btn btn-secondary btn-sm" onclick="agregarCuentaABanco(${bi})">➕ Cuenta</button>`:''}
+              ${puedeBorrar?`<button class="btn btn-sm" style="background:var(--red2);color:var(--red)" onclick="eliminarBancoCuentas(${bi})">🗑</button>`:''}
+            </div>
           </div>
           <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px">
             ${(b.cuentas||[]).map((c,ci)=>`
@@ -2939,7 +2941,7 @@ function renderCuentas(){
                     <div style="font-size:15px;font-weight:800;font-family:monospace;letter-spacing:1px">${escHtml(c.numero||'—')}</div>
                     <div style="font-size:11px;color:var(--gray);margin-top:4px">${(c.tipo||'').includes('Corriente')?'🔄 Cuenta Corriente':'💰 Cuenta de Ahorro'}</div>
                   </div>
-                  ${esAdmin?`<button class="btn btn-sm" style="background:var(--red2);color:var(--red);padding:4px 8px" onclick="eliminarCuentaBancoCuentas(${bi},${ci})">✕</button>`:''}
+                  ${puedeBorrar?`<button class="btn btn-sm" style="background:var(--red2);color:var(--red);padding:4px 8px" onclick="eliminarCuentaBancoCuentas(${bi},${ci})">✕</button>`:''}
                 </div>
               </div>`).join('')||`<div style="color:var(--gray);font-size:13px;padding:8px">Sin cuentas agregadas</div>`}
           </div>
@@ -2947,6 +2949,9 @@ function renderCuentas(){
     </div>`}`;
 }
 function nuevoBancoCuenta(){
+  if(!currentUser)return;
+  const puedeEditar=currentUser.role==='admin'||canDo('editar')||(currentUser?.permisos?.editarCuentas);
+  if(!puedeEditar){toast('No tienes permiso para agregar bancos','error');return;}
   openModal('🏦 Nuevo Banco',`
     <div class="form-field"><label class="required">Nombre del Banco</label>
       <input type="text" id="nb-nombre" placeholder="Ej: Banco Popular Dominicano">
@@ -2996,6 +3001,8 @@ function guardarNuevoBancoCuenta(){
   sDB('config');closeModal();toast('Banco guardado ✓','success');renderCuentas();
 }
 function agregarCuentaABanco(bi){
+  const puedeEditar=currentUser?.role==='admin'||canDo('editar')||(currentUser?.permisos?.editarCuentas);
+  if(!puedeEditar){toast('No tienes permiso para agregar cuentas','error');return;}
   openModal(`➕ Nueva Cuenta — ${escHtml(DB.config.bancoCuentas[bi]?.banco||'')}`,`
     <div class="form-row c2">
       <div class="form-field"><label class="required">Número de Cuenta</label><input type="text" id="ac-numero" placeholder="0000-0000-0000"></div>
@@ -3020,11 +3027,15 @@ function guardarCuentaEnBanco(bi){
   sDB('config');closeModal();toast('Cuenta agregada ✓','success');renderCuentas();
 }
 function eliminarBancoCuentas(bi){
+  const puedeBorrar=currentUser?.role==='admin'||canDo('eliminar')||(currentUser?.permisos?.borrarCuentas);
+  if(!puedeBorrar){toast('No tienes permiso para eliminar bancos','error');return;}
   openModal('⚠️ Eliminar Banco',`<p style="padding:16px 0;text-align:center">¿Eliminar el banco <strong>${escHtml(DB.config.bancoCuentas[bi]?.banco||'')}</strong> y todas sus cuentas?</p>`,
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
      <button class="btn btn-red" onclick="DB.config.bancoCuentas.splice(${bi},1);DB.config.bancos=DB.config.bancoCuentas.map(b=>b.banco);sDB('config');closeModal();toast('Banco eliminado','success');renderCuentas()">🗑 Eliminar</button>`);
 }
 function eliminarCuentaBancoCuentas(bi,ci){
+  const puedeBorrar=currentUser?.role==='admin'||canDo('eliminar')||(currentUser?.permisos?.borrarCuentas);
+  if(!puedeBorrar){toast('No tienes permiso para eliminar cuentas','error');return;}
   DB.config.bancoCuentas[bi].cuentas.splice(ci,1);
   sDB('config');toast('Cuenta eliminada','success');renderCuentas();
 }
