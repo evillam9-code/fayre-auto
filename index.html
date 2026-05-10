@@ -7046,7 +7046,7 @@ function renderCXC(){
         ${(currentUser?.role==='admin'||canDo('eliminar'))?`<button id="cxc-btn-eliminar" disabled class="btn btn-sm" style="${ds}" onclick="cxcAccion('eliminar')">🗑 Eliminar</button>`:''}
         <div style="width:1px;height:28px;background:var(--gray3);margin:0 2px"></div>
         <button class="btn btn-secondary btn-sm" onclick="imprimirCXC()">📄 PDF</button>
-        ${(currentUser?.role==='admin'||canDo('editar'))?`<button class="btn btn-primary" onclick="nuevaCXCManual()">➕ Nueva CxC</button>`:''}
+        ${(currentUser?.role==='admin'||canDo('editar')||(currentUser?.permisos?.editarCobros))?`<button class="btn btn-primary" onclick="nuevaCXCManual()">➕ Nueva CxC</button>`:''}
       </div>
     </div>
 
@@ -7116,6 +7116,7 @@ function selCXC(id,tr){
 }
 
 function nuevaCXCManual(){
+  if(currentUser?.role!=='admin'&&!canDo('editar')&&!currentUser?.permisos?.editarCobros){toast('No tienes permiso para agregar CxC','error');return;}
   const cuentas=DB.config.cuentas||['Caja General'];
   openModal('➕ Nueva Cuenta por Cobrar',`
     <div class="form-row c2">
