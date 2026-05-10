@@ -6809,7 +6809,7 @@ function verHistorialCXP(gid){
     <td>${escHtml(p.cuenta||'—')}</td>
     <td>${escHtml(p.nota||'—')}</td>
     <td><span class="badge ${p.saldado?'badge-green':'badge-amber'}">${p.saldado?'SALDADO':'ABONO'}</span></td>
-    ${currentUser?.role==='admin'?`<td><button class="btn btn-secondary btn-sm" onclick="imprimirReciboPagoCXP(DB.gastosVehiculos.find(x=>x.id==='${g.id}'),{fecha:'${p.fecha}',monto:${p.monto},cuenta:'${escHtml(p.cuenta||'')}',nota:'${escHtml(p.nota||'')}',saldado:${p.saldado||false}})">🖨️</button></td>`:'<td></td>'}
+    ${(currentUser?.role==='admin'||canDo('imprimir'))?`<td><button class="btn btn-secondary btn-sm" onclick="imprimirReciboPagoCXP(DB.gastosVehiculos.find(x=>x.id==='${g.id}'),{fecha:'${p.fecha}',monto:${p.monto},cuenta:'${escHtml(p.cuenta||'')}',nota:'${escHtml(p.nota||'')}',saldado:${p.saldado||false}})">🖨️</button></td>`:'<td></td>'}
   </tr>`).join('');
   openModal('📋 Historial de Pagos — '+escHtml(g.suplidor||'—'),`
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px">
@@ -8355,7 +8355,7 @@ function renderFacturaExterna(){
           <td>
             <div style="display:flex;gap:4px">
               <button class="btn btn-sm btn-secondary" onclick="imprimirFacturaExterna('${f.id}')">🖨️</button>
-              ${currentUser?.role==='admin'?`<button class="btn btn-sm btn-red" onclick="DB.facturasExternas=DB.facturasExternas.filter(x=>x.id!=='${f.id}');sDB('facturasExternas');toast('Eliminado','success');renderFacturaExterna()">🗑</button>`:''}
+              ${(currentUser?.role==='admin'||canDo('eliminar'))?`<button class="btn btn-sm btn-red" onclick="DB.facturasExternas=DB.facturasExternas.filter(x=>x.id!=='${f.id}');sDB('facturasExternas');toast('Eliminado','success');renderFacturaExterna()">🗑</button>`:''}
             </div>
           </td>
         </tr>`).join(''):'<tr><td colspan="9" style="text-align:center;padding:24px;color:var(--gray)">Sin facturas externas</td></tr>'}
