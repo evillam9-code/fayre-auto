@@ -205,12 +205,12 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
 <script>
 (function(){
   var VERSION='dealer_v14';
-  var saved=localStorage.getItem('ds_version');
+  var saved=localStorage.getItem('fayre_version');
   if(saved&&saved!==VERSION){
-    localStorage.setItem('ds_version',VERSION);
+    localStorage.setItem('fayre_version',VERSION);
     location.reload(true);
   } else if(!saved){
-    localStorage.setItem('ds_version',VERSION);
+    localStorage.setItem('fayre_version',VERSION);
   }
 })();
 </script>
@@ -363,8 +363,8 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
 
 <script>
 // STORAGE
-const ls=k=>{try{const v=localStorage.getItem('ds_'+k);return v?JSON.parse(v):null}catch{return null}};
-const ss=(k,v)=>{try{localStorage.setItem('ds_'+k,JSON.stringify(v))}catch{}};
+const ls=k=>{try{const v=localStorage.getItem('fayre_'+k);return v?JSON.parse(v):null}catch{return null}};
+const ss=(k,v)=>{try{localStorage.setItem('fayre_'+k,JSON.stringify(v))}catch{}};
 
 // DEFAULT CONFIG
 const defaultConfig={
@@ -1261,7 +1261,7 @@ function guardarVehiculo(id){
   sDB('vehiculos');
   toast(id?'Vehículo actualizado ✓':'Vehículo agregado ✓','success');
   renderInventario();
-  preguntarCerrar('closeModal()');
+  closeModal();
 }
 
 function agregarMarcaRapida(){
@@ -4300,7 +4300,7 @@ function guardarNuevoGastoVeh(){
   sDB('gastosVehiculos');
   toast('Gasto registrado ✓','success');
   renderGastosVeh();
-  preguntarCerrar('closeModal()');
+  closeModal();
 }
 
 function abonarGastoVeh(gid){
@@ -6192,7 +6192,7 @@ function guardarSuplidor(idx){
   sDB('suplidores');
   toast('Suplidor guardado ✓','success');
   renderSuplidores(tipoSuplidor);
-  preguntarCerrar('closeModal()');
+  closeModal();
 }
 function editarSuplidor(i){
   const s=DB.suplidores[i];
