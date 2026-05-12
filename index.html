@@ -411,7 +411,29 @@ let DB={
   chat:ls('chat')||{},
   presencia:ls('presencia')||{}
 };
-function sDB(k){ss(k,DB[k]);}
+function sDB(k){
+  if(!window._fbActivo){
+    // Mostrar mensaje de error prominente
+    const ya=document.getElementById('_fb-block-msg');
+    if(!ya){
+      const div=document.createElement('div');
+      div.id='_fb-block-msg';
+      div.style.cssText='position:fixed;top:0;left:0;right:0;z-index:999999;background:#dc2626;color:#fff;padding:14px 20px;font-size:14px;font-weight:700;text-align:center;box-shadow:0 4px 20px rgba(0,0,0,.4);font-family:Outfit,sans-serif;';
+      div.innerHTML='🔴 Para guardar datos, debe de estar conectado a FIREBASE y no lo está — Favor contacte al administrador: <a href="tel:8498579190" style="color:#fff;text-decoration:underline">Edward Villa — 849-857-9190</a> <button onclick="this.parentElement.remove()" style="margin-left:16px;background:rgba(255,255,255,.25);border:none;color:#fff;padding:3px 10px;border-radius:6px;cursor:pointer;font-weight:700">✕</button>';
+      document.body.appendChild(div);
+      setTimeout(()=>{if(div.parentElement)div.remove();},8000);
+    }
+    // Intentar reconectar automáticamente
+    if(typeof fbIniciar==='function'){
+      fbIniciar().then(()=>{
+        if(window._fbActivo){ss(k,DB[k]);if(typeof fbGuardar==='function')fbGuardar(k).catch(()=>{});}
+      }).catch(()=>{});
+    }
+    return;
+  }
+  ss(k,DB[k]);
+  if(typeof fbGuardar==='function')fbGuardar(k).catch(()=>{});
+}
 
 const fmt=n=>(DB.config.moneda||'RD$')+' '+parseFloat(n||0).toLocaleString('es-DO',{minimumFractionDigits:2,maximumFractionDigits:2});
 const fmtUSD=n=>'USD '+parseFloat(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -1203,7 +1225,7 @@ function formVehiculo(v){
       <div class="form-field"><label>Compañía Importadora</label>
         <select id="v-suplidor">
           <option value="">-- Sin compañía --</option>
-          ${DB.suplidores.filter(s=>(s.tipoSuplidor||'vehiculo')==='vehiculo').map(s=>`<option value="${escHtml(s.empresa||s.nombre||'')}" ${(s.empresa||s.nombre||'')===v?.suplidor?'selected':''}>${escHtml(s.empresa||s.nombre||'')}${s.propietario?' — '+s.propietario:''}</option>`).join('')}
+          ${DB.suplidores.filter(s=>s.tipoSuplidor==='importadora').map(s=>`<option value="${escHtml(s.empresa||s.nombre||'')}" ${(s.empresa||s.nombre||'')===v?.suplidor?'selected':''}>${escHtml(s.empresa||s.nombre||'')}${s.propietario?' — '+s.propietario:''}</option>`).join('')}
         </select>
       </div>
       <div class="form-field"><label>Notas</label><textarea id="v-notas" rows="1" placeholder="Notas adicionales...">${escHtml(v?.notas||'')}</textarea></div>
@@ -1366,7 +1388,7 @@ function gastosVehiculo(vid){
   openModal(`💸 Gastos — ${v.codigo} ${v.marca} ${v.modelo} ${v.anio}`,`
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;background:var(--gray2);padding:12px;border-radius:8px">
       <div class="form-field" style="margin:0"><label style="font-size:10px">Costo del Vehículo (RD$)</label>
-        <input type="number" id="gv-costo-veh" value="${costo||0}" step="0.01" onchange="actualizarCostoVeh('${vid}',this.value)">
+        <input type="text" id="gv-costo-veh" value="${fmtMoneyDisplay(costo||0)}" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this);actualizarCostoVeh('${vid}',this.value.replace(/,/g,''))" onfocus="fmtMoneyFocus(this)">
         <div style="font-size:11px;color:var(--gray);margin-top:2px">USD: ${fmtUSD(costo/tasa)}</div>
       </div>
       <div class="form-field" style="margin:0"><label style="font-size:10px">Suplidor</label>
@@ -1389,7 +1411,7 @@ function gastosVehiculo(vid){
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">
         <div class="form-field" style="margin:0"><label style="font-size:10px">Tipo de Gasto</label><select id="gv-tipo">${TIPOS_GASTO_VEH.map(t=>`<option>${t}</option>`).join('')}</select></div>
         <div class="form-field" style="margin:0"><label style="font-size:10px">Descripción</label><input type="text" id="gv-desc" placeholder="Detalle"></div>
-        <div class="form-field" style="margin:0"><label style="font-size:10px">Monto (RD$)</label><input type="number" id="gv-monto" placeholder="0.00" step="0.01"></div>
+        <div class="form-field" style="margin:0"><label style="font-size:10px">Monto (RD$)</label><input type="text" id="gv-monto" placeholder="0.00" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)"></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px">
         <div class="form-field" style="margin:0"><label style="font-size:10px">Forma de Pago</label><select id="gv-forma"><option value="CONTADO">Contado</option><option value="CREDITO">Crédito</option></select></div>
@@ -1416,7 +1438,7 @@ function agregarSuplidorRapido(vid){
   toast('Suplidor agregado ✓','success');
 }
 function agregarGastoVeh(vid){
-  const monto=parseFloat(document.getElementById('gv-monto').value||0);
+  const monto=parseFloat((document.getElementById('gv-monto').value||'0').replace(/,/g,''));
   if(!monto){toast('Ingresa el monto','error');return;}
   if(!DB.gastosVehiculos)DB.gastosVehiculos=[];
   const g={id:uid(),vehiculoId:vid,fecha:document.getElementById('gv-fecha').value,tipo:document.getElementById('gv-tipo').value,descripcion:document.getElementById('gv-desc').value,monto,formaPago:document.getElementById('gv-forma').value,cuenta:document.getElementById('gv-cuenta').value};
@@ -1430,10 +1452,9 @@ function imprimirGastosVehiculo(vid){
   const v=DB.vehiculos.find(x=>x.id===vid);if(!v)return;
   const gastos=(DB.gastosVehiculos||[]).filter(g=>g.vehiculoId===vid);
   const tasaActual=DB.config.tasaCambio||60;
-  const tasaStr=prompt('💱 Ingresa la tasa del dólar del día (RD$ por 1 USD):',tasaActual);
+  const tasaStr=prompt('💱 Ingresa la tasa del dólar del día (RD$ por 1 USD) para el resumen del PDF:',tasaActual);
   if(tasaStr===null)return;
   const tasa=parseFloat(tasaStr)||tasaActual;
-  // Usar función general con gastos de este vehículo
   _generarPDFGastosVeh(gastos,tasa,'',vid,true);
 }
 
@@ -1837,7 +1858,7 @@ function editarGasto(i){
   const catList=['Mantenimiento','Publicidad','Oficina','Transporte','Servicios','Seguro','Legal','Salarios','Otro'];
   openModal('Editar Gasto',`
     <div class="form-row c2"><div class="form-field"><label>Fecha</label><input type="date" id="g-fecha" value="${g.fecha||today()}"></div><div class="form-field"><label>Categoría</label><select id="g-cat">${catList.map(c=>`<option ${c===g.categoria?'selected':''}>${c}</option>`).join('')}</select></div></div>
-    <div class="form-row c2"><div class="form-field"><label>Suplidor</label><select id="g-sup"><option value="">Sin suplidor</option>${DB.suplidores.map(s=>`<option ${s.nombre===g.suplidor?'selected':''}>${escHtml(s.nombre)}</option>`).join('')}</select></div><div class="form-field"><label>Monto</label><input type="number" id="g-monto" value="${g.monto||0}" step="0.01"></div></div>
+    <div class="form-row c2"><div class="form-field"><label>Suplidor</label><select id="g-sup"><option value="">Sin suplidor</option>${DB.suplidores.map(s=>`<option ${s.nombre===g.suplidor?'selected':''}>${escHtml(s.nombre)}</option>`).join('')}</select></div><div class="form-field"><label>Monto</label><input type="text" id="g-monto" value="${fmtMoneyDisplay(g.monto||0)}" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)"></div></div>
     <div class="form-row c2"><div class="form-field"><label>Forma de Pago</label><select id="g-forma"><option value="CONTADO" ${(g.formaPago||'CONTADO')==='CONTADO'?'selected':''}>Contado</option><option value="CREDITO" ${g.formaPago==='CREDITO'?'selected':''}>Crédito</option></select></div><div class="form-field"><label>Estado</label><select id="g-status"><option value="SALDADO" ${(g.statusGasto||'SALDADO')==='SALDADO'?'selected':''}>Saldado</option><option value="ABONADO" ${g.statusGasto==='ABONADO'?'selected':''}>Abonado</option><option value="PENDIENTE" ${g.statusGasto==='PENDIENTE'?'selected':''}>Pendiente</option></select></div></div>
     <div class="form-field"><label>Descripción</label><input type="text" id="g-desc" value="${escHtml(g.descripcion||'')}"></div>`,
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="guardarEditGasto(${i})">💾 Guardar</button>`);
@@ -1846,7 +1867,7 @@ function guardarEditGasto(i){
   DB.gastos[i].fecha=document.getElementById('g-fecha').value;
   DB.gastos[i].categoria=document.getElementById('g-cat').value;
   DB.gastos[i].suplidor=document.getElementById('g-sup').value;
-  DB.gastos[i].monto=parseFloat(document.getElementById('g-monto').value||0);
+  DB.gastos[i].monto=parseFloat((document.getElementById('g-monto').value||'0').replace(/,/g,''));
   DB.gastos[i].formaPago=document.getElementById('g-forma').value;
   DB.gastos[i].statusGasto=document.getElementById('g-status').value;
   DB.gastos[i].descripcion=document.getElementById('g-desc').value;
@@ -1913,10 +1934,10 @@ function nuevoGasto(){
     </div>
     <div class="form-row c3">
       <div class="form-field"><label class="required">Monto Factura</label>
-        <input type="text" id="g-monto-factura" placeholder="0.00" oninput="fmtMoneyInput(this);calcPendienteGasto()">
+        <input type="text" id="g-monto-factura" placeholder="0.00" oninput="fmtMoneyInput(this);calcPendienteGasto()" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
       </div>
       <div class="form-field"><label>Monto Abonado</label>
-        <input type="text" id="g-monto-abonado" value="0" placeholder="0.00" oninput="fmtMoneyInput(this);calcPendienteGasto()">
+        <input type="text" id="g-monto-abonado" value="0" placeholder="0.00" oninput="fmtMoneyInput(this);calcPendienteGasto()" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
       </div>
       <div class="form-field"><label>Pendiente</label>
         <input type="text" id="g-monto-pendiente" value="0" readonly style="background:#f8fafc;font-weight:700;color:var(--red)">
@@ -2121,7 +2142,7 @@ function nomAccion(accion){
     const emp=DB.nomina.find(e=>e.id===p.empleadoId);
     openModal('✏️ Editar Pago — '+escHtml(emp?.nombre||p.empleadoNombre||''),`
       <div class="form-field"><label>Fecha</label><input type="date" id="ep-fecha" value="${p.fecha||''}"></div>
-      <div class="form-field"><label>Monto</label><input type="number" id="ep-monto" value="${p.monto||0}" step="0.01" min="0"></div>
+      <div class="form-field"><label>Monto</label><input type="text" id="ep-monto" value="${fmtMoneyDisplay(p.monto||0)}" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)" min="0"></div>
       <div class="form-field"><label>Tipo</label><select id="ep-tipo">
         ${[['MEN','Mensual'],['1Q','1ra Quincena'],['2Q','2da Quincena'],['SEM','Semanal'],['COM','Comisión']].map(([v,l])=>`<option value="${v}" ${p.tipo===v?'selected':''}>${l}</option>`).join('')}
       </select></div>
@@ -2147,7 +2168,7 @@ function nomAccion(accion){
 }
 function guardarEditPagoNomina(pid){
   const fecha=document.getElementById('ep-fecha')?.value;
-  const monto=parseFloat(document.getElementById('ep-monto')?.value||0);
+  const monto=parseFloat((document.getElementById('ep-monto')?.value||'0').replace(/,/g,''));
   const tipo=document.getElementById('ep-tipo')?.value||'MEN';
   const nota=document.getElementById('ep-nota')?.value?.trim()||'';
   if(!fecha){toast('La fecha es requerida','error');return;}
@@ -2177,7 +2198,7 @@ function registrarPagoNomina(i){
     </div>
     <div class="form-row c2">
       <div class="form-field"><label class="required">Monto</label>
-        <input type="number" id="np-monto" value="${(salario).toFixed(2)}" step="0.01">
+        <input type="text" id="np-monto" value="${fmtMoneyDisplay(salario)}" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
       </div>
       <div class="form-field"><label>Cuenta</label>
         <select id="np-cuenta">${(DB.config.cuentas||['Caja General']).map(c=>`<option>${escHtml(c)}</option>`).join('')}</select>
@@ -2194,7 +2215,7 @@ function calcMontoNomina(salario){
   if(inp)inp.value=fmtMoneyDisplay(m);
 }
 function guardarPagoNomina(i){
-  const monto=parseFloat(document.getElementById('np-monto').value||0);
+  const monto=parseFloat((document.getElementById('np-monto').value||'0').replace(/,/g,''));
   if(!monto){toast('Ingresa el monto','error');return;}
   const e=DB.nomina[i];
   const mes=document.getElementById('np-mes').value;
@@ -2606,7 +2627,7 @@ function nuevoEmpleado(){
   openModal('Nuevo Empleado',`
     <div class="form-row c2"><div class="form-field"><label class="required">Nombre Completo</label><input type="text" id="e-nombre"></div><div class="form-field"><label>Cargo / Función</label><input type="text" id="e-cargo"></div></div>
     <div class="form-row c3"><div class="form-field"><label>Documento (Cédula)</label><input type="text" id="e-doc" maxlength="13" placeholder="000-0000000-0" oninput="fmtCedulaInput(this)"></div><div class="form-field"><label>Teléfono</label><input type="text" id="e-tel" maxlength="12" placeholder="000-000-0000" oninput="fmtTelInput(this)"></div><div class="form-field"><label>Fecha Ingreso</label><input type="date" id="e-ingreso" value="${today()}"></div></div>
-    <div class="form-row c3"><div class="form-field"><label>Forma de Pago</label><select id="e-pago"><option>Mensual</option><option>Quincenal</option><option>Semanal</option></select></div><div class="form-field"><label class="required">Salario Base</label><input type="number" id="e-salario" step="0.01"></div><div class="form-field"><label>Estado</label><select id="e-activo"><option value="true">Activo</option><option value="false">Inactivo</option></select></div></div>
+    <div class="form-row c3"><div class="form-field"><label>Forma de Pago</label><select id="e-pago"><option>Mensual</option><option>Quincenal</option><option>Semanal</option></select></div><div class="form-field"><label class="required">Salario Base</label><input type="text" id="e-salario" placeholder="0.00" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)"></div><div class="form-field"><label>Estado</label><select id="e-activo"><option value="true">Activo</option><option value="false">Inactivo</option></select></div></div>
     <div class="form-row c2">
       <div class="form-field"><label>📷 Doc. Frente</label><input type="file" id="e-doc-f" accept="image/*" onchange="previewFoto('e-doc-f','e-doc-f-prev')"><img id="e-doc-f-prev" style="display:none;width:100%;max-height:80px;object-fit:cover;border-radius:4px;margin-top:4px"></div>
       <div class="form-field"><label>📷 Doc. Dorso</label><input type="file" id="e-doc-d" accept="image/*" onchange="previewFoto('e-doc-d','e-doc-d-prev')"><img id="e-doc-d-prev" style="display:none;width:100%;max-height:80px;object-fit:cover;border-radius:4px;margin-top:4px"></div>
@@ -2615,7 +2636,7 @@ function nuevoEmpleado(){
 }
 function guardarEmpleado(idx){
   const nombre=document.getElementById('e-nombre').value.trim();
-  const salario=parseFloat(document.getElementById('e-salario').value||0);
+  const salario=parseFloat((document.getElementById('e-salario').value||'0').replace(/,/g,''));
   if(!nombre||!salario){toast('Nombre y salario son requeridos','error');return;}
   const fEl=document.getElementById('e-doc-f-prev');const dEl=document.getElementById('e-doc-d-prev');
   const activoVal=document.getElementById('e-activo')?.value;
@@ -2627,7 +2648,7 @@ function editarEmpleado(i){
   const e=DB.nomina[i];
   openModal('Editar Empleado',`
     <div class="form-row c2"><div class="form-field"><label class="required">Nombre</label><input type="text" id="e-nombre" value="${escHtml(e.nombre||'')}"></div><div class="form-field"><label>Cargo</label><input type="text" id="e-cargo" value="${escHtml(e.cargo||'')}"></div></div>
-    <div class="form-row c3"><div class="form-field"><label>Fecha Inicio</label><input type="date" id="e-ingreso" value="${e.fechaIngreso||today()}"></div><div class="form-field"><label>Forma de Pago</label><select id="e-pago">${['Mensual','Quincenal','Semanal'].map(p=>`<option ${p===e.formaPago?'selected':''}>${p}</option>`).join('')}</select></div><div class="form-field"><label class="required">Salario</label><input type="number" id="e-salario" value="${e.salario||0}" step="0.01"></div></div>
+    <div class="form-row c3"><div class="form-field"><label>Fecha Inicio</label><input type="date" id="e-ingreso" value="${e.fechaIngreso||today()}"></div><div class="form-field"><label>Forma de Pago</label><select id="e-pago">${['Mensual','Quincenal','Semanal'].map(p=>`<option ${p===e.formaPago?'selected':''}>${p}</option>`).join('')}</select></div><div class="form-field"><label class="required">Salario</label><input type="text" id="e-salario" value="${fmtMoneyDisplay(e.salario||0)}" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)"></div></div>
     <div class="form-field"><label>Teléfono</label><input type="text" id="e-tel" value="${escHtml(e.telefono||'')}" maxlength="12" placeholder="000-000-0000" oninput="fmtTelInput(this)"></div>`,
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="guardarEmpleado(${i})">💾 Actualizar</button>`);
 }
@@ -4004,13 +4025,15 @@ function renderGastosVeh(){
   const filtroStatus=document.getElementById('gveh-filtro-status')?.value||'';
   const filtroDesde=document.getElementById('gveh-filtro-desde')?.value||'';
   const filtroHasta=document.getElementById('gveh-filtro-hasta')?.value||'';
+  const filtroMoneda=document.getElementById('gveh-filtro-moneda')?.value||'';
   let gastos=DB.gastosVehiculos||[];
   if(filtroDesde)gastos=gastos.filter(g=>g.fecha&&g.fecha>=filtroDesde);
   if(filtroHasta)gastos=gastos.filter(g=>g.fecha&&g.fecha<=filtroHasta);
   if(filtroVeh)gastos=gastos.filter(g=>g.vehiculoId===filtroVeh);
   if(filtroSup)gastos=gastos.filter(g=>g.suplidor===filtroSup);
   if(filtroStatus)gastos=gastos.filter(g=>(g.statusGasto||'PENDIENTE')===filtroStatus);
-  // Separar por moneda
+  if(filtroMoneda)gastos=gastos.filter(g=>(g.moneda||'RD$')===filtroMoneda);
+  // Separar por moneda para resumen
   const gastosRD=gastos.filter(g=>(g.moneda||'RD$')==='RD$');
   const gastosUSD=gastos.filter(g=>g.moneda==='USD');
   const totalRD=gastosRD.reduce((a,g)=>a+parseFloat(g.montoFactura||0),0);
@@ -4019,15 +4042,34 @@ function renderGastosVeh(){
   const totalUSD=gastosUSD.reduce((a,g)=>a+parseFloat(g.montoFactura||0),0);
   const pagadoUSD=gastosUSD.reduce((a,g)=>a+parseFloat(g.montoPagado||0),0);
   const pendUSD=gastosUSD.reduce((a,g)=>a+parseFloat(g.montoPendiente||0),0);
-  const totalMonto=gastos.reduce((a,g)=>a+parseFloat(g.montoFactura||0),0);
-  const totalPagado=gastos.reduce((a,g)=>a+parseFloat(g.montoPagado||0),0);
-  const totalPendiente=gastos.reduce((a,g)=>a+parseFloat(g.montoPendiente||0),0);
-  const tasa=parseFloat(DB.config.tasaCambio||60);
   const ds='background:#e2e8f0;color:#adb5bd;cursor:not-allowed;border:1px solid #dee2e6';
+
+  // Bloques de resumen según filtro moneda
+  const bloqueRD=`<div class="card" style="margin-bottom:0;border-top:3px solid var(--green)">
+    <div style="font-size:12px;font-weight:700;text-transform:uppercase;color:var(--gray);margin-bottom:10px">🇩🇴 Gastos en Pesos (RD$)</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;text-align:center">
+      <div><div style="font-size:10px;color:var(--gray);font-weight:600">Total</div><div style="font-size:15px;font-weight:800;color:var(--navy)">RD$ ${totalRD.toLocaleString('es-DO',{minimumFractionDigits:2})}</div></div>
+      <div><div style="font-size:10px;color:var(--gray);font-weight:600">Pagado</div><div style="font-size:15px;font-weight:800;color:var(--green)">RD$ ${pagadoRD.toLocaleString('es-DO',{minimumFractionDigits:2})}</div></div>
+      <div><div style="font-size:10px;color:var(--gray);font-weight:600">Pendiente</div><div style="font-size:15px;font-weight:800;color:var(--red)">RD$ ${pendRD.toLocaleString('es-DO',{minimumFractionDigits:2})}</div></div>
+    </div>
+  </div>`;
+  const bloqueUSD=`<div class="card" style="margin-bottom:0;border-top:3px solid var(--blue)">
+    <div style="font-size:12px;font-weight:700;text-transform:uppercase;color:var(--gray);margin-bottom:10px">🇺🇸 Gastos en Dólares (USD)</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;text-align:center">
+      <div><div style="font-size:10px;color:var(--gray);font-weight:600">Total</div><div style="font-size:15px;font-weight:800;color:var(--navy)">$${totalUSD.toLocaleString('en-US',{minimumFractionDigits:2})}</div></div>
+      <div><div style="font-size:10px;color:var(--gray);font-weight:600">Pagado</div><div style="font-size:15px;font-weight:800;color:var(--green)">$${pagadoUSD.toLocaleString('en-US',{minimumFractionDigits:2})}</div></div>
+      <div><div style="font-size:10px;color:var(--gray);font-weight:600">Pendiente</div><div style="font-size:15px;font-weight:800;color:var(--red)">$${pendUSD.toLocaleString('en-US',{minimumFractionDigits:2})}</div></div>
+    </div>
+  </div>`;
+  const resumenHTML=filtroMoneda==='RD$'
+    ?`<div style="margin-bottom:16px">${bloqueRD}</div>`
+    :filtroMoneda==='USD'
+    ?`<div style="margin-bottom:16px">${bloqueUSD}</div>`
+    :`<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">${bloqueRD}${bloqueUSD}</div>`;
 
   document.getElementById('page-gastosVeh').innerHTML=`
     <div class="page-header">
-      <div><h1>💸 Gastos de Vehículo</h1><p>${gastos.length} registro(s) — Pendiente RD$: <strong style="color:var(--red)">${pendRD.toLocaleString('es-DO',{minimumFractionDigits:2})} | USD: $${pendUSD.toLocaleString('en-US',{minimumFractionDigits:2})}</strong></p></div>
+      <div><h1>💸 Gastos de Vehículo</h1><p>${gastos.length} registro(s) — Pendiente: <strong style="color:var(--red)">RD$ ${pendRD.toLocaleString('es-DO',{minimumFractionDigits:2})}</strong> | <strong style="color:var(--blue)">USD $${pendUSD.toLocaleString('en-US',{minimumFractionDigits:2})}</strong></p></div>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
         <button id="gveh-btn-pagar" disabled class="btn btn-sm btn-green" style="${ds}" onclick="gvehAccion('pagar')">💵 Registrar Pago</button>
         ${(currentUser?.role==='admin'||canDo('editar')||canDo('eliminar'))?`${(currentUser?.role==='admin'||canDo('editar'))?`<button id="gveh-btn-editar" disabled class="btn btn-sm" style="${ds}" onclick="gvehAccion('editar')">✏️ Editar</button>`:''} ${(currentUser?.role==='admin'||canDo('eliminar'))?`<button id="gveh-btn-eliminar" disabled class="btn btn-sm" style="${ds}" onclick="gvehAccion('eliminar')">🗑 Eliminar</button>`:''}`:''}
@@ -4036,19 +4078,27 @@ function renderGastosVeh(){
     </div>
 
     <div class="card" style="margin-bottom:16px">
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px">
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px">
         <div style="display:flex;flex-direction:column;gap:4px">
           <label style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--gray)">Vehículo</label>
           <select id="gveh-filtro-veh" onchange="renderGastosVeh()" style="padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
             <option value="">Todos los vehículos</option>
-            ${DB.vehiculos.filter(v=>v.status!=='VENDIDO').map(v=>`<option value="${v.id}" ${v.id===filtroVeh?'selected':''}>${escHtml(v.codigo)} — ${escHtml(v.marca)} ${escHtml(v.modelo)}</option>`).join('')}
+            ${DB.vehiculos.map(v=>`<option value="${v.id}" ${v.id===filtroVeh?'selected':''}>${escHtml(v.codigo)} — ${escHtml(v.marca)} ${escHtml(v.modelo)}${v.status==='VENDIDO'?' (V)':''}</option>`).join('')}
           </select>
         </div>
         <div style="display:flex;flex-direction:column;gap:4px">
-          <label style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--gray)">Suplidor (Vehículos)</label>
+          <label style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--gray)">Suplidor</label>
           <select id="gveh-filtro-sup" onchange="renderGastosVeh()" style="padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
             <option value="">Todos los suplidores</option>
-            ${DB.suplidores.filter(s=>(s.tipoSuplidor||'vehiculo')==='vehiculo').map(s=>`<option value="${escHtml(s.empresa||s.nombre||'')}" ${(s.empresa||s.nombre||'')===filtroSup?'selected':''}>${escHtml(s.empresa||s.nombre||'')}</option>`).join('')}
+            ${DB.suplidores.map(s=>`<option value="${escHtml(s.empresa||s.nombre||'')}" ${(s.empresa||s.nombre||'')===filtroSup?'selected':''}>${escHtml(s.empresa||s.nombre||'')}</option>`).join('')}
+          </select>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <label style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--gray)">Moneda</label>
+          <select id="gveh-filtro-moneda" onchange="renderGastosVeh()" style="padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px;font-weight:700">
+            <option value="">Todas las monedas</option>
+            <option value="RD$" ${filtroMoneda==='RD$'?'selected':''}>🇩🇴 RD$ — Pesos</option>
+            <option value="USD" ${filtroMoneda==='USD'?'selected':''}>🇺🇸 USD — Dólares</option>
           </select>
         </div>
         <div style="display:flex;flex-direction:column;gap:4px">
@@ -4062,38 +4112,20 @@ function renderGastosVeh(){
         </div>
         <div style="display:flex;flex-direction:column;gap:4px">
           <label style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--gray)">Desde</label>
-          <input type="date" id="gveh-filtro-desde" onchange="renderGastosVeh()" style="padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
+          <input type="date" id="gveh-filtro-desde" value="${filtroDesde}" onchange="renderGastosVeh()" style="padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
         </div>
         <div style="display:flex;flex-direction:column;gap:4px">
           <label style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--gray)">Hasta</label>
-          <input type="date" id="gveh-filtro-hasta" onchange="renderGastosVeh()" style="padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
+          <input type="date" id="gveh-filtro-hasta" value="${filtroHasta}" onchange="renderGastosVeh()" style="padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
         </div>
         <div style="display:flex;gap:6px;align-items:flex-end">
-          <button class="btn btn-secondary btn-sm" onclick="limpiarFiltrosGastosVeh()" style="flex-shrink:0">🔄</button>
+          <button class="btn btn-secondary btn-sm" onclick="limpiarFiltrosGastosVeh()" title="Limpiar filtros" style="flex-shrink:0">🔄</button>
           <button class="btn btn-secondary btn-sm" onclick="exportarGastosVehPDF()">📄 PDF</button>
         </div>
       </div>
     </div>
 
-    <!-- RESUMEN POR MONEDA -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">
-      <div class="card" style="margin-bottom:0;border-top:3px solid var(--green)">
-        <div style="font-size:12px;font-weight:700;text-transform:uppercase;color:var(--gray);margin-bottom:10px">🇩🇴 Gastos en Pesos (RD$)</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;text-align:center">
-          <div><div style="font-size:10px;color:var(--gray);font-weight:600">Total</div><div style="font-size:15px;font-weight:800;color:var(--navy)">${totalRD.toLocaleString('es-DO',{minimumFractionDigits:2})}</div></div>
-          <div><div style="font-size:10px;color:var(--gray);font-weight:600">Pagado</div><div style="font-size:15px;font-weight:800;color:var(--green)">${pagadoRD.toLocaleString('es-DO',{minimumFractionDigits:2})}</div></div>
-          <div><div style="font-size:10px;color:var(--gray);font-weight:600">Pendiente</div><div style="font-size:15px;font-weight:800;color:var(--red)">${pendRD.toLocaleString('es-DO',{minimumFractionDigits:2})}</div></div>
-        </div>
-      </div>
-      <div class="card" style="margin-bottom:0;border-top:3px solid var(--blue)">
-        <div style="font-size:12px;font-weight:700;text-transform:uppercase;color:var(--gray);margin-bottom:10px">🇺🇸 Gastos en Dólares (USD)</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;text-align:center">
-          <div><div style="font-size:10px;color:var(--gray);font-weight:600">Total</div><div style="font-size:15px;font-weight:800;color:var(--navy)">$${totalUSD.toLocaleString('en-US',{minimumFractionDigits:2})}</div></div>
-          <div><div style="font-size:10px;color:var(--gray);font-weight:600">Pagado</div><div style="font-size:15px;font-weight:800;color:var(--green)">$${pagadoUSD.toLocaleString('en-US',{minimumFractionDigits:2})}</div></div>
-          <div><div style="font-size:10px;color:var(--gray);font-weight:600">Pendiente</div><div style="font-size:15px;font-weight:800;color:var(--red)">$${pendUSD.toLocaleString('en-US',{minimumFractionDigits:2})}</div></div>
-        </div>
-      </div>
-    </div>
+    ${resumenHTML}
 
     <div class="card">
       <div class="search-wrap"><input class="search-input" placeholder="Buscar por vehículo, tipo de gasto, suplidor..." oninput="filterTable('gveh-tbl',this.value)"></div>
@@ -4115,9 +4147,11 @@ function renderGastosVeh(){
         <tbody>${gastos.length?gastos.slice().reverse().map(g=>{
           let v=DB.vehiculos.find(x=>x.id===g.vehiculoId);
           if(!v&&g.vehiculoId){
-            if(g.codigo) v=DB.vehiculos.find(x=>x.codigo===g.codigo);
-            if(!v&&g.vin) v=DB.vehiculos.find(x=>x.vin===g.vin);
+            if(g.codigo)v=DB.vehiculos.find(x=>x.codigo===g.codigo);
+            if(!v&&g.vin)v=DB.vehiculos.find(x=>x.vin===g.vin);
           }
+          const esUSD=g.moneda==='USD';
+          const fV=(n)=>esUSD?'$'+parseFloat(n||0).toLocaleString('en-US',{minimumFractionDigits:2})+' USD':fmt(n||0);
           const sColor={PAGADO:'badge-green',ABONADO:'badge-amber',PENDIENTE:'badge-red'};
           return`<tr onclick="selGVeh('${g.id}',this)" style="cursor:pointer">
             <td style="text-align:center"><input type="radio" name="gveh-sel" onclick="event.stopPropagation();selGVeh('${g.id}',this.closest('tr'))" style="width:15px;height:15px;cursor:pointer;accent-color:var(--blue)"></td>
@@ -4125,14 +4159,13 @@ function renderGastosVeh(){
             <td style="font-size:12px;font-weight:600">${v?escHtml(v.codigo+' '+v.marca+' '+v.modelo):'—'}</td>
             <td style="font-size:12px">${escHtml(g.suplidor||'—')}</td>
             <td><span class="badge badge-amber" style="font-size:11px">${escHtml(g._origen==='manual'?(g.descripcion||g.tipo||'—'):g.tipo||'—')}</span></td>
-            <td><span class="badge badge-blue" style="font-size:11px">${g.moneda||'RD$'}</span></td>
+            <td><span class="badge ${esUSD?'badge-blue':'badge-green'}" style="font-size:11px">${g.moneda||'RD$'}</span></td>
             <td style="font-size:12px">${escHtml(g.cuenta||'—')}</td>
-            <td style="font-weight:700;color:var(--navy)">${g.moneda==='USD'?'$'+parseFloat(g.montoFactura||0).toLocaleString('en-US',{minimumFractionDigits:2})+' USD':fmt(g.montoFactura||0)}</td>
-            <td style="color:var(--green);font-weight:600">${g.moneda==='USD'?'$'+parseFloat(g.montoPagado||0).toLocaleString('en-US',{minimumFractionDigits:2})+' USD':fmt(g.montoPagado||0)}</td>
-            <td style="font-weight:700;color:${parseFloat(g.montoPendiente||0)>0?'var(--red)':'var(--green)'}">${g.moneda==='USD'?'$'+parseFloat(g.montoPendiente||0).toLocaleString('en-US',{minimumFractionDigits:2})+' USD':fmt(g.montoPendiente||0)}</td>
+            <td style="font-weight:700;color:var(--navy)">${fV(g.montoFactura)}</td>
+            <td style="color:var(--green);font-weight:600">${fV(g.montoPagado)}</td>
+            <td style="font-weight:700;color:${parseFloat(g.montoPendiente||0)>0?'var(--red)':'var(--green)'}">${fV(g.montoPendiente)}</td>
             <td style="font-size:12px;color:var(--gray)">${fmtDate(g.fechaPago)||'—'}</td>
             <td><span class="badge ${sColor[g.statusGasto||'PENDIENTE']||'badge-gray'}">${g.statusGasto||'PENDIENTE'}</span></td>
-
           </tr>`;
         }).join(''):'<tr><td colspan="12" style="text-align:center;padding:24px;color:var(--gray)">Sin gastos registrados</td></tr>'}
         </tbody>
@@ -4183,8 +4216,8 @@ function nuevoGastoVeh(){
           <option value="USD">USD — Dólares</option>
         </select>
       </div>
-      <div class="form-field" id="ngv-tasa-wrap" style="display:none"><label>Tasa de Cambio (RD$ x USD)</label>
-        <input type="number" id="ngv-tasa" value="${DB.config.tasaCambio||60}" step="0.01" oninput="calcPendienteGVeh()">
+      <div class="form-field" id="ngv-tasa-wrap" style="display:none">
+        <input type="hidden" id="ngv-tasa" value="${DB.config.tasaCambio||60}">
       </div>
     </div>
     <div class="form-row c2" id="ngv-banco-wrap">
@@ -4201,13 +4234,13 @@ function nuevoGastoVeh(){
     </div>
     <div class="form-row c3">
       <div class="form-field"><label class="required">Monto Factura</label>
-        <input type="text" id="ngv-factura" value="0" oninput="fmtMoneyInput(this);calcPendienteGVeh()" placeholder="0.00">
+        <input type="text" id="ngv-factura" value="0" oninput="fmtMoneyInput(this);calcPendienteGVeh()" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)" placeholder="0.00">
       </div>
       <div class="form-field"><label>Abono Inicial</label>
-        <input type="text" id="ngv-abono" value="0" oninput="fmtMoneyInput(this);calcPendienteGVeh()" placeholder="0.00">
+        <input type="text" id="ngv-abono" value="0" oninput="fmtMoneyInput(this);calcPendienteGVeh()" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)" placeholder="0.00">
       </div>
       <div class="form-field"><label>Pendiente</label>
-        <input type="number" id="ngv-pendiente" value="0" readonly style="background:#f8fafc;font-weight:700;color:var(--red)">
+        <input type="text" id="ngv-pendiente" value="0.00" readonly style="background:#f8fafc;font-weight:700;color:var(--red)">
       </div>
     </div>
     <div class="form-row c2">
@@ -4223,9 +4256,9 @@ function nuevoGastoVeh(){
 }
 
 function toggleGVehMoneda(){
-  const moneda=document.getElementById('ngv-moneda')?.value;
+  // Tasa de cambio eliminada del formulario — siempre oculta
   const tasaWrap=document.getElementById('ngv-tasa-wrap');
-  if(tasaWrap)tasaWrap.style.display=moneda==='USD'?'block':'none';
+  if(tasaWrap)tasaWrap.style.display='none';
 }
 function actualizarCuentasNGV(){
   const bancoEl=document.getElementById('ngv-banco');
@@ -4319,7 +4352,7 @@ function abonarGastoVeh(gid){
     </div>
     <div class="form-row c2">
       <div class="form-field"><label class="required">Monto a Pagar</label>
-        <input type="number" id="abgv-monto" value="${g.montoPendiente||0}" step="0.01" max="${g.montoPendiente||0}">
+        <input type="text" id="abgv-monto" value="${fmtMoneyDisplay(g.montoPendiente||0)}" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
       </div>
       <div class="form-field"><label>Cuenta de Salida</label>
         <select id="abgv-cuenta">${cuentas.map(c=>`<option ${c===g.cuenta?'selected':''}>${escHtml(c)}</option>`).join('')}</select>
@@ -4335,7 +4368,7 @@ function abonarGastoVeh(gid){
 }
 
 function confirmarAbonoGastoVeh(i){
-  const monto=parseFloat(document.getElementById('abgv-monto').value||0);
+  const monto=parseFloat((document.getElementById('abgv-monto').value||'0').replace(/,/g,''));
   if(!monto||monto<=0){toast('Ingresa un monto válido','error');return;}
   const g=DB.gastosVehiculos[i];
   if(monto>parseFloat(g.montoPendiente||0)){toast('El monto no puede superar el pendiente','error');return;}
@@ -4398,10 +4431,10 @@ function editarGastoVeh(gid){
     </div>
     <div class="form-row c3">
       <div class="form-field"><label>Monto Factura</label>
-        <input type="number" id="egv-factura" value="${g.montoFactura||0}" step="0.01">
+        <input type="text" id="egv-factura" value="${fmtMoneyDisplay(g.montoFactura||0)}" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
       </div>
       <div class="form-field"><label>Monto Pagado</label>
-        <input type="number" id="egv-pagado" value="${g.montoPagado||0}" step="0.01">
+        <input type="text" id="egv-pagado" value="${fmtMoneyDisplay(g.montoPagado||0)}" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
       </div>
       <div class="form-field"><label>Fecha de Pago</label>
         <input type="date" id="egv-fechapago" value="${g.fechaPago||''}">
@@ -4413,8 +4446,8 @@ function editarGastoVeh(gid){
 
 function guardarEditGastoVeh(i){
   if(currentUser?.role!=='admin'){toast('Solo el administrador puede editar','error');return;}
-  const factura=parseFloat(document.getElementById('egv-factura').value||0);
-  const pagado=parseFloat(document.getElementById('egv-pagado').value||0);
+  const factura=parseFloat((document.getElementById('egv-factura').value||'0').replace(/,/g,''));
+  const pagado=parseFloat((document.getElementById('egv-pagado').value||'0').replace(/,/g,''));
   const pendiente=factura-pagado;
   const egvVid=document.getElementById('egv-veh')?.value||DB.gastosVehiculos[i].vehiculoId;
   if(egvVid){
@@ -4491,16 +4524,18 @@ function exportarGastosVehPDF(){
   const filtroStatus=document.getElementById('gveh-filtro-status')?.value||'';
   const filtroDesde=document.getElementById('gveh-filtro-desde')?.value||'';
   const filtroHasta=document.getElementById('gveh-filtro-hasta')?.value||'';
+  const filtroMoneda=document.getElementById('gveh-filtro-moneda')?.value||'';
   let gastos=DB.gastosVehiculos||[];
   if(filtroVeh)gastos=gastos.filter(g=>g.vehiculoId===filtroVeh);
   if(filtroSup)gastos=gastos.filter(g=>g.suplidor===filtroSup);
   if(filtroStatus)gastos=gastos.filter(g=>(g.statusGasto||'PENDIENTE')===filtroStatus);
   if(filtroDesde)gastos=gastos.filter(g=>g.fecha&&g.fecha>=filtroDesde);
   if(filtroHasta)gastos=gastos.filter(g=>g.fecha&&g.fecha<=filtroHasta);
-  // Pedir tasa del día
+  if(filtroMoneda)gastos=gastos.filter(g=>(g.moneda||'RD$')===filtroMoneda);
+  // Pedir tasa del día solo para el PDF (para calcular total general)
   const tasaActual=DB.config.tasaCambio||60;
-  const tasaStr=prompt('💱 Ingresa la tasa del dólar del día (RD$ por 1 USD):',tasaActual);
-  if(tasaStr===null)return; // canceló
+  const tasaStr=prompt('💱 Ingresa la tasa del dólar del día (RD$ por 1 USD) para el resumen del PDF:',tasaActual);
+  if(tasaStr===null)return;
   const tasa=parseFloat(tasaStr)||tasaActual;
   _generarPDFGastosVeh(gastos,tasa,filtroSup,filtroVeh,false);
 }
@@ -4850,8 +4885,8 @@ function nuevaVenta(){
           <option value="USD">USD — Dólares</option>
         </select>
       </div>
-      <div id="sv-tasa-wrap" style="display:none" class="form-field"><label>💱 Tasa del Día (RD$ x USD)</label>
-        <input type="number" id="sv-tasa" step="0.01" value="${DB.config.tasaCambio||60}" placeholder="Ej: 60.50" oninput="calcPend()">
+      <div id="sv-tasa-wrap" style="display:none" class="form-field">
+        <input type="hidden" id="sv-tasa" value="${DB.config.tasaCambio||60}">
       </div>
       <div id="sv-equiv-wrap" style="display:none" class="form-field"><label>Equivalente en RD$</label>
         <input type="text" id="sv-equiv" readonly style="background:#f8fafc;font-weight:700;color:var(--blue)">
@@ -4859,10 +4894,10 @@ function nuevaVenta(){
     </div>
     <div class="form-row c3">
       <div class="form-field"><label class="required">Precio de Venta</label>
-        <input type="text" id="sv-precio" value="" placeholder="0.00" oninput="fmtMoneyInput(this);calcPend()">
+        <input type="text" id="sv-precio" value="" placeholder="0.00" oninput="fmtMoneyInput(this);calcPend()" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
       </div>
       <div class="form-field"><label>Inicial Recibido</label>
-        <input type="text" id="sv-inicial" value="" placeholder="0.00" oninput="fmtMoneyInput(this);calcPend()">
+        <input type="text" id="sv-inicial" value="" placeholder="0.00" oninput="fmtMoneyInput(this);calcPend()" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
       </div>
       <div class="form-field"><label>Pendiente</label>
         <input type="text" id="sv-pendiente" value="" readonly style="background:#f8fafc;font-weight:700;color:var(--red)">
@@ -4932,7 +4967,7 @@ function nuevaVenta(){
           <div class="form-field" style="margin:0"><label style="font-size:10px">Kilometraje</label><input type="text" id="sv-rec-km" placeholder="0" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)"></div>
         </div>
         <div class="form-row c2" style="margin-bottom:0">
-          <div class="form-field" style="margin:0"><label style="font-size:10px">Monto Recibido</label><input type="text" id="sv-rec-monto" placeholder="0.00" oninput="fmtMoneyInput(this);calcPend()"></div>
+          <div class="form-field" style="margin:0"><label style="font-size:10px">Monto Recibido</label><input type="text" id="sv-rec-monto" placeholder="0.00" oninput="fmtMoneyInput(this);calcPend()" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)"></div>
           <div class="form-field" style="margin:0"><label style="font-size:10px">Adjuntar Matrícula</label>
             <input type="file" id="sv-rec-matricula" accept="image/*" onchange="previewFoto('sv-rec-matricula','sv-rec-mat-prev')">
             <img id="sv-rec-mat-prev" style="display:none;width:100%;max-height:60px;object-fit:cover;border-radius:4px;margin-top:4px">
@@ -5082,9 +5117,9 @@ function actualizarCuentasVenta(){
   cuentaEl.innerHTML=(b?b.cuentas:[]).map(c=>`<option value="${escHtml(c.tipo+' — '+c.numero)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`).join('')||'<option value="Caja General">Caja General</option>';
 }
 function toggleTasaVenta(){
-  const moneda=document.getElementById('sv-moneda')?.value||'RD$';
+  // Tasa de cambio eliminada del formulario — siempre oculta
   const wrap=document.getElementById('sv-tasa-wrap');
-  if(wrap)wrap.style.display=moneda==='USD'?'block':'none';
+  if(wrap)wrap.style.display='none';
 }
 function toggleTraspasoFields(){
   const tipo=document.getElementById('sv-tipo-transferencia')?.value;
@@ -5391,10 +5426,10 @@ function editarVenta(vid){
   openModal('✏️ Editar Venta — '+escHtml(v.factura),`
     <div class="form-row c2">
       <div class="form-field"><label>Precio de Venta</label>
-        <input type="text" id="ev-precio" value="${v.precioVenta||0}" oninput="fmtMoneyInput(this);document.getElementById('ev-pendiente').value=fmtMoneyDisplay(Math.max(0,parseFloat(this.value.replace(/,/g,'')||0)-parseFloat(document.getElementById('ev-inicial').value.replace(/,/g,'')||0)))">
+        <input type="text" id="ev-precio" value="${v.precioVenta||0}" oninput="fmtMoneyInput(this);document.getElementById('ev-pendiente').value=fmtMoneyDisplay(Math.max(0,parseFloat(this.value.replace(/,/g,'')||0)-parseFloat(document.getElementById('ev-inicial').value.replace(/,/g,'')||0)))" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
       </div>
       <div class="form-field"><label>Inicial Recibido</label>
-        <input type="text" id="ev-inicial" value="${v.inicial||0}" oninput="fmtMoneyInput(this);document.getElementById('ev-pendiente').value=fmtMoneyDisplay(Math.max(0,parseFloat(document.getElementById('ev-precio').value.replace(/,/g,'')||0)-parseFloat(this.value.replace(/,/g,'')||0)))">
+        <input type="text" id="ev-inicial" value="${v.inicial||0}" oninput="fmtMoneyInput(this);document.getElementById('ev-pendiente').value=fmtMoneyDisplay(Math.max(0,parseFloat(document.getElementById('ev-precio').value.replace(/,/g,'')||0)-parseFloat(this.value.replace(/,/g,'')||0)))" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
       </div>
     </div>
     <div class="form-row c3">
@@ -6233,17 +6268,24 @@ function fmtTelInput(el){
   el.value=v;
 }
 function fmtMoneyInput(el){
+  const pos=el.selectionStart;
+  const prevLen=el.value.length;
   let v=el.value.replace(/[^0-9.]/g,'');
   const parts=v.split('.');
   if(parts.length>2)v=parts[0]+'.'+parts.slice(1).join('');
-  el.value=v;
+  const intPart=(parts[0]||'').replace(/\B(?=(\d{3})+(?!\d))/g,',');
+  const decPart=parts.length>1?'.'+parts[1]:'';
+  el.value=intPart+decPart;
+  const diff=el.value.length-prevLen;
+  try{el.setSelectionRange(pos+diff,pos+diff);}catch(e){}
 }
 function fmtMoneyBlur(el){
   const n=parseFloat(el.value.replace(/,/g,'')||0);
   if(!isNaN(n))el.value=n.toLocaleString('es-DO',{minimumFractionDigits:2,maximumFractionDigits:2});
 }
 function fmtMoneyFocus(el){
-  el.value=el.value.replace(/,/g,'');
+  const n=parseFloat(el.value.replace(/,/g,'')||0);
+  el.value=n===0?'':String(n);
 }
 function fmtMoneyDisplay(val){
   const n=parseFloat(val||0);
@@ -6527,10 +6569,10 @@ function editarCXP(gid, origen){
     </div>
     <div class="form-row c3">
       <div class="form-field"><label>Monto Factura</label>
-        <input type="number" id="ecxp-factura" value="${g.montoFactura||0}" step="0.01">
+        <input type="text" id="ecxp-factura" value="${fmtMoneyDisplay(g.montoFactura||0)}" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
       </div>
       <div class="form-field"><label>Monto Pagado</label>
-        <input type="number" id="ecxp-pagado" value="${g.montoPagado||0}" step="0.01">
+        <input type="text" id="ecxp-pagado" value="${fmtMoneyDisplay(g.montoPagado||0)}" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
       </div>
       <div class="form-field"><label>Fecha</label>
         <input type="date" id="ecxp-fecha" value="${g.fecha||today()}">
@@ -6545,8 +6587,8 @@ function guardarEditCXP(gid, origen){
   const i = arr.findIndex(g=>g.id===gid);
   if(i<0)return;
   const vid = document.getElementById('ecxp-veh')?.value||'';
-  const factura = parseFloat(document.getElementById('ecxp-factura').value||0);
-  const pagado = parseFloat(document.getElementById('ecxp-pagado').value||0);
+  const factura = parseFloat((document.getElementById('ecxp-factura').value||'0').replace(/,/g,''));
+  const pagado = parseFloat((document.getElementById('ecxp-pagado').value||'0').replace(/,/g,''));
   const pendiente = Math.max(0, factura-pagado);
   if(vid){
     const vRef = DB.vehiculos.find(x=>x.id===vid);
@@ -6593,10 +6635,10 @@ function nuevaCXPManual(){
     </div>
     <div class="form-row c3">
       <div class="form-field"><label class="required">Monto Total</label>
-        <input type="text" id="cxpm-monto" value="0" oninput="fmtMoneyInput(this);calcCXPMPend()">
+        <input type="text" id="cxpm-monto" value="0" oninput="fmtMoneyInput(this);calcCXPMPend()" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
       </div>
       <div class="form-field"><label>Abono Inicial</label>
-        <input type="text" id="cxpm-abono" value="0" oninput="fmtMoneyInput(this);calcCXPMPend()">
+        <input type="text" id="cxpm-abono" value="0" oninput="fmtMoneyInput(this);calcCXPMPend()" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
       </div>
       <div class="form-field"><label>Pendiente</label>
         <input type="text" id="cxpm-pend" readonly value="0" style="background:#f8fafc;font-weight:700;color:var(--red)">
@@ -6680,7 +6722,7 @@ function abonarCXPManual(gid){
     </div>
     <div class="form-row c2">
       <div class="form-field"><label class="required">Monto a Pagar</label>
-        <input type="number" id="cxpm-pay-monto" value="${g.montoPendiente||0}" step="0.01" max="${g.montoPendiente||0}">
+        <input type="text" id="cxpm-pay-monto" value="${fmtMoneyDisplay(g.montoPendiente||0)}" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
       </div>
       <div class="form-field"><label>Fecha de Pago</label>
         <input type="date" id="cxpm-pay-fecha" value="${today()}">
@@ -6706,7 +6748,7 @@ function actualizarCuentasPagoManual(){
   cuentaEl.innerHTML=(b?b.cuentas:[]).map(c=>`<option value="${escHtml(c.tipo+' \u2014 '+c.numero)}">${escHtml(c.tipo)} \u2014 ${escHtml(c.numero)}</option>`).join('')||'<option value="Caja General">Caja General</option>';
 }
 function confirmarPagoCXPManual(i){
-  const monto=parseFloat(document.getElementById('cxpm-pay-monto')?.value||0);
+  const monto=parseFloat((document.getElementById('cxpm-pay-monto')?.value||'0').replace(/,/g,''));
   if(!monto||monto<=0){toast('Ingresa un monto v\u00e1lido','error');return;}
   const g=DB.cxp[i];
   if(monto>parseFloat(g.montoPendiente||0)){toast('El monto no puede superar el pendiente','error');return;}
@@ -7141,13 +7183,13 @@ function nuevaCXCManual(){
     </div>
     <div class="form-row c3">
       <div class="form-field"><label class="required">Monto Total</label>
-        <input type="number" id="ncxc-total" step="0.01" placeholder="0.00" oninput="calcSaldoCXC();calcEquivCXC()">
+        <input type="text" id="ncxc-total" placeholder="0.00" oninput="fmtMoneyInput(this);calcSaldoCXC();calcEquivCXC()" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
       </div>
       <div class="form-field"><label>Monto Inicial / Abono</label>
-        <input type="number" id="ncxc-abono" step="0.01" value="0" placeholder="0.00" oninput="calcSaldoCXC()">
+        <input type="text" id="ncxc-abono" value="0" placeholder="0.00" oninput="fmtMoneyInput(this);calcSaldoCXC()" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
       </div>
       <div class="form-field"><label>Saldo Pendiente</label>
-        <input type="number" id="ncxc-saldo" step="0.01" readonly style="background:#f1f5f9;font-weight:700">
+        <input type="text" id="ncxc-saldo" readonly style="background:#f1f5f9;font-weight:700">
       </div>
     </div>
     <div class="form-row c3">
@@ -7157,11 +7199,11 @@ function nuevaCXCManual(){
           <option value="USD">USD — Dólares</option>
         </select>
       </div>
-      <div class="form-field" id="ncxc-tasa-wrap" style="display:none"><label>💱 Tasa del Día (RD$ x USD)</label>
-        <input type="number" id="ncxc-tasa" value="${DB.config.tasaCambio||60}" step="0.01" placeholder="Ej: 60.50">
+      <div class="form-field" id="ncxc-tasa-wrap" style="display:none">
+        <input type="hidden" id="ncxc-tasa" value="${DB.config.tasaCambio||60}">
       </div>
-      <div class="form-field" id="ncxc-tasa-eq" style="display:none"><label>Equivalente en RD$</label>
-        <input type="text" id="ncxc-equiv" readonly style="background:#f8fafc;font-weight:700;color:var(--blue)" placeholder="—">
+      <div class="form-field" id="ncxc-tasa-eq" style="display:none">
+        <input type="hidden" id="ncxc-equiv" value="">
       </div>
     </div>
     <div class="form-row c2">
@@ -7180,12 +7222,11 @@ function nuevaCXCManual(){
      <button class="btn btn-primary" onclick="guardarCXCManual()">💾 Guardar</button>`);
 }
 function toggleTasaCXC(){
-  const moneda=document.getElementById('ncxc-moneda')?.value;
+  // Tasa de cambio eliminada del formulario — siempre oculta
   const tw=document.getElementById('ncxc-tasa-wrap');
   const eq=document.getElementById('ncxc-tasa-eq');
-  if(tw)tw.style.display=moneda==='USD'?'block':'none';
-  if(eq)eq.style.display=moneda==='USD'?'block':'none';
-  calcEquivCXC();
+  if(tw)tw.style.display='none';
+  if(eq)eq.style.display='none';
 }
 function calcEquivCXC(){
   const moneda=document.getElementById('ncxc-moneda')?.value;
@@ -7204,8 +7245,8 @@ function actualizarCuentasCXCManual(){
   cuentaEl.innerHTML=(b&&b.cuentas&&b.cuentas.length)?b.cuentas.map(c=>`<option value="${escHtml(c.tipo+' — '+c.numero)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`).join(''):'<option value="Caja General">Caja General</option>';
 }
 function calcSaldoCXC(){
-  const total=parseFloat(document.getElementById('ncxc-total')?.value||0);
-  const abono=parseFloat(document.getElementById('ncxc-abono')?.value||0);
+  const total=parseFloat((document.getElementById('ncxc-total')?.value||'0').replace(/,/g,''));
+  const abono=parseFloat((document.getElementById('ncxc-abono')?.value||'0').replace(/,/g,''));
   const saldo=document.getElementById('ncxc-saldo');
   if(saldo)saldo.value=fmtMoneyDisplay(Math.max(0,total-abono));
   calcEquivCXC();
@@ -7213,12 +7254,12 @@ function calcSaldoCXC(){
 function guardarCXCManual(){
   const cliId=document.getElementById('ncxc-cli').value;
   const concepto=document.getElementById('ncxc-concepto').value.trim();
-  const total=parseFloat(document.getElementById('ncxc-total').value||0);
+  const total=parseFloat((document.getElementById('ncxc-total').value||'0').replace(/,/g,''));
   if(!cliId){toast('Selecciona un cliente','error');return;}
   if(!concepto){toast('Ingresa el concepto','error');return;}
   if(!total){toast('Ingresa el monto total','error');return;}
   const cli=DB.clientes.find(x=>x.id===cliId);
-  const abono=parseFloat(document.getElementById('ncxc-abono').value||0);
+  const abono=parseFloat((document.getElementById('ncxc-abono').value||'0').replace(/,/g,''));
   const saldo=Math.max(0,total-abono);
   const cuenta=document.getElementById('ncxc-cuenta').value;
   const banco=document.getElementById('ncxc-banco')?.value||'';
@@ -8123,10 +8164,10 @@ function _formSeguro(s){
     </div>
     <div class="form-row c3">
       <div class="form-field"><label class="required">Prima Total</label>
-        <input type="text" id="sg-prima" value="${prim||0}" oninput="fmtMoneyInput(this);calcPendSeguro()" placeholder="0.00">
+        <input type="text" id="sg-prima" value="${prim||0}" oninput="fmtMoneyInput(this);calcPendSeguro()" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)" placeholder="0.00">
       </div>
       <div class="form-field"><label>Abono Inicial</label>
-        <input type="text" id="sg-abonado" value="${abon||0}" oninput="fmtMoneyInput(this);calcPendSeguro()" placeholder="0.00">
+        <input type="text" id="sg-abonado" value="${abon||0}" oninput="fmtMoneyInput(this);calcPendSeguro()" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)" placeholder="0.00">
       </div>
       <div class="form-field"><label>Pendiente</label>
         <input type="text" id="sg-pendiente" value="${fmtMoneyDisplay(Math.max(0,prim-abon))}" readonly style="background:#f8fafc;font-weight:700;color:var(--red)">
@@ -8400,10 +8441,10 @@ function nuevaFacturaExterna(){
     </div>
     <div class="form-row c3">
       <div class="form-field"><label class="required">Monto Total</label>
-        <input type="text" id="fe-monto" value="0" oninput="fmtMoneyInput(this);calcPendFE()">
+        <input type="text" id="fe-monto" value="0" oninput="fmtMoneyInput(this);calcPendFE()" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
       </div>
       <div class="form-field"><label>Abono Inicial</label>
-        <input type="text" id="fe-abono" value="0" oninput="fmtMoneyInput(this);calcPendFE()">
+        <input type="text" id="fe-abono" value="0" oninput="fmtMoneyInput(this);calcPendFE()" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
       </div>
       <div class="form-field"><label>Pendiente</label>
         <input type="text" id="fe-pendiente" readonly style="background:#f8fafc;font-weight:700;color:var(--red)" value="0">
@@ -9277,6 +9318,8 @@ window.fbIniciar = async function(){
   try {
     const loaded = await fbCargar();
     window._fbActivo = true;
+    // Limpiar cualquier intervalo de reconexión previo
+    if(window._fbReconectInterval){clearInterval(window._fbReconectInterval);window._fbReconectInterval=null;}
     if(loaded){
       setStatus('#22c55e','✓ Firebase');
       window._fbCargado=true;
@@ -9312,8 +9355,23 @@ window.fbIniciar = async function(){
       console.log('✅ Firebase: datos iniciales guardados');
     }
   } catch(e) {
-    setStatus('#ef4444','Sin conexión');
+    setStatus('#ef4444','Sin conexión — reintentando...');
     console.warn('Firebase error:', e.message);
+    window._fbActivo=false;
+    // Auto-reconexión cada 15 segundos
+    if(!window._fbReconectInterval){
+      window._fbReconectInterval=setInterval(async()=>{
+        if(window._fbActivo){clearInterval(window._fbReconectInterval);window._fbReconectInterval=null;return;}
+        console.log('🔄 Reintentando conexión a Firebase...');
+        setStatus('#f59e0b','Reconectando...');
+        try{
+          await window.fbIniciar();
+        }catch(re){
+          setStatus('#ef4444','Sin conexión — reintentando...');
+          console.warn('Reintento Firebase fallido:',re.message);
+        }
+      },15000);
+    }
   }
 };
 </script>
