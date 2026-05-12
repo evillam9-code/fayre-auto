@@ -4072,7 +4072,7 @@ function renderGastosVeh(){
       <div><h1>💸 Gastos de Vehículo</h1><p>${gastos.length} registro(s) — Pendiente: <strong style="color:var(--red)">RD$ ${pendRD.toLocaleString('es-DO',{minimumFractionDigits:2})}</strong> | <strong style="color:var(--blue)">USD $${pendUSD.toLocaleString('en-US',{minimumFractionDigits:2})}</strong></p></div>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
         <button id="gveh-btn-pagar" disabled class="btn btn-sm btn-green" style="${ds}" onclick="gvehAccion('pagar')">💵 Registrar Pago</button>
-        ${(currentUser?.role==='admin'||canDo('editar')||canDo('eliminar'))?`${(currentUser?.role==='admin'||canDo('editar'))?`<button id="gveh-btn-editar" disabled class="btn btn-sm" style="${ds}" onclick="gvehAccion('editar')">✏️ Editar</button>`:''} ${(currentUser?.role==='admin'||canDo('eliminar'))?`<button id="gveh-btn-eliminar" disabled class="btn btn-sm" style="${ds}" onclick="gvehAccion('eliminar')">🗑 Eliminar</button>`:''}`:''}
+        ${(currentUser?.role==='admin'||canDo('editar')||canDo('eliminar')||currentUser?.permisos?.editarGastosVeh||currentUser?.permisos?.borrarGastosVeh)?`${(currentUser?.role==='admin'||canDo('editar')||currentUser?.permisos?.editarGastosVeh)?`<button id="gveh-btn-editar" disabled class="btn btn-sm" style="${ds}" onclick="gvehAccion('editar')">✏️ Editar</button>`:''} ${(currentUser?.role==='admin'||canDo('eliminar')||currentUser?.permisos?.borrarGastosVeh)?`<button id="gveh-btn-eliminar" disabled class="btn btn-sm" style="${ds}" onclick="gvehAccion('eliminar')">🗑 Eliminar</button>`:''}`:''}
         <button class="btn btn-primary" onclick="nuevoGastoVeh()">➕ Nuevo Gasto</button>
       </div>
     </div>
@@ -4389,7 +4389,7 @@ function confirmarAbonoGastoVeh(i){
 }
 
 function editarGastoVeh(gid){
-  if(currentUser?.role!=='admin'){toast('Solo el administrador puede editar','error');return;}
+  if(currentUser?.role!=='admin'&&!canDo('editar')&&!currentUser?.permisos?.editarGastosVeh){toast('No tienes permiso para editar','error');return;}
   const gastos=DB.gastosVehiculos||[];
   const i=gastos.findIndex(g=>g.id===gid);
   if(i<0)return;
@@ -4445,7 +4445,7 @@ function editarGastoVeh(gid){
 }
 
 function guardarEditGastoVeh(i){
-  if(currentUser?.role!=='admin'){toast('Solo el administrador puede editar','error');return;}
+  if(currentUser?.role!=='admin'&&!canDo('editar')&&!currentUser?.permisos?.editarGastosVeh){toast('No tienes permiso para editar','error');return;}
   const factura=parseFloat((document.getElementById('egv-factura').value||'0').replace(/,/g,''));
   const pagado=parseFloat((document.getElementById('egv-pagado').value||'0').replace(/,/g,''));
   const pendiente=factura-pagado;
@@ -4487,8 +4487,8 @@ function selGVeh(id,tr){
   const g=(DB.gastosVehiculos||[]).find(x=>x.id===id);
   const actB=(bid,bg,c)=>{const b=document.getElementById(bid);if(b){b.disabled=false;b.style.cssText='background:'+bg+';color:'+c+';cursor:pointer;border:none;';}};
   if(parseFloat(g?.montoPendiente||0)>0)actB('gveh-btn-pagar','#16a34a','#fff');
-  if(currentUser?.role==='admin'||canDo('editar'))actB('gveh-btn-editar','#475569','#fff');
-  if(currentUser?.role==='admin'||canDo('eliminar'))actB('gveh-btn-eliminar','#dc2626','#fff');
+  if(currentUser?.role==='admin'||canDo('editar')||currentUser?.permisos?.editarGastosVeh)actB('gveh-btn-editar','#475569','#fff');
+  if(currentUser?.role==='admin'||canDo('eliminar')||currentUser?.permisos?.borrarGastosVeh)actB('gveh-btn-eliminar','#dc2626','#fff');
 }
 
 function agregarTipoGastoVeh(){
@@ -4510,7 +4510,7 @@ function agregarTipoGastoVeh(){
 function gvehAccion(accion){
   if(!gvehSelectedId)return;
   if(accion==='pagar')abonarGastoVeh(gvehSelectedId);
-  else if(accion==='editar'&&!canDo('editar')){toast('No tienes permiso para editar','error');return;}else if(accion==='editar')editarGastoVeh(gvehSelectedId);
+  else if(accion==='editar'&&currentUser?.role!=='admin'&&!canDo('editar')&&!currentUser?.permisos?.editarGastosVeh){toast('No tienes permiso para editar','error');return;}else if(accion==='editar')editarGastoVeh(gvehSelectedId);
   else if(accion==='eliminar'&&!canDo('eliminar')){toast('No tienes permiso para eliminar','error');return;}else if(accion==='eliminar')eliminarGastoVeh(gvehSelectedId);
 }
 
