@@ -9154,9 +9154,10 @@ function _ejecutarBackupAuto(){
   },3000);
 }
 async function fbGuardar(key){
-  try {
+  // Timeout de 12 segundos — si Firebase no responde, lanzar error claro
+  const _timeout = new Promise((_,reject)=>setTimeout(()=>reject(new Error('timeout: Firebase tardó demasiado')),12000));
+  const _guardar = async ()=>{
     let val=DB[key]!==undefined?DB[key]:(key==='config'?{}:[]);
-    // Para config: guardar logoData separado para evitar límite de tamaño
     if(key==='config'&&typeof val==='object'&&val!==null){
       const logo=val.logoData||'';
       const sinLogo=Object.assign({},val,{logoData:''});
@@ -9165,16 +9166,23 @@ async function fbGuardar(key){
     } else {
       await _fbDB.collection(_fbCol).doc(key).set({valor:JSON.stringify(val)});
     }
-  } catch(e){ console.warn('FB save error:', e.message); }
+  };
+  // Lanzar el error hacia arriba para que sDB lo detecte y muestre mensaje
+  await Promise.race([_guardar(), _timeout]);
 }
 
 async function fbCargar(){
   const keys=['config','config_logo','users','vehiculos','clientes','suplidores','ventas','cotizaciones',
     'caja','gastos','nomina','nominaPagos','gastosVehiculos','cxp','cxc','autorizaciones','seguros','facturasExternas','log'];
   let loaded=false;
-  for(const key of keys){
-    try {
-      const snap = await _fbDB.collection(_fbCol).doc(key).get();
+  // Cargar TODAS las colecciones en paralelo — mucho más rápido que secuencial
+  const resultados = await Promise.allSettled(
+    keys.map(key => _fbDB.collection(_fbCol).doc(key).get().then(snap=>({key,snap})))
+  );
+  for(const res of resultados){
+    if(res.status!=='fulfilled')continue;
+    const {key,snap}=res.value;
+    try{
       if(snap.exists){
         const val = JSON.parse(snap.data().valor);
         if(val!==null){
@@ -9183,14 +9191,12 @@ async function fbCargar(){
             DB[key].forEach(lu=>{if(!merged.find(u=>u.id===lu.id))merged.push(lu);});
             DB[key]=merged.length>0?merged:DB[key];
           } else if(key==='config_logo'){
-            // Logo guardado separado - cargarlo en DB.config.logoData
             const logoVal=typeof val==='string'?val:(val&&val.logoData?val.logoData:'');
             if(logoVal&&logoVal.startsWith('data:')){
               DB.config=DB.config||{};
               DB.config.logoData=logoVal;
             }
           } else if(key==='config' && typeof val==='object' && val!==null){
-            // Merge config: Firebase tiene prioridad pero no sobreescribir con vacíos
             const merged=Object.assign({},DB[key]);
             Object.keys(val).forEach(k=>{
               if(val[k]!==null && val[k]!==undefined && val[k]!==''){
@@ -9204,7 +9210,7 @@ async function fbCargar(){
           loaded=true;
         }
       }
-    } catch(e){ console.warn('FB load error:', key, e.message); }
+    }catch(e){ console.warn('FB load error:', key, e.message); }
   }
   return loaded;
 }
@@ -9450,12 +9456,24 @@ window.fbIniciar = async function(){
         if(_renderMap[_pid])setTimeout(_renderMap[_pid],300);
       }
     } else {
-      const keys=['config','users','vehiculos','clientes','suplidores','ventas','cotizaciones',
-        'caja','gastos','nomina','nominaPagos','gastosVehiculos','cxp','cxc','autorizaciones','seguros','facturasExternas','log'];
-      for(const k of keys) await fbGuardar(k);
+      // Firebase está vacío — solo subir si hay datos reales en localStorage
+      // Evitar que usuarios nuevos o con pocos datos sobreescriban Firebase con vacíos
+      const tieneVehiculos=(DB.vehiculos||[]).length>0;
+      const tieneVentas=(DB.ventas||[]).length>0;
+      const tieneUsers=(DB.users||[]).length>1; // más de solo admin
+      const tieneConfig=DB.config&&(DB.config.empresa||DB.config.moneda);
+      const hayDatosReales=tieneVehiculos||tieneVentas||tieneUsers||tieneConfig;
+      if(hayDatosReales){
+        const keys=['config','users','vehiculos','clientes','suplidores','ventas','cotizaciones',
+          'caja','gastos','nomina','nominaPagos','gastosVehiculos','cxp','cxc','autorizaciones','seguros','facturasExternas','log'];
+        for(const k of keys) await fbGuardar(k);
+        console.log('✅ Firebase: datos iniciales guardados desde localStorage');
+      } else {
+        // No hay datos locales significativos — no subir nada, solo conectar
+        console.log('ℹ️ Firebase vacío y sin datos locales — solo conectando sin subir');
+      }
       window._fbCargado=true;
       setStatus('#22c55e','✓ Firebase');
-      console.log('✅ Firebase: datos iniciales guardados');
     }
   } catch(e) {
     setStatus('#ef4444','Sin conexión — reintentando...');
