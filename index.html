@@ -212,7 +212,55 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
   } else if(!saved){
     localStorage.setItem('fayre_version',VERSION);
   }
+  window._APP_VERSION=VERSION;
 })();
+</script>
+<script>
+// AUTO VERSION CHECKER VIA FIREBASE
+window._versionCheckInterval=null;
+function iniciarVerificadorVersion(){
+  if(window._versionCheckInterval)return;
+  window._versionCheckInterval=setInterval(async function(){
+    if(!window._fbActivo||!window._fbDB||!window._fbCol)return;
+    try{
+      const snap=await window._fbDB.collection(window._fbCol).doc('system_version').get();
+      if(!snap.exists)return;
+      const data=snap.data();
+      const remoteVersion=data&&data.version?data.version:null;
+      if(!remoteVersion)return;
+      const localVersion=localStorage.getItem('fayre_version')||window._APP_VERSION;
+      if(remoteVersion!==localVersion){
+        if(document.getElementById('_version-update-banner'))return;
+        const banner=document.createElement('div');
+        banner.id='_version-update-banner';
+        banner.style.cssText='position:fixed;bottom:0;left:0;right:0;z-index:999998;background:linear-gradient(135deg,#1d4ed8,#2563eb);color:#fff;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;gap:16px;box-shadow:0 -4px 20px rgba(0,0,0,.3);font-family:Outfit,sans-serif;';
+        banner.innerHTML='<div style="display:flex;align-items:center;gap:12px;"><span style="font-size:22px">\uD83D\uDD04</span><div><div style="font-weight:800;font-size:14px;">Nueva versi\u00F3n disponible</div><div style="font-size:12px;opacity:.85;">El administrador public\u00F3 una actualizaci\u00F3n del sistema.</div></div></div><button onclick="localStorage.setItem(\'fayre_version\',\''+remoteVersion+'\');location.reload(true);" style="background:#fff;color:#1d4ed8;border:none;border-radius:8px;padding:10px 20px;font-size:14px;font-weight:800;cursor:pointer;font-family:Outfit,sans-serif;white-space:nowrap;flex-shrink:0;">\u26A1 Actualizar ahora</button>';
+        document.body.appendChild(banner);
+        setTimeout(function(){
+          localStorage.setItem('fayre_version',remoteVersion);
+          location.reload(true);
+        },30000);
+      }
+    }catch(e){}
+  },30000);
+}
+async function publicarNuevaVersion(silencioso){
+  if(!window._fbActivo||!window._fbDB||!window._fbCol){toast('No hay conexi\u00F3n a Firebase','error');return;}
+  const ts=Date.now();
+  const newVersion='dealer_v'+ts;
+  try{
+    await window._fbDB.collection(window._fbCol).doc('system_version').set({
+      version:newVersion,
+      publicadoPor:(window.currentUser&&window.currentUser.nombre)||'Admin',
+      fecha:new Date().toISOString()
+    });
+    localStorage.setItem('fayre_version',newVersion);
+    window._APP_VERSION=newVersion;
+    if(!silencioso)toast('\u2705 Nueva versi\u00F3n publicada — todos los usuarios se actualizar\u00E1n en 30 segundos','success');
+  }catch(e){
+    toast('Error al publicar versi\u00F3n: '+e.message,'error');
+  }
+}
 </script>
 </head>
 <body>
@@ -418,10 +466,18 @@ function sDB(k){
     if(!ya){
       const div=document.createElement('div');
       div.id='_fb-block-msg';
-      div.style.cssText='position:fixed;top:0;left:0;right:0;z-index:999999;background:#dc2626;color:#fff;padding:14px 20px;font-size:14px;font-weight:700;text-align:center;box-shadow:0 4px 20px rgba(0,0,0,.4);font-family:Outfit,sans-serif;';
-      div.innerHTML='🔴 Para guardar datos, debe de estar conectado a FIREBASE y no lo está — Favor contacte al administrador: <a href="tel:8498579190" style="color:#fff;text-decoration:underline">Edward Villa — 849-857-9190</a> <button onclick="this.parentElement.remove()" style="margin-left:16px;background:rgba(255,255,255,.25);border:none;color:#fff;padding:3px 10px;border-radius:6px;cursor:pointer;font-weight:700">✕</button>';
+      div.style.cssText='position:fixed;inset:0;z-index:999999;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:center;font-family:Outfit,sans-serif;';
+      div.innerHTML=`<div style="background:#fff;border-radius:16px;padding:32px 28px;max-width:480px;width:90%;text-align:center;box-shadow:0 8px 40px rgba(0,0,0,.4);">
+        <div style="font-size:48px;margin-bottom:12px;">🔴</div>
+        <div style="font-size:18px;font-weight:800;color:#dc2626;margin-bottom:10px;">Sin conexión a Firebase</div>
+        <div style="font-size:14px;color:#374151;margin-bottom:18px;line-height:1.6;">Los datos <strong>no se pueden guardar</strong> porque el sistema no está conectado a la base de datos.<br>Favor comuníquese con el administrador del sistema.</div>
+        <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:14px;margin-bottom:20px;">
+          <div style="font-size:13px;font-weight:700;color:#991b1b;">👤 Edward Villa</div>
+          <a href="tel:8098579190" style="font-size:20px;font-weight:800;color:#dc2626;text-decoration:none;display:block;margin-top:4px;">📞 809-857-9190</a>
+        </div>
+        <button onclick="document.getElementById('_fb-block-msg').remove()" style="background:#dc2626;color:#fff;border:none;border-radius:10px;padding:12px 32px;font-size:15px;font-weight:700;cursor:pointer;font-family:Outfit,sans-serif;width:100%;">✅ Entendido — Llamaré al administrador</button>
+      </div>`;
       document.body.appendChild(div);
-      setTimeout(()=>{if(div.parentElement)div.remove();},8000);
     }
     // Intentar reconectar automáticamente
     if(typeof fbIniciar==='function'){
@@ -637,6 +693,15 @@ function doLogin(){
     _iniciarPresenciaGlobal();
     setTimeout(_verificarBackupAdmin,2500);
     setTimeout(_verificarCumpleanosHoy,3500);
+    // Si es admin, publicar nueva versión automáticamente al entrar
+    if(user.role==='admin'){
+      setTimeout(async function(){
+        if(typeof publicarNuevaVersion==='function'&&window._fbActivo){
+          await publicarNuevaVersion(true);
+          console.log('✅ Versión publicada automáticamente al entrar como admin');
+        }
+      },3000);
+    }
   };
   // Mostrar bienvenida con datos del localStorage primero
   _actualizarWelcome();
@@ -3236,6 +3301,9 @@ function renderConfig(){
         <button class="btn btn-secondary btn-sm" onclick="forzarSincronizacion()" style="background:#2563eb;color:#fff;border:none">
           ☁️ Subir todo a Firebase
         </button>
+        ${currentUser?.role==='admin'?`<button class="btn btn-sm" onclick="publicarNuevaVersion()" style="background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;border:none;font-weight:700;" title="Fuerza que todos los usuarios actualicen su navegador automáticamente">
+          🚀 Publicar Nueva Versión
+        </button>`:''}
       </div>
     </div>
     ${fbPendiente?'<div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px;color:#92400e;display:flex;align-items:center;gap:8px"><span>⏳</span> Sincronizando con Firebase... Los datos se actualizarán en unos segundos.</div>':''}
@@ -4414,11 +4482,10 @@ function editarGastoVeh(gid){
         </select>
       </div>
     </div>
-    <div class="form-row c2">
+    <div class="form-row c4" style="grid-template-columns:2fr 1fr 1fr 1fr;">
       <div class="form-field"><label>Tipo de Gasto</label>
         <select id="egv-tipo">${tiposGasto.map(t=>`<option ${t===g.tipo?'selected':''}>${t}</option>`).join('')}</select>
       </div>
-    <div class="form-row c3">
       <div class="form-field"><label>Moneda</label>
         <select id="egv-moneda"><option value="RD$" ${(g.moneda||'RD$')==='RD$'?'selected':''}>RD$</option><option value="USD" ${g.moneda==='USD'?'selected':''}>USD</option></select>
       </div>
@@ -9212,6 +9279,38 @@ function fbActivarListeners(){
             if(!merged.find(u=>u.id===lu.id))merged.push(lu);
           });
           DB.users=merged.length>0?merged:DB.users;
+          // Aplicar permisos/módulos en tiempo real si el usuario actual fue modificado
+          if(window.currentUser){
+            const updatedMe=DB.users.find(u=>u.id===window.currentUser.id);
+            if(updatedMe){
+              const changed=JSON.stringify(updatedMe.modulos)!==JSON.stringify(window.currentUser.modulos)||
+                            JSON.stringify(updatedMe.permisos)!==JSON.stringify(window.currentUser.permisos)||
+                            updatedMe.activo!==window.currentUser.activo;
+              if(changed){
+                // Si fue desactivado, cerrar sesión
+                if(updatedMe.activo===false){
+                  toast('Tu cuenta ha sido desactivada. Contacta al administrador.','error');
+                  setTimeout(()=>{if(typeof doLogout==='function')doLogout();},2500);
+                } else {
+                  window.currentUser=Object.assign({},window.currentUser,{
+                    modulos:updatedMe.modulos,
+                    permisos:updatedMe.permisos,
+                    role:updatedMe.role
+                  });
+                  if(typeof aplicarPermisosNav==='function')aplicarPermisosNav();
+                  // Si está en una página a la que ya no tiene acceso, redirigir al dashboard
+                  const activePg=document.querySelector('.page.active');
+                  if(activePg){
+                    const pgId=activePg.id.replace('page-','');
+                    if(pgId!=='dashboard'&&window.currentUser.role!=='admin'&&!(window.currentUser.modulos||[]).includes(pgId)){
+                      toast('Tus permisos han sido actualizados','warning');
+                      if(typeof showPage==='function')showPage('dashboard');
+                    }
+                  }
+                }
+              }
+            }
+          }
         } else if(key==='config_logo'){
           const logoVal=typeof val==='string'?val:(val&&val.logoData?val.logoData:'');
           if(logoVal&&logoVal.startsWith('data:')){
@@ -9325,6 +9424,8 @@ window.fbIniciar = async function(){
       window._fbCargado=true;
       // Activar listeners de tiempo real
       if(typeof fbActivarListeners==='function') fbActivarListeners();
+      // Iniciar verificador de versión automática
+      if(typeof iniciarVerificadorVersion==='function') iniciarVerificadorVersion();
       // Actualizar sidebar con logo de Firebase
       if(typeof actualizarLogoSidebar==='function') actualizarLogoSidebar();
       // Actualizar topbar empresa
