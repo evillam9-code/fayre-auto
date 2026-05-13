@@ -8979,6 +8979,8 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const _fbDB = firebase.firestore();
 const _fbCol = 'fayre';
+window._fbDB = _fbDB;
+window._fbCol = _fbCol;
 
 
 function _hacerBackup(){
