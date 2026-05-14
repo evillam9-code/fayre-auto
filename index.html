@@ -745,10 +745,17 @@ function canAccess(modId){
 function canDo(action){
   if(!currentUser)return false;
   if(currentUser.role==='admin')return true;
-  // Roles con acceso total (dueño, gerente, etc.)
   const rolesAdmin=['admin','dueño','dueno','gerente','owner'];
   if(rolesAdmin.some(r=>currentUser.role?.toLowerCase()===r.toLowerCase()))return true;
-  return (currentUser.permisos||{})[action]===true;
+  const p=currentUser.permisos||{};
+  if(p[action]===true)return true;
+  if(action==='editar'){
+    return Object.keys(p).some(k=>k.startsWith('editar')&&p[k]===true);
+  }
+  if(action==='eliminar'){
+    return Object.keys(p).some(k=>k.startsWith('borrar')&&p[k]===true);
+  }
+  return false;
 }
 function aplicarPermisosNav(){
   if(!currentUser)return;
@@ -909,12 +916,7 @@ function imprimirDashboard(){
   win.document.close();
 }
 function renderDashboard(){
-  // Datos frescos
-  DB.vehiculos=ls('vehiculos')||DB.vehiculos;
-  DB.ventas=ls('ventas')||DB.ventas;
-  DB.gastosVehiculos=ls('gastosVehiculos')||DB.gastosVehiculos;
-  DB.cxc=ls('cxc')||DB.cxc;
-  DB.suplidores=ls('suplidores')||DB.suplidores;
+  // Usar datos ya en memoria (Firebase los cargó) — no sobreescribir con localStorage viejo
 
   const mes=document.getElementById('dash-mes')?.value||'';
   const dia=document.getElementById('dash-dia')?.value||'';
@@ -4189,6 +4191,7 @@ function renderGastosVeh(){
         <div style="display:flex;gap:6px;align-items:flex-end">
           <button class="btn btn-secondary btn-sm" onclick="limpiarFiltrosGastosVeh()" title="Limpiar filtros" style="flex-shrink:0">🔄</button>
           <button class="btn btn-secondary btn-sm" onclick="exportarGastosVehPDF()">📄 PDF</button>
+          <button class="btn btn-sm" style="background:var(--navy);color:#fff" onclick="exportarHojaCostos()">📋 Hoja de Costos</button>
         </div>
       </div>
     </div>
@@ -4285,7 +4288,8 @@ function nuevoGastoVeh(){
         </select>
       </div>
       <div class="form-field" id="ngv-tasa-wrap" style="display:none">
-        <input type="hidden" id="ngv-tasa" value="${DB.config.tasaCambio||60}">
+        <label class="required">Tasa de Cambio (RD$ x USD)</label>
+        <input type="number" id="ngv-tasa" value="${DB.config.tasaCambio||60}" step="0.01" placeholder="Ej: 60.50" oninput="calcPendienteGVeh()">
       </div>
     </div>
     <div class="form-row c2" id="ngv-banco-wrap">
@@ -4321,12 +4325,14 @@ function nuevoGastoVeh(){
     </div>`,
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
      <button class="btn btn-primary" onclick="guardarNuevoGastoVeh()">💾 Guardar</button>`);
+  // Mostrar tasa si la moneda ya viene en USD al abrir
+  setTimeout(toggleGVehMoneda, 50);
 }
 
 function toggleGVehMoneda(){
-  // Tasa de cambio eliminada del formulario — siempre oculta
+  const moneda=document.getElementById('ngv-moneda')?.value;
   const tasaWrap=document.getElementById('ngv-tasa-wrap');
-  if(tasaWrap)tasaWrap.style.display='none';
+  if(tasaWrap)tasaWrap.style.display=moneda==='USD'?'block':'none';
 }
 function actualizarCuentasNGV(){
   const bancoEl=document.getElementById('ngv-banco');
@@ -4366,7 +4372,14 @@ function guardarNuevoGastoVeh(){
   const abono=parseFloat((document.getElementById('ngv-abono').value||'0').replace(/,/g,''));
   const pendiente=factura-abono;
   const moneda=document.getElementById('ngv-moneda').value;
-  const tasaUsada=moneda==='USD'?parseFloat(document.getElementById('ngv-tasa')?.value||DB.config.tasaCambio||60):parseFloat(DB.config.tasaCambio||60);
+  const tasaRaw=parseFloat(document.getElementById('ngv-tasa')?.value||0);
+  if(moneda==='USD'&&(!tasaRaw||tasaRaw<=0)){
+    toast('La tasa de cambio es obligatoria para gastos en USD','error');
+    const el=document.getElementById('ngv-tasa');
+    if(el){el.style.border='2px solid var(--red)';el.focus();setTimeout(()=>el.style.border='',3000);}
+    return;
+  }
+  const tasaUsada=moneda==='USD'?tasaRaw:parseFloat(DB.config.tasaCambio||60);
   const bancoVal=document.getElementById('ngv-banco')?.value||'';
   const cuentaVal=document.getElementById('ngv-cuenta')?.value||'';
   const _vRef=DB.vehiculos.find(x=>x.id===vid);
@@ -4487,7 +4500,14 @@ function editarGastoVeh(gid){
         <select id="egv-tipo">${tiposGasto.map(t=>`<option ${t===g.tipo?'selected':''}>${t}</option>`).join('')}</select>
       </div>
       <div class="form-field"><label>Moneda</label>
-        <select id="egv-moneda"><option value="RD$" ${(g.moneda||'RD$')==='RD$'?'selected':''}>RD$</option><option value="USD" ${g.moneda==='USD'?'selected':''}>USD</option></select>
+        <select id="egv-moneda" onchange="document.getElementById('egv-tasa-wrap').style.display=this.value==='USD'?'block':'none'">
+          <option value="RD$" ${(g.moneda||'RD$')==='RD$'?'selected':''}>RD$</option>
+          <option value="USD" ${g.moneda==='USD'?'selected':''}>USD</option>
+        </select>
+      </div>
+      <div class="form-field" id="egv-tasa-wrap" style="display:${g.moneda==='USD'?'block':'none'}">
+        <label class="required">Tasa (RD$ x USD)</label>
+        <input type="number" id="egv-tasa" value="${g.tasaCambio||DB.config.tasaCambio||60}" step="0.01" placeholder="Ej: 60.50">
       </div>
       <div class="form-field"><label>Cuenta Salida</label>
         <select id="egv-cuenta">${cuentas.map(c=>`<option ${c===g.cuenta?'selected':''}>${escHtml(c)}</option>`).join('')}</select>
@@ -4516,6 +4536,15 @@ function guardarEditGastoVeh(i){
   const factura=parseFloat((document.getElementById('egv-factura').value||'0').replace(/,/g,''));
   const pagado=parseFloat((document.getElementById('egv-pagado').value||'0').replace(/,/g,''));
   const pendiente=factura-pagado;
+  const moneda=document.getElementById('egv-moneda').value;
+  const tasaRawE=parseFloat(document.getElementById('egv-tasa')?.value||0);
+  if(moneda==='USD'&&(!tasaRawE||tasaRawE<=0)){
+    toast('La tasa de cambio es obligatoria para gastos en USD','error');
+    const el=document.getElementById('egv-tasa');
+    if(el){el.style.border='2px solid var(--red)';el.focus();setTimeout(()=>el.style.border='',3000);}
+    return;
+  }
+  const tasaGuardada=moneda==='USD'?tasaRawE:parseFloat(DB.config.tasaCambio||60);
   const egvVid=document.getElementById('egv-veh')?.value||DB.gastosVehiculos[i].vehiculoId;
   if(egvVid){
     const egvV=DB.vehiculos.find(x=>x.id===egvVid);
@@ -4524,7 +4553,8 @@ function guardarEditGastoVeh(i){
   }
   DB.gastosVehiculos[i].suplidor=document.getElementById('egv-sup').value;
   DB.gastosVehiculos[i].tipo=document.getElementById('egv-tipo').value;
-  DB.gastosVehiculos[i].moneda=document.getElementById('egv-moneda').value;
+  DB.gastosVehiculos[i].moneda=moneda;
+  DB.gastosVehiculos[i].tasaCambio=tasaGuardada;
   DB.gastosVehiculos[i].cuenta=document.getElementById('egv-cuenta').value;
   DB.gastosVehiculos[i].fecha=document.getElementById('egv-fecha').value;
   DB.gastosVehiculos[i].fechaPago=document.getElementById('egv-fechapago').value;
@@ -4585,6 +4615,191 @@ function limpiarFiltrosGastosVeh(){
   ['gveh-filtro-veh','gveh-filtro-sup','gveh-filtro-status','gveh-filtro-desde','gveh-filtro-hasta'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   renderGastosVeh();
 }
+function exportarHojaCostos(){
+  const filtroVeh=document.getElementById('gveh-filtro-veh')?.value||'';
+  if(!filtroVeh){
+    const sel=document.getElementById('gveh-filtro-veh');
+    if(sel){sel.style.border='2px solid var(--red)';sel.focus();setTimeout(()=>sel.style.border='',3000);}
+    toast('Selecciona un vehículo para generar la Hoja de Costos','error');
+    return;
+  }
+  const gastos=(DB.gastosVehiculos||[]).filter(g=>g.vehiculoId===filtroVeh);
+  if(!gastos.length){toast('Este vehículo no tiene gastos registrados','error');return;}
+  _generarHojaCostosPDF(gastos,filtroVeh);
+}
+
+function _generarHojaCostosPDF(gastos,filtroVeh){
+  const empresa=DB.config.empresa||'JEYCO AUTO';
+  const logo=DB.config.logoData||'';
+  const rnc=DB.config.rnc||'';
+  const tel=DB.config.telefono||'';
+  const dir=DB.config.direccion||'';
+  const fRD=(n)=>'RD$ '+parseFloat(n||0).toLocaleString('es-DO',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const fUS=(n)=>'US$ '+parseFloat(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const fN=(n)=>parseFloat(n||0).toLocaleString('es-DO',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const gastosRD=gastos.filter(g=>(g.moneda||'RD$')==='RD$');
+  const gastosUSD=gastos.filter(g=>g.moneda==='USD');
+  const hayUSD=gastosUSD.length>0;
+  const hayRD=gastosRD.length>0;
+  const subtotRD=gastosRD.reduce((a,g)=>a+parseFloat(g.montoFactura||0),0);
+  const subtotPagRD=gastosRD.reduce((a,g)=>a+parseFloat(g.montoPagado||0),0);
+  const subtotPendRD=gastosRD.reduce((a,g)=>a+parseFloat(g.montoPendiente||0),0);
+  const subtotUSD=gastosUSD.reduce((a,g)=>a+parseFloat(g.montoFactura||0),0);
+  const subtotPagUSD=gastosUSD.reduce((a,g)=>a+parseFloat(g.montoPagado||0),0);
+  const subtotPendUSD=gastosUSD.reduce((a,g)=>a+parseFloat(g.montoPendiente||0),0);
+  const tasaFallback=parseFloat(DB.config.tasaCambio||60);
+  const totalRD=gastosRD.reduce((a,g)=>a+parseFloat(g.montoFactura||0),0)
+               +gastosUSD.reduce((a,g)=>a+parseFloat(g.montoFactura||0)*parseFloat(g.tasaCambio||tasaFallback),0);
+  const totalPagRD=gastosRD.reduce((a,g)=>a+parseFloat(g.montoPagado||0),0)
+                  +gastosUSD.reduce((a,g)=>a+parseFloat(g.montoPagado||0)*parseFloat(g.tasaCambio||tasaFallback),0);
+  const totalPendRD=totalRD-totalPagRD;
+  const tasasUSD=gastosUSD.map(g=>parseFloat(g.tasaCambio||tasaFallback));
+  const tasaPromedio=hayUSD?tasasUSD.reduce((a,t)=>a+t,0)/tasasUSD.length:0;
+  const totalUS=hayUSD?(subtotUSD+(subtotRD/tasaPromedio)):0;
+  const totalPagUS=hayUSD?(subtotPagUSD+(subtotPagRD/tasaPromedio)):0;
+  const totalPendUS=hayUSD?(totalUS-totalPagUS):0;
+  const veh=filtroVeh?DB.vehiculos.find(v=>v.id===filtroVeh):null;
+  const filasRD=gastosRD.map((g,i)=>`<tr>
+    <td class="num">${i+1}</td><td class="desc">${escHtml(g.tipo||'—')}</td>
+    <td class="sup">${escHtml(g.suplidor||'—')}</td><td class="mon">RD$</td>
+    <td class="amt">${fN(g.montoFactura)}</td>
+    <td class="amt ok">${parseFloat(g.montoPagado||0)>0?fN(g.montoPagado):''}</td>
+    <td class="amt nd">${parseFloat(g.montoPendiente||0)>0?fN(g.montoPendiente):''}</td>
+    <td class="st"><span class="b ${g.statusGasto==='PAGADO'?'g':g.statusGasto==='ABONADO'?'a':'r'}">${g.statusGasto||'PEND.'}</span></td>
+  </tr>`).join('');
+  const filasUSD=gastosUSD.map((g,i)=>`<tr class="urow">
+    <td class="num">${gastosRD.length+i+1}</td><td class="desc">${escHtml(g.tipo||'—')}</td>
+    <td class="sup">${escHtml(g.suplidor||'—')}</td><td class="mon">US$</td>
+    <td class="amt">${fN(g.montoFactura)}</td>
+    <td class="amt ok">${parseFloat(g.montoPagado||0)>0?fN(g.montoPagado):''}</td>
+    <td class="amt nd">${parseFloat(g.montoPendiente||0)>0?fN(g.montoPendiente):''}</td>
+    <td class="st"><span class="b ${g.statusGasto==='PAGADO'?'g':g.statusGasto==='ABONADO'?'a':'r'}">${g.statusGasto||'PEND.'}</span></td>
+  </tr>`).join('');
+  const win=window.open('','_blank','width=820,height=750');
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
+  <title>Hoja de Costos${veh?' — '+veh.codigo:''}</title>
+  <style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Arial,sans-serif;font-size:9px;color:#0f172a;background:#fff;padding:10px 14px}
+  .hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0f172a;padding-bottom:7px;margin-bottom:7px}
+  .hdr img{max-height:44px;max-width:110px;object-fit:contain;display:block;margin-bottom:3px}
+  .hdr-emp{font-size:9px;color:#475569;line-height:1.5}
+  .hdr-emp strong{font-size:11px;color:#0f172a;display:block;margin-bottom:1px}
+  .hdr-titulo{font-size:18px;font-weight:900;color:#dc2626;letter-spacing:1px;text-align:right;line-height:1}
+  .hdr-sub{font-size:9px;color:#6b7280;text-align:right;margin-top:3px}
+  .veh-box{border:1px solid #334155;border-radius:4px;margin-bottom:8px;overflow:hidden}
+  .veh-bar{background:#334155;color:#fff;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:3px 8px;display:flex;justify-content:space-between;align-items:center}
+  .veh-bar span.cod{background:#f59e0b;color:#0f172a;padding:1px 8px;border-radius:8px;font-size:9px;font-weight:800}
+  .veh-grid{display:grid;grid-template-columns:repeat(6,1fr)}
+  .vc{padding:4px 7px;border-right:1px solid #e2e8f0}.vc:last-child{border-right:none}
+  .vc .l{font-size:8px;font-weight:700;text-transform:uppercase;color:#6b7280;margin-bottom:1px}
+  .vc .v{font-weight:700;font-size:10px}
+  table{width:100%;border-collapse:collapse}
+  .th{background:#0f172a;color:#fff}
+  .th th{padding:4px 6px;font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.2px;white-space:nowrap}
+  td{padding:3px 6px;border-bottom:1px solid #e2e8f0;vertical-align:middle;font-size:9px}
+  tr:nth-child(even) td{background:#f8fafc}
+  .urow td{background:#eff6ff!important}
+  .num{width:20px;text-align:center;color:#94a3b8;font-size:8px}
+  .desc{font-weight:600;font-size:9px}.sup{color:#64748b;font-size:8px}
+  .mon{text-align:center;font-size:8px;font-weight:700;color:#64748b;width:26px}
+  .amt{text-align:right;font-family:'Courier New',monospace;white-space:nowrap;width:90px;font-size:9px}
+  .ok{color:#16a34a}.nd{color:#dc2626;font-weight:700}.st{text-align:center;width:52px}
+  .sh td{background:#e2e8f0!important;font-weight:800;font-size:8px;text-transform:uppercase;color:#334155;letter-spacing:.4px;padding:2px 6px}
+  .sr td{background:#fef9c3!important;font-weight:800;font-size:9px}
+  .su td{background:#dbeafe!important;font-weight:800;font-size:9px}
+  .b{display:inline-block;padding:1px 5px;border-radius:6px;font-size:8px;font-weight:700}
+  .g{background:#dcfce7;color:#16a34a}.r{background:#fee2e2;color:#dc2626}.a{background:#fef3c7;color:#d97706}
+  .res{margin-top:8px;border:1px solid #334155;border-radius:4px;overflow:hidden}
+  .res-bar{background:#334155;color:#fff;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:3px 8px}
+  .res-top{display:grid;grid-template-columns:${hayRD&&hayUSD?'1fr 1fr 1fr':'1fr 1fr'}}
+  .rc{padding:6px 10px;border-right:1px solid #e2e8f0}.rc:last-child{border-right:none}
+  .rl{font-size:8px;font-weight:700;text-transform:uppercase;color:#6b7280;margin-bottom:3px}
+  .rv{font-size:13px;font-weight:900}.rs{font-size:8px;margin-top:1px}
+  .res-bot{display:grid;grid-template-columns:${hayUSD?'1fr 1fr':'1fr'};border-top:2px solid #334155}
+  .tc{padding:7px 10px;border-right:1px solid #e2e8f0}.tc:last-child{border-right:none}
+  .tl{font-size:8px;font-weight:700;text-transform:uppercase;margin-bottom:3px}
+  .tv{font-size:16px;font-weight:900}.ts{font-size:8px;margin-top:2px;color:#6b7280}
+  @media print{.noprint{display:none}@page{size:letter;margin:8mm}}
+  </style></head><body>
+  <div class="hdr">
+    <div>${logo?`<img src="${logo}">`:''}
+      <div class="hdr-emp"><strong>${escHtml(empresa)}</strong>
+        ${rnc?`RNC: ${escHtml(rnc)}<br>`:''}${dir?`${escHtml(dir)}<br>`:''}${tel?`Tel: ${escHtml(tel)}`:''}
+      </div>
+    </div>
+    <div><div class="hdr-titulo">Hoja de Costos</div>
+      <div class="hdr-sub">Fecha: ${fmtDate(today())} &nbsp;|&nbsp; ${gastos.length} gasto(s)</div>
+    </div>
+  </div>
+  ${veh?`<div class="veh-box">
+    <div class="veh-bar"><span>📋 Datos del Vehículo</span><span class="cod">${escHtml(veh.codigo)}</span></div>
+    <div class="veh-grid">
+      <div class="vc"><div class="l">Marca</div><div class="v">${escHtml(veh.marca||'—')}</div></div>
+      <div class="vc"><div class="l">Modelo</div><div class="v">${escHtml(veh.modelo||'—')}</div></div>
+      <div class="vc"><div class="l">Año</div><div class="v">${escHtml(String(veh.anio||'—'))}</div></div>
+      <div class="vc"><div class="l">Color</div><div class="v">${escHtml(veh.color||'—')}</div></div>
+      <div class="vc"><div class="l">VIN</div><div class="v" style="font-size:8px">${escHtml(veh.vin||'—')}</div></div>
+      <div class="vc"><div class="l">Estado</div><div class="v"><span class="b ${veh.status==='VENDIDO'?'r':veh.status==='RESERVADO'?'a':'g'}">${escHtml(veh.status||'ACTIVO')}</span></div></div>
+    </div>
+  </div>`:''}
+  <table>
+    <thead class="th"><tr>
+      <th class="num">#</th><th>Tipo de Gasto</th><th>Suplidor</th>
+      <th style="text-align:center">Mon.</th><th style="text-align:right">Factura</th>
+      <th style="text-align:right">Pagado</th><th style="text-align:right">Pendiente</th>
+      <th style="text-align:center">Estado</th>
+    </tr></thead>
+    <tbody>
+      ${hayRD?`<tr class="sh"><td colspan="8">💰 Gastos en Pesos Dominicanos (RD$)</td></tr>
+      ${filasRD}
+      ${gastosRD.length>1?`<tr class="sr"><td colspan="4" style="text-align:right;font-size:8px">SUB-TOTAL RD$</td>
+        <td class="amt">${fN(subtotRD)}</td><td class="amt ok">${fN(subtotPagRD)}</td>
+        <td class="amt nd">${subtotPendRD>0?fN(subtotPendRD):''}</td><td></td></tr>`:''}`:''}
+      ${hayUSD?`<tr class="sh"><td colspan="8">💵 Gastos en Dólares Americanos (US$)</td></tr>
+      ${filasUSD}
+      ${gastosUSD.length>1?`<tr class="su"><td colspan="4" style="text-align:right;font-size:8px">SUB-TOTAL US$</td>
+        <td class="amt">${fN(subtotUSD)}</td><td class="amt ok">${fN(subtotPagUSD)}</td>
+        <td class="amt nd">${subtotPendUSD>0?fN(subtotPendUSD):''}</td><td></td></tr>`:''}`:''}
+    </tbody>
+  </table>
+  <div class="res">
+    <div class="res-bar">📊 Resumen de Costos</div>
+    <div class="res-top">
+      ${hayRD?`<div class="rc">
+        <div class="rl">Sub-Total en Pesos (RD$)</div>
+        <div class="rv">${fRD(subtotRD)}</div>
+        <div class="rs" style="color:#16a34a">Pagado: ${fRD(subtotPagRD)}</div>
+        ${subtotPendRD>0?`<div class="rs" style="color:#dc2626">Pendiente: ${fRD(subtotPendRD)}</div>`:'<div class="rs" style="color:#16a34a">✅ Sin pendiente</div>'}
+      </div>`:''}
+      ${hayUSD?`<div class="rc">
+        <div class="rl">Sub-Total en Dólares (US$)</div>
+        <div class="rv" style="color:#2563eb">${fUS(subtotUSD)}</div>
+        <div class="rs" style="color:#16a34a">Pagado: ${fUS(subtotPagUSD)}</div>
+        ${subtotPendUSD>0?`<div class="rs" style="color:#dc2626">Pendiente: ${fUS(subtotPendUSD)}</div>`:'<div class="rs" style="color:#16a34a">✅ Sin pendiente</div>'}
+      </div>`:''}
+      <div class="rc" style="background:#f8fafc">
+        <div class="rl">Registros</div>
+        <div class="rv" style="font-size:16px;color:#334155">${gastos.length}</div>
+        <div class="rs">RD$: ${gastosRD.length} &nbsp;|&nbsp; US$: ${gastosUSD.length}</div>
+        <div class="rs" style="color:${totalPendRD>0?'#dc2626':'#16a34a'};font-weight:700;margin-top:2px">${totalPendRD>0?'⚠️ Tiene pendientes':'✅ Todo pagado'}</div>
+      </div>
+    </div>
+    <div style="border-top:2px solid #334155">
+      <div class="tc" style="background:#fff7ed">
+        <div class="tl" style="color:#92400e">TOTAL GENERAL EN PESOS (RD$)</div>
+        <div class="tv" style="color:#d97706">${fRD(totalRD)}</div>
+        ${totalPendRD>0?`<div class="ts" style="color:#dc2626;font-weight:700;margin-top:3px">Pendiente: ${fRD(totalPendRD)}</div>`:'<div class="ts" style="color:#16a34a;font-weight:700;margin-top:3px">✅ Todo pagado</div>'}
+      </div>
+    </div>
+  </div>
+  <div class="noprint" style="margin-top:12px;text-align:center">
+    <button onclick="window.print()" style="padding:8px 28px;background:#0f172a;color:#fff;border:none;border-radius:5px;font-size:12px;cursor:pointer;font-family:Arial">🖨️ Imprimir / Guardar PDF</button>
+  </div>
+  </body></html>`);
+  win.document.close();
+}
+
 function exportarGastosVehPDF(){
   const filtroVeh=document.getElementById('gveh-filtro-veh')?.value||'';
   const filtroSup=document.getElementById('gveh-filtro-sup')?.value||'';
@@ -8029,6 +8244,7 @@ function exportarInformePDF(){
   const vActivos=DB.vehiculos.filter(v=>v.status==='ACTIVO');
   const vAduana=DB.vehiculos.filter(v=>v.status==='ADUANA');
   const vTransito=DB.vehiculos.filter(v=>v.status==='TRÁNSITO');
+  const vEEUU=DB.vehiculos.filter(v=>v.status==='EN EEUU');
   const ventasTransito=DB.ventas.filter(v=>v.estadoVenta==='TRÁNSITO'||v.docsPendientes);
   const tasa=parseFloat(DB.config.tasaCambio||60);
   const totalVentas=ventasMes.reduce((a,v)=>a+(v.moneda==='USD'?parseFloat(v.precioVenta||0)*tasa:parseFloat(v.precioVenta||0)),0);
@@ -8097,6 +8313,8 @@ function exportarInformePDF(){
   ${vActivos.length?'<table><thead><tr><th>Código</th><th>Vehículo</th><th>Año</th><th>Chasis/VIN</th><th>Color</th><th>Propietario</th></tr></thead><tbody>'+vActivos.map(v=>'<tr><td>'+escHtml(v.codigo||'')+'</td><td style="font-weight:700">'+escHtml(v.marca+' '+v.modelo)+'</td><td>'+v.anio+'</td><td style="font-family:monospace;font-size:10px">'+escHtml(v.vin||'—')+'</td><td>'+escHtml(v.color||'—')+'</td><td>'+escHtml(v.propietario||'—')+'</td></tr>').join('')+'</tbody></table>':'<p style="color:#64748b;margin:8px 0">Sin vehículos activos</p>'}
   <h3>En Aduana (${vAduana.length})</h3>
   ${vAduana.length?'<table><thead><tr><th>Código</th><th>Vehículo</th><th>Año</th><th>Chasis/VIN</th><th>Suplidor</th></tr></thead><tbody>'+vAduana.map(v=>'<tr><td>'+escHtml(v.codigo||'')+'</td><td style="font-weight:700">'+escHtml(v.marca+' '+v.modelo)+'</td><td>'+v.anio+'</td><td style="font-family:monospace;font-size:10px">'+escHtml(v.vin||'—')+'</td><td>'+escHtml(v.suplidor||'—')+'</td></tr>').join('')+'</tbody></table>':'<p style="color:#64748b;margin:8px 0">Sin vehículos en aduana</p>'}
+  <h3>En EEUU (${vEEUU.length})</h3>
+  ${vEEUU.length?'<table><thead><tr><th>Código</th><th>Vehículo</th><th>Año</th><th>Chasis/VIN</th><th>Color</th><th>Propietario</th></tr></thead><tbody>'+vEEUU.map(v=>'<tr><td>'+escHtml(v.codigo||'')+'</td><td style="font-weight:700">'+escHtml(v.marca+' '+v.modelo)+'</td><td>'+v.anio+'</td><td style="font-family:monospace;font-size:10px">'+escHtml(v.vin||'—')+'</td><td>'+escHtml(v.color||'—')+'</td><td>'+escHtml(v.propietario||'—')+'</td></tr>').join('')+'</tbody></table>':'<p style="color:#64748b;margin:8px 0">Sin vehículos en EEUU</p>'}
 
   <!-- VENTAS DEL MES -->
   <h2>💰 VENTAS REALIZADAS EN EL MES</h2>
