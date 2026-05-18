@@ -1538,11 +1538,31 @@ function agregarSuplidorRapido(vid){
 function agregarGastoVeh(vid){
   const monto=parseFloat((document.getElementById('gv-monto').value||'0').replace(/,/g,''));
   if(!monto){toast('Ingresa el monto','error');return;}
+  const formaPago=document.getElementById('gv-forma').value;
+  const esCredito=formaPago==='CREDITO';
   if(!DB.gastosVehiculos)DB.gastosVehiculos=[];
-  const g={id:uid(),vehiculoId:vid,fecha:document.getElementById('gv-fecha').value,tipo:document.getElementById('gv-tipo').value,descripcion:document.getElementById('gv-desc').value,monto,formaPago:document.getElementById('gv-forma').value,cuenta:document.getElementById('gv-cuenta').value};
+  const g={
+    id:uid(),
+    vehiculoId:vid,
+    fecha:document.getElementById('gv-fecha').value,
+    tipo:document.getElementById('gv-tipo').value,
+    descripcion:document.getElementById('gv-desc').value,
+    moneda:'RD$',
+    montoFactura:monto,
+    montoPagado:esCredito?0:monto,
+    montoPendiente:esCredito?monto:0,
+    formaPago,
+    cuenta:document.getElementById('gv-cuenta').value,
+    responsable:currentUser?.nombre||''
+  };
   DB.gastosVehiculos.push(g);
-  DB.caja.push({id:uid(),fecha:g.fecha,tipo:'SALIDA',categoria:'Gasto de Vehículo',descripcion:`Gasto [${DB.vehiculos.find(v=>v.id===vid)?.codigo||vid}]: ${g.tipo} — ${g.descripcion}`,monto,referencia:g.cuenta,responsable:currentUser?.nombre||''});
-  sDB('gastosVehiculos');sDB('caja');toast('Gasto agregado ✓','success');gastosVehiculo(vid);
+  if(!esCredito){
+    DB.caja.push({id:uid(),fecha:g.fecha,tipo:'SALIDA',categoria:'Gasto de Vehículo',descripcion:`Gasto [${DB.vehiculos.find(v=>v.id===vid)?.codigo||vid}]: ${g.tipo} — ${g.descripcion}`,monto,moneda:'RD$',referencia:g.cuenta,responsable:currentUser?.nombre||''});
+    sDB('caja');
+  }
+  sDB('gastosVehiculos');
+  toast('Gasto agregado ✓','success');
+  gastosVehiculo(vid);
 }
 function eliminarGastoVeh(gid,vid){if(currentUser?.role!=='admin'&&!canDo('eliminar')){toast('No tienes permiso para eliminar','error');return;}DB.gastosVehiculos=(DB.gastosVehiculos||[]).filter(g=>g.id!==gid);sDB('gastosVehiculos');toast('Eliminado','success');gastosVehiculo(vid);}
 
@@ -2448,6 +2468,17 @@ function renderUsuarios(){
     document.getElementById('page-usuarios').innerHTML='<div style="text-align:center;padding:48px;color:var(--gray)">🔒 Solo el administrador puede gestionar usuarios</div>';
     return;
   }
+  // Sincronizar presencia desde Firebase antes de renderizar
+  if(window._fbActivo&&window._fbDB&&window._fbCol){
+    try{
+      window._fbDB.collection(window._fbCol).doc('presencia').get().then(doc=>{
+        if(doc.exists){const data=doc.data()||{};DB.presencia=Object.assign(DB.presencia||{},data);}
+        _renderUsuariosHTML();
+      }).catch(()=>_renderUsuariosHTML());
+    }catch{_renderUsuariosHTML();}
+  }else{_renderUsuariosHTML();}
+}
+function _renderUsuariosHTML(){
   const roles=DB.config.roles||[{id:'dueno',nombre:'Dueño'},{id:'secretaria',nombre:'Secretaria'},{id:'asistente',nombre:'Asistente'},{id:'tecnico',nombre:'Técnico'}];
   const MODS=[
     {id:'dashboard',label:'Dashboard'},{id:'informes',label:'Informe Mensual'},
