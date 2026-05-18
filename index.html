@@ -3431,7 +3431,6 @@ function renderConfig(){
       <div class="form-row c2"><div class="form-field"><label>Moneda</label><select id="cf-moneda"><option value="RD$" ${c.moneda==='RD$'?'selected':''}>RD$ - Pesos Dominicanos</option><option value="USD" ${c.moneda==='USD'?'selected':''}>USD - Dólares US</option></select></div></div>
       <div class="form-row c2">
         <div class="form-field"><label>Prefijo Código de Vehículo</label><input type="text" id="cf-prefijo" value="${escHtml(c.prefijoCodigo||'')}" placeholder="Se toma del nombre del negocio" maxlength="5"><div style="font-size:11px;color:var(--gray);margin-top:4px">Ej: F → F-001 | Vacío = primera letra del negocio</div></div>
-        <div class="form-field"><label>Tasa de Cambio (RD$ por 1 USD)</label><input type="number" id="cf-tasa" value="${c.tasaCambio||60}" step="0.01"></div>
       </div>
       <div class="btn-row" style="margin-top:12px"><button class="btn btn-primary" onclick="guardarInfoNegocio()">💾 Guardar</button></div>
     </div>
@@ -4020,7 +4019,6 @@ function guardarInfoNegocio(){
   c.moneda=document.getElementById('cf-moneda')?.value||'RD$';
   c.rnc=document.getElementById('cf-rnc')?.value||'';
   c.prefijoCodigo=document.getElementById('cf-prefijo')?.value.trim()||'';
-  c.tasaCambio=parseFloat(document.getElementById('cf-tasa')?.value||60);
   sDB('config');
   const emp=document.getElementById('topbar-empresa');
   if(emp&&c.empresa)emp.textContent=c.empresa;
@@ -4780,11 +4778,26 @@ function _generarHojaCostosPDF(gastos,filtroVeh){
   const subtotPagUSD=gastosUSD.reduce((a,g)=>a+parseFloat(g.montoPagado||0),0);
   const subtotPendUSD=gastosUSD.reduce((a,g)=>a+parseFloat(g.montoPendiente||0),0);
   const tasaFallback=parseFloat(DB.config.tasaCambio||60);
-  const totalRD=gastosRD.reduce((a,g)=>a+parseFloat(g.montoFactura||0),0)
-               +gastosUSD.reduce((a,g)=>a+parseFloat(g.montoFactura||0)*parseFloat(g.tasaCambio||tasaFallback),0);
-  const totalPagRD=gastosRD.reduce((a,g)=>a+parseFloat(g.montoPagado||0),0)
-                  +gastosUSD.reduce((a,g)=>a+parseFloat(g.montoPagado||0)*parseFloat(g.tasaCambio||tasaFallback),0);
-  const totalPendRD=totalRD-totalPagRD;
+  // Para gastos USD: usar los RD$ reales de cada pago (tasa por pago)
+  // Si hay pendiente, estimarlo con la tasa actual
+  const calcRDReal=(g)=>{
+    if((g.moneda||'RD$')==='RD$')return{factura:parseFloat(g.montoFactura||0),pagado:parseFloat(g.montoPagado||0),pendiente:parseFloat(g.montoPendiente||0),tasa:null};
+    // USD: sumar equivRD de cada pago registrado
+    const pagosConTasa=(g.pagos||[]).filter(p=>p.equivRD);
+    const rdPagado=pagosConTasa.length>0
+      ?pagosConTasa.reduce((a,p)=>a+parseFloat(p.equivRD||0),0)
+      :parseFloat(g.montoPagado||0)*parseFloat(g.tasaCambio||tasaFallback);
+    const tasaEstimado=parseFloat(g.tasaCambio||tasaFallback);
+    const rdPendiente=parseFloat(g.montoPendiente||0)*tasaEstimado;
+    const rdFactura=rdPagado+rdPendiente;
+    // Tasa promedio real de los pagos
+    const tasasReales=(g.pagos||[]).filter(p=>p.tasa).map(p=>parseFloat(p.tasa));
+    const tasaProm=tasasReales.length>0?tasasReales.reduce((a,t)=>a+t,0)/tasasReales.length:tasaEstimado;
+    return{factura:rdFactura,pagado:rdPagado,pendiente:rdPendiente,tasa:tasaProm};
+  };
+  const totalRD=gastos.reduce((a,g)=>a+calcRDReal(g).factura,0);
+  const totalPagRD=gastos.reduce((a,g)=>a+calcRDReal(g).pagado,0);
+  const totalPendRD=gastos.reduce((a,g)=>a+calcRDReal(g).pendiente,0);
   const tasasUSD=gastosUSD.map(g=>parseFloat(g.tasaCambio||tasaFallback));
   const tasaPromedio=hayUSD?tasasUSD.reduce((a,t)=>a+t,0)/tasasUSD.length:0;
   const totalUS=hayUSD?(subtotUSD+(subtotRD/tasaPromedio)):0;
@@ -4799,14 +4812,18 @@ function _generarHojaCostosPDF(gastos,filtroVeh){
     <td class="amt nd">${parseFloat(g.montoPendiente||0)>0?fN(g.montoPendiente):''}</td>
     <td class="st"><span class="b ${g.statusGasto==='PAGADO'?'g':g.statusGasto==='ABONADO'?'a':'r'}">${g.statusGasto||'PEND.'}</span></td>
   </tr>`).join('');
-  const filasUSD=gastosUSD.map((g,i)=>`<tr class="urow">
+  const filasUSD=gastosUSD.map((g,i)=>{
+    const rd=calcRDReal(g);
+    const tasasStr=(g.pagos||[]).filter(p=>p.tasa).map(p=>'RD$'+parseFloat(p.tasa).toFixed(2)).join(' / ');
+    const pendEst=parseFloat(g.montoPendiente||0)>0?` <span style="color:#f59e0b;font-size:8px">(est.)</span>`:'';
+    return`<tr class="urow">
     <td class="num">${gastosRD.length+i+1}</td><td class="desc">${escHtml(g.tipo||'—')}</td>
     <td class="sup">${escHtml(g.suplidor||'—')}</td><td class="mon">US$</td>
-    <td class="amt">${fN(g.montoFactura)}</td>
-    <td class="amt ok">${parseFloat(g.montoPagado||0)>0?fN(g.montoPagado):''}</td>
-    <td class="amt nd">${parseFloat(g.montoPendiente||0)>0?fN(g.montoPendiente):''}</td>
-    <td class="st"><span class="b ${g.statusGasto==='PAGADO'?'g':g.statusGasto==='ABONADO'?'a':'r'}">${g.statusGasto||'PEND.'}</span></td>
-  </tr>`).join('');
+    <td class="amt">${fN(g.montoFactura)}<br><span style="font-size:7px;color:#2563eb">=RD$ ${fN(rd.factura)}${pendEst}</span></td>
+    <td class="amt ok">${parseFloat(g.montoPagado||0)>0?fN(g.montoPagado)+'<br><span style="font-size:7px;color:#16a34a">RD$ '+fN(rd.pagado)+'</span>':''}</td>
+    <td class="amt nd">${parseFloat(g.montoPendiente||0)>0?fN(g.montoPendiente)+'<br><span style="font-size:7px;color:#dc2626">RD$ '+fN(rd.pendiente)+'</span>':''}</td>
+    <td class="st"><span class="b ${g.statusGasto==='PAGADO'?'g':g.statusGasto==='ABONADO'?'a':'r'}">${g.statusGasto||'PEND.'}</span>${tasasStr?`<br><span style="font-size:7px;color:#6b7280">${tasasStr}</span>`:''}</td>
+  </tr>`;}).join('');
   const win=window.open('','_blank','width=820,height=750');
   win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
   <title>Hoja de Costos${veh?' — '+veh.codigo:''}</title>
@@ -7203,7 +7220,7 @@ function abonarDesdeCXP(gid){
     </div>
     <div class="form-row c2">
       <div class="form-field"><label class="required">Monto a Pagar (${esUSD?'USD':'RD$'})</label>
-        <input type="text" id="cxpp-monto" value="${g.montoPendiente||0}" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)" placeholder="0.00">
+        <input type="text" id="cxpp-monto" value="${g.montoPendiente||0}" oninput="fmtMoneyInput(this);${esUSD?'calcEquivCXP();':''}" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)" placeholder="0.00">
       </div>
       <div class="form-field"><label>Banco</label>
         <select id="cxpp-banco" onchange="actualizarCuentasCXPP()">
@@ -7211,6 +7228,28 @@ function abonarDesdeCXP(gid){
         </select>
       </div>
     </div>
+    ${esUSD?`
+    <div style="background:#eff6ff;border:0.5px solid #bfdbfe;border-radius:8px;padding:10px 14px;margin-bottom:12px">
+      <div style="font-size:11px;font-weight:500;color:#1d4ed8;margin-bottom:8px">💱 Tasa de cambio del día</div>
+      <div class="form-row c2" style="margin-bottom:0">
+        <div class="form-field" style="margin-bottom:0">
+          <label>Tasa del día (RD$ por 1 USD)</label>
+          <input type="number" id="cxpp-tasa" value="${DB.config.tasaCambio||60}" step="0.01" placeholder="Ej: 62.50" oninput="calcEquivCXP()">
+        </div>
+        <div class="form-field" style="margin-bottom:0">
+          <label>Equivalente en RD$ <span style="color:var(--green);font-size:11px">(calculado)</span></label>
+          <input type="text" id="cxpp-equiv" readonly style="background:var(--gray2);color:var(--green);font-weight:700" value="${fmt((g.montoPendiente||0)*(DB.config.tasaCambio||60))}">
+        </div>
+      </div>
+    </div>
+    <script>
+    function calcEquivCXP(){
+      const m=parseFloat((document.getElementById('cxpp-monto')?.value||'0').replace(/,/g,''))||0;
+      const t=parseFloat(document.getElementById('cxpp-tasa')?.value||0)||0;
+      const el=document.getElementById('cxpp-equiv');
+      if(el)el.value=typeof fmt==='function'?fmt(m*t):'RD$ '+(m*t).toLocaleString('es-DO',{minimumFractionDigits:2});
+    }
+    <\/script>`:''}
     <div class="form-row c2">
       <div class="form-field"><label>Cuenta Bancaria de Salida</label>
         <select id="cxpp-cuenta">
@@ -7234,9 +7273,13 @@ function confirmarPagoCXP(i){
   if(!monto||monto<=0){toast('Ingresa un monto válido','error');return;}
   const g=DB.gastosVehiculos[i];
   if(monto>parseFloat(g.montoPendiente||0)){toast('El monto no puede superar el pendiente','error');return;}
+  const esUSD=g.moneda==='USD';
+  const tasa=esUSD?parseFloat(document.getElementById('cxpp-tasa')?.value||0):null;
+  if(esUSD&&(!tasa||tasa<=0)){toast('La tasa del día es obligatoria para pagos en USD','error');document.getElementById('cxpp-tasa')?.focus();return;}
   const fechaPago=document.getElementById('cxpp-fecha').value;
   const cuentaPago=document.getElementById('cxpp-cuenta').value;
   const notaPago=document.getElementById('cxpp-nota')?.value||'';
+  const equivRD=esUSD?monto*tasa:null;
   DB.gastosVehiculos[i].montoPagado=(parseFloat(g.montoPagado||0)+monto);
   DB.gastosVehiculos[i].montoPendiente=(parseFloat(g.montoPendiente||0)-monto);
   DB.gastosVehiculos[i].fechaPago=fechaPago;
@@ -7244,13 +7287,20 @@ function confirmarPagoCXP(i){
   const saldado=DB.gastosVehiculos[i].montoPendiente<=0;
   if(saldado){DB.gastosVehiculos[i].montoPendiente=0;DB.gastosVehiculos[i].statusGasto='PAGADO';}
   else DB.gastosVehiculos[i].statusGasto='ABONADO';
-  // Guardar historial de pagos
   if(!DB.gastosVehiculos[i].pagos)DB.gastosVehiculos[i].pagos=[];
-  DB.gastosVehiculos[i].pagos.push({id:uid(),fecha:fechaPago,monto,cuenta:cuentaPago,nota:notaPago,saldado});
+  DB.gastosVehiculos[i].pagos.push({id:uid(),fecha:fechaPago,monto,cuenta:cuentaPago,nota:notaPago,saldado,
+    ...(esUSD&&tasa?{tasa,equivRD,moneda:'USD'}:{})
+  });
+  // Registrar en caja — si USD, registra el equivalente en RD$
+  if(esUSD&&tasa){
+    DB.caja.push({id:uid(),fecha:fechaPago,tipo:'SALIDA',categoria:'CXP USD',
+      descripcion:'Pago CXP USD: '+g.descripcion+(g.suplidor?' — '+g.suplidor:'')+' (Tasa: '+tasa.toFixed(2)+')',
+      monto:equivRD,moneda:'RD$',referencia:cuentaPago,banco:document.getElementById('cxpp-banco')?.value||'',responsable:currentUser?.nombre||''});
+    sDB('caja');
+  }
   sDB('gastosVehiculos');
   closeModal();
-  // Generar recibo de pago
-  imprimirReciboPagoCXP(DB.gastosVehiculos[i],{fecha:fechaPago,monto,cuenta:cuentaPago,nota:notaPago,saldado});
+  imprimirReciboPagoCXP(DB.gastosVehiculos[i],{fecha:fechaPago,monto,cuenta:cuentaPago,nota:notaPago,saldado,tasa,equivRD});
   toast(saldado?'✅ Gasto saldado — Generando recibo...':'💵 Abono registrado — Generando recibo...','success');
   renderCXP();
 }
@@ -7263,10 +7313,12 @@ function verHistorialCXP(gid){
   const rows=(g.pagos||[]).map(p=>`<tr>
     <td>${fmtDate(p.fecha)}</td>
     <td style="font-weight:700;color:var(--green)">${fV(p.monto)}</td>
+    <td>${p.tasa?`<span style="font-size:11px;color:var(--blue)">RD$ ${parseFloat(p.tasa||0).toFixed(2)}</span>`:'—'}</td>
+    <td>${p.equivRD?fmt(p.equivRD):'—'}</td>
     <td>${escHtml(p.cuenta||'—')}</td>
     <td>${escHtml(p.nota||'—')}</td>
     <td><span class="badge ${p.saldado?'badge-green':'badge-amber'}">${p.saldado?'SALDADO':'ABONO'}</span></td>
-    ${(currentUser?.role==='admin'||canDo('imprimir'))?`<td><button class="btn btn-secondary btn-sm" onclick="imprimirReciboPagoCXP(DB.gastosVehiculos.find(x=>x.id==='${g.id}'),{fecha:'${p.fecha}',monto:${p.monto},cuenta:'${escHtml(p.cuenta||'')}',nota:'${escHtml(p.nota||'')}',saldado:${p.saldado||false}})">🖨️</button></td>`:'<td></td>'}
+    ${(currentUser?.role==='admin'||canDo('imprimir'))?`<td><button class="btn btn-secondary btn-sm" onclick="imprimirReciboPagoCXP(DB.gastosVehiculos.find(x=>x.id==='${g.id}'),{fecha:'${p.fecha}',monto:${p.monto},cuenta:'${escHtml(p.cuenta||'')}',nota:'${escHtml(p.nota||'')}',saldado:${p.saldado||false},tasa:${p.tasa||0},equivRD:${p.equivRD||0}})">🖨️</button></td>`:'<td></td>'}
   </tr>`).join('');
   openModal('📋 Historial de Pagos — '+escHtml(g.suplidor||'—'),`
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px">
@@ -7275,8 +7327,8 @@ function verHistorialCXP(gid){
       <div style="text-align:center;padding:10px;background:var(--red2);border-radius:8px"><div style="font-size:10px;color:var(--red)">Pendiente</div><div style="font-weight:800;color:var(--red)">${fV(g.montoPendiente||0)}</div></div>
     </div>
     <div style="font-size:12px;color:var(--gray);margin-bottom:8px">${escHtml(g.tipo||'—')} — ${v?escHtml(v.codigo+' '+v.marca+' '+v.modelo):'—'} — Suplidor: <strong>${escHtml(g.suplidor||'—')}</strong></div>
-    <table><thead><tr><th>Fecha</th><th>Monto</th><th>Cuenta Ingreso</th><th>Nota</th><th>Tipo</th><th>Recibo</th></tr></thead>
-    <tbody>${rows||'<tr><td colspan="6" style="text-align:center;padding:16px;color:var(--gray)">Sin pagos registrados</td></tr>'}</tbody></table>`);
+    <table><thead><tr><th>Fecha</th><th>Monto</th>${esUSD?'<th>Tasa</th><th>Equiv RD$</th>':''}<th>Cuenta</th><th>Nota</th><th>Tipo</th><th>Recibo</th></tr></thead>
+    <tbody>${rows||`<tr><td colspan="${esUSD?8:6}" style="text-align:center;padding:16px;color:var(--gray)">Sin pagos registrados</td></tr>`}</tbody></table>`);
 }
 
 function imprimirReciboPagoCXP(g, pago){
