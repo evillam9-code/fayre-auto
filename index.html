@@ -936,6 +936,17 @@ function imprimirDashboard(){
   win.document.close();
 }
 function renderDashboard(){
+  // Sincronizar presencia desde Firebase antes de renderizar
+  if(window._fbActivo&&window._fbDB&&window._fbCol){
+    try{
+      window._fbDB.collection(window._fbCol).doc('presencia').get().then(doc=>{
+        if(doc.exists){const data=doc.data()||{};DB.presencia=Object.assign(DB.presencia||{},data);}
+        _renderDashboardHTML();
+      }).catch(()=>_renderDashboardHTML());
+    }catch{_renderDashboardHTML();}
+  }else{_renderDashboardHTML();}
+}
+function _renderDashboardHTML(){
   // Usar datos ya en memoria (Firebase los cargó) — no sobreescribir con localStorage viejo
 
   const mes=document.getElementById('dash-mes')?.value||'';
@@ -1102,7 +1113,7 @@ function renderDashboard(){
       </div>
       ${(()=>{
         const ahora=Date.now();
-        const conectados=(DB.users||[]).filter(u=>u.activo&&u.id!==currentUser.id&&(DB.presencia||{})[u.id]&&(ahora-(DB.presencia||{})[u.id])<30000);
+        const conectados=(DB.users||[]).filter(u=>u.activo&&u.id!==currentUser.id&&(DB.presencia||{})[u.id]&&(ahora-(DB.presencia||{})[u.id])<120000);
         if(!conectados.length)return '<div style="text-align:center;padding:16px;color:var(--gray);font-size:13px">No hay otros usuarios conectados en este momento</div>';
         return '<div style="display:flex;flex-wrap:wrap;gap:10px">'+conectados.map(u=>{
           const hace=Math.floor((ahora-(DB.presencia||{})[u.id])/1000);
@@ -2534,7 +2545,7 @@ function renderUsuarios(){
           let presenciaGlobal={};
           try{presenciaGlobal=JSON.parse(localStorage.getItem('fayre_presencia')||'{}');}catch{}
           const ult=presenciaGlobal[u.id]||(DB.presencia||{})[u.id]||0;
-          const enLinea=ult>0&&(ahora-ult)<30000;
+          const enLinea=ult>0&&(ahora-ult)<120000;
           const estadoHTML=enLinea
             ?'<span style="display:inline-flex;align-items:center;gap:5px;background:#dcfce7;color:#16a34a;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700"><span style="width:7px;height:7px;border-radius:50%;background:#16a34a;display:inline-block"></span>En línea</span>'
             :'<span style="display:inline-flex;align-items:center;gap:5px;background:#f1f5f9;color:#64748b;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600"><span style="width:7px;height:7px;border-radius:50%;background:#94a3b8;display:inline-block"></span>Desconectado</span>';
@@ -3760,7 +3771,7 @@ function renderChat(){
   }
   function isOnline(uid){
     const p=(DB.presencia||{})[uid];
-    return p&&(Date.now()-p)<30000;
+    return p&&(Date.now()-p)<120000;
   }
   const listaHTML=otros.map(u=>{
     const unread=unreadCount(u.id);
@@ -3860,36 +3871,57 @@ function _chatScrollBottom(){
   setTimeout(()=>{const d=document.getElementById('chat-messages');if(d)d.scrollTop=d.scrollHeight;},50);
 }
 
-// ══ PRESENCIA GLOBAL (funciona sin servidor, entre pestañas locales) ══
-let _presenciaGlobalInterval=null;
+// ══ PRESENCIA GLOBAL (funciona sin servidor, entre pestañas y otras PCs via Firebase) ══
 let _presenciaBC=null; // BroadcastChannel
+let _presenciaGlobalInterval=null;
+
+function _leerPresenciaGlobal(){
+  try{return JSON.parse(localStorage.getItem('fayre_presencia')||'{}');}catch{return {};}
+}
+function _escribirPresenciaGlobal(uid,ts){
+  const p=_leerPresenciaGlobal();
+  p[uid]=ts;
+  localStorage.setItem('fayre_presencia',JSON.stringify(p));
+}
+function _sincPresencia(){
+  const global=_leerPresenciaGlobal();
+  DB.presencia=Object.assign(DB.presencia||{},global);
+}
+function _pingPresencia(){
+  if(!currentUser)return;
+  const ts=Date.now();
+  _escribirPresenciaGlobal(currentUser.id,ts);
+  if(!DB.presencia)DB.presencia={};
+  DB.presencia[currentUser.id]=ts;
+  if(_presenciaBC){try{_presenciaBC.postMessage({uid:currentUser.id,ts});}catch{}}
+  // Subir presencia a Firebase para que otras PCs la vean
+  if(window._fbActivo&&window._fbDB&&window._fbCol){
+    try{
+      window._fbDB.collection(window._fbCol).doc('presencia').set(
+        {[currentUser.id]:ts},{merge:true}
+      ).catch(()=>{});
+    }catch{}
+  }
+}
+function _sincPresenciaFirebase(){
+  // Leer presencia de Firebase para ver otros usuarios en otras PCs
+  if(!window._fbActivo||!window._fbDB||!window._fbCol)return;
+  try{
+    window._fbDB.collection(window._fbCol).doc('presencia').get().then(doc=>{
+      if(doc.exists){
+        const data=doc.data()||{};
+        DB.presencia=Object.assign(DB.presencia||{},data);
+        // Actualizar también localStorage
+        const p=_leerPresenciaGlobal();
+        Object.assign(p,data);
+        localStorage.setItem('fayre_presencia',JSON.stringify(p));
+      }
+    }).catch(()=>{});
+  }catch{}
+}
 
 function _iniciarPresenciaGlobal(){
   if(!currentUser)return;
-  // Leer presencia compartida del localStorage global (sin prefijo ds_)
-  function _leerPresenciaGlobal(){
-    try{return JSON.parse(localStorage.getItem('fayre_presencia')||'{}');}catch{return {};}
-  }
-  function _escribirPresenciaGlobal(uid,ts){
-    const p=_leerPresenciaGlobal();
-    p[uid]=ts;
-    localStorage.setItem('fayre_presencia',JSON.stringify(p));
-  }
-  // Sincronizar hacia DB.presencia desde el storage global
-  function _sincPresencia(){
-    const global=_leerPresenciaGlobal();
-    DB.presencia=Object.assign(DB.presencia||{},global);
-  }
-  // Registrar este usuario como activo
-  function _ping(){
-    if(!currentUser)return;
-    const ts=Date.now();
-    _escribirPresenciaGlobal(currentUser.id,ts);
-    if(!DB.presencia)DB.presencia={};
-    DB.presencia[currentUser.id]=ts;
-    // Broadcast a otras pestañas
-    if(_presenciaBC){try{_presenciaBC.postMessage({uid:currentUser.id,ts});}catch{}}
-  }
   // BroadcastChannel para comunicación entre pestañas del mismo archivo
   try{
     if(_presenciaBC)_presenciaBC.close();
@@ -3898,7 +3930,6 @@ function _iniciarPresenciaGlobal(){
       if(e.data&&e.data.uid&&e.data.ts){
         if(!DB.presencia)DB.presencia={};
         DB.presencia[e.data.uid]=e.data.ts;
-        // Si la página de usuarios está abierta, refrescar silenciosamente
         const pUsuarios=document.getElementById('page-usuarios');
         if(pUsuarios&&pUsuarios.classList.contains('active')){
           clearTimeout(window._presenciaRefreshTimer);
@@ -3907,16 +3938,18 @@ function _iniciarPresenciaGlobal(){
       }
     };
   }catch(e){console.warn('BroadcastChannel no disponible:',e.message);}
-  // Leer presencia de otras pestañas ya abiertas
+  // Sincronizar presencia local y Firebase
   _sincPresencia();
-  // Hacer ping inmediato
-  _ping();
-  // Ping cada 10 segundos
+  _sincPresenciaFirebase();
+  // Ping inmediato
+  _pingPresencia();
+  // Ping cada 10 segundos — local y Firebase
   if(_presenciaGlobalInterval)clearInterval(_presenciaGlobalInterval);
   _presenciaGlobalInterval=setInterval(()=>{
     if(!currentUser){clearInterval(_presenciaGlobalInterval);return;}
     _sincPresencia();
-    _ping();
+    _sincPresenciaFirebase();
+    _pingPresencia();
   },10000);
   // Limpiar al cerrar/salir
   window.addEventListener('beforeunload',()=>{
@@ -3925,6 +3958,13 @@ function _iniciarPresenciaGlobal(){
       delete p[currentUser.id];
       localStorage.setItem('fayre_presencia',JSON.stringify(p));
       if(_presenciaBC)try{_presenciaBC.postMessage({uid:currentUser.id,ts:0});}catch{}
+      // Limpiar en Firebase también
+      if(window._fbActivo&&window._fbDB&&window._fbCol){
+        try{
+          const upd={};upd[currentUser.id]=null;
+          window._fbDB.collection(window._fbCol).doc('presencia').update(upd).catch(()=>{});
+        }catch{}
+      }
     }
   },{once:true});
 }
