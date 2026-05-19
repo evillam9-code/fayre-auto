@@ -4820,7 +4820,7 @@ function _generarHojaCostosPDF(gastos,filtroVeh){
     <td class="num">${gastosRD.length+i+1}</td><td class="desc">${escHtml(g.tipo||'—')}</td>
     <td class="sup">${escHtml(g.suplidor||'—')}</td><td class="mon">US$</td>
     <td class="amt">${fN(g.montoFactura)}<br><span style="font-size:7px;color:#2563eb">=RD$ ${fN(rd.factura)}${pendEst}</span></td>
-    <td class="amt ok">${parseFloat(g.montoPagado||0)>0?fN(g.montoPagado)+'<br><span style="font-size:7px;color:#16a34a">RD$ '+fN(rd.pagado)+'</span>':''}</td>
+    <td class="amt ok">${parseFloat(g.montoPagado||0)>0?fN(g.montoPagado)+'<br><span style="font-size:7px;color:#1d4ed8">RD$ '+fN(rd.pagado)+'</span>':''}</td>
     <td class="amt nd">${parseFloat(g.montoPendiente||0)>0?fN(g.montoPendiente)+'<br><span style="font-size:7px;color:#dc2626">RD$ '+fN(rd.pendiente)+'</span>':''}</td>
     <td class="st"><span class="b ${g.statusGasto==='PAGADO'?'g':g.statusGasto==='ABONADO'?'a':'r'}">${g.statusGasto||'PEND.'}</span>${tasasStr?`<br><span style="font-size:7px;color:#6b7280">${tasasStr}</span>`:''}</td>
   </tr>`;}).join('');
@@ -4853,12 +4853,12 @@ function _generarHojaCostosPDF(gastos,filtroVeh){
   .desc{font-weight:600;font-size:9px}.sup{color:#64748b;font-size:8px}
   .mon{text-align:center;font-size:8px;font-weight:700;color:#64748b;width:26px}
   .amt{text-align:right;font-family:'Courier New',monospace;white-space:nowrap;width:90px;font-size:9px}
-  .ok{color:#16a34a}.nd{color:#dc2626;font-weight:700}.st{text-align:center;width:52px}
+  .ok{color:#1d4ed8}.nd{color:#dc2626;font-weight:700}.st{text-align:center;width:52px}
   .sh td{background:#e2e8f0!important;font-weight:800;font-size:8px;text-transform:uppercase;color:#334155;letter-spacing:.4px;padding:2px 6px}
   .sr td{background:#fef9c3!important;font-weight:800;font-size:9px}
   .su td{background:#dbeafe!important;font-weight:800;font-size:9px}
   .b{display:inline-block;padding:1px 5px;border-radius:6px;font-size:8px;font-weight:700}
-  .g{background:#dcfce7;color:#16a34a}.r{background:#fee2e2;color:#dc2626}.a{background:#fef3c7;color:#d97706}
+  .g{background:#dbeafe;color:#1d4ed8}.r{background:#fee2e2;color:#dc2626}.a{background:#fef3c7;color:#d97706}
   .res{margin-top:8px;border:1px solid #334155;border-radius:4px;overflow:hidden}
   .res-bar{background:#334155;color:#fff;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:3px 8px}
   .res-top{display:grid;grid-template-columns:${hayRD&&hayUSD?'1fr 1fr 1fr':'1fr 1fr'}}
@@ -4918,27 +4918,27 @@ function _generarHojaCostosPDF(gastos,filtroVeh){
       ${hayRD?`<div class="rc">
         <div class="rl">Sub-Total en Pesos (RD$)</div>
         <div class="rv">${fRD(subtotRD)}</div>
-        <div class="rs" style="color:#16a34a">Pagado: ${fRD(subtotPagRD)}</div>
-        ${subtotPendRD>0?`<div class="rs" style="color:#dc2626">Pendiente: ${fRD(subtotPendRD)}</div>`:'<div class="rs" style="color:#16a34a">✅ Sin pendiente</div>'}
+        <div class="rs" style="color:#1d4ed8">Pagado: ${fRD(subtotPagRD)}</div>
+        ${subtotPendRD>0?`<div class="rs" style="color:#dc2626">Pendiente: ${fRD(subtotPendRD)}</div>`:'<div class="rs" style="color:#1d4ed8">✅ Sin pendiente</div>'}
       </div>`:''}
       ${hayUSD?`<div class="rc">
         <div class="rl">Sub-Total en Dólares (US$)</div>
         <div class="rv" style="color:#2563eb">${fUS(subtotUSD)}</div>
-        <div class="rs" style="color:#16a34a">Pagado: ${fUS(subtotPagUSD)}</div>
-        ${subtotPendUSD>0?`<div class="rs" style="color:#dc2626">Pendiente: ${fUS(subtotPendUSD)}</div>`:'<div class="rs" style="color:#16a34a">✅ Sin pendiente</div>'}
+        <div class="rs" style="color:#1d4ed8">Pagado: ${fUS(subtotPagUSD)}</div>
+        ${subtotPendUSD>0?`<div class="rs" style="color:#dc2626">Pendiente: ${fUS(subtotPendUSD)}</div>`:'<div class="rs" style="color:#1d4ed8">✅ Sin pendiente</div>'}
       </div>`:''}
       <div class="rc" style="background:#f8fafc">
         <div class="rl">Registros</div>
         <div class="rv" style="font-size:16px;color:#334155">${gastos.length}</div>
         <div class="rs">RD$: ${gastosRD.length} &nbsp;|&nbsp; US$: ${gastosUSD.length}</div>
-        <div class="rs" style="color:${totalPendRD>0?'#dc2626':'#16a34a'};font-weight:700;margin-top:2px">${totalPendRD>0?'⚠️ Tiene pendientes':'✅ Todo pagado'}</div>
+        <div class="rs" style="color:${totalPendRD>0?'#dc2626':'#1d4ed8'};font-weight:700;margin-top:2px">${totalPendRD>0?'⚠️ Tiene pendientes':'✅ Todo pagado'}</div>
       </div>
     </div>
     <div style="border-top:2px solid #334155">
       <div class="tc" style="background:#fff7ed">
         <div class="tl" style="color:#92400e">TOTAL GENERAL EN PESOS (RD$)</div>
         <div class="tv" style="color:#d97706">${fRD(totalRD)}</div>
-        ${totalPendRD>0?`<div class="ts" style="color:#dc2626;font-weight:700;margin-top:3px">Pendiente: ${fRD(totalPendRD)}</div>`:'<div class="ts" style="color:#16a34a;font-weight:700;margin-top:3px">✅ Todo pagado</div>'}
+        ${totalPendRD>0?`<div class="ts" style="color:#dc2626;font-weight:700;margin-top:3px">Pendiente: ${fRD(totalPendRD)}</div>`:'<div class="ts" style="color:#1d4ed8;font-weight:700;margin-top:3px">✅ Todo pagado</div>'}
       </div>
     </div>
   </div>
@@ -6851,7 +6851,7 @@ function renderCXP(){
       <span>Las cuentas por pagar se generan automáticamente al registrar gastos de vehículo con saldo pendiente.</span>
     </div>
     <div class="card" style="margin-bottom:16px">
-      <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:12px;align-items:end">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:12px;align-items:end">
         <div style="display:flex;flex-direction:column;gap:4px">
           <label style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--gray)">Suplidor</label>
           <select id="cxp-filtro-sup" onchange="renderCXP()" style="padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
@@ -6866,8 +6866,16 @@ function renderCXP(){
             ${DB.vehiculos.filter(v=>(DB.gastosVehiculos||[]).some(g=>g.vehiculoId===v.id&&parseFloat(g.montoPendiente||0)>0)).map(v=>`<option value="${v.id}" ${v.id===filtroVeh?'selected':''}>${escHtml(v.codigo)} — ${escHtml(v.marca)} ${escHtml(v.modelo)}</option>`).join('')}
           </select>
         </div>
-        <div><input type="hidden" id="cxp-filtro-moneda" value="${filtroMoneda}">
-          <button class="btn btn-secondary" onclick="document.getElementById('cxp-filtro-sup').value='';document.getElementById('cxp-filtro-veh').value='';renderCXP()">🔄 Limpiar</button>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <label style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--gray)">Moneda</label>
+          <select id="cxp-filtro-moneda" onchange="renderCXP()" style="padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
+            <option value="">Todas</option>
+            <option value="RD$" ${filtroMoneda==='RD$'?'selected':''}>🇩🇴 RD$ — Pesos</option>
+            <option value="USD" ${filtroMoneda==='USD'?'selected':''}>🇺🇸 USD — Dólares</option>
+          </select>
+        </div>
+        <div>
+          <button class="btn btn-secondary" onclick="document.getElementById('cxp-filtro-sup').value='';document.getElementById('cxp-filtro-veh').value='';document.getElementById('cxp-filtro-moneda').value='';renderCXP()">🔄 Limpiar</button>
         </div>
       </div>
     </div>
@@ -6941,8 +6949,9 @@ function renderCXP(){
             <td>
               <div style="display:flex;gap:4px;flex-wrap:wrap">
                 ${parseFloat(g.montoPendiente||0)>0?`<button class="btn btn-sm btn-green" onclick="event.stopPropagation();${g._origen==='manual'?`abonarCXPManual('${g.id}')`:`abonarDesdeCXP('${g.id}')`}" title="Registrar pago">💵 Pagar</button>`:''}
-                ${(currentUser?.role==='admin'||currentUser?.permisos?.editar||canDo('editar'))?`<button class="btn btn-sm" style="background:var(--blue3);color:var(--blue);padding:4px 8px" onclick="event.stopPropagation();editarCXP('${g.id}','${g._origen}')" title="Editar">✏️</button>`:''}
+                ${(currentUser?.role==='admin'||canDo('editar'))?`<button class="btn btn-sm" style="background:var(--blue3);color:var(--blue);padding:4px 8px" onclick="event.stopPropagation();editarCXP('${g.id}','${g._origen}')" title="Editar">✏️</button>`:''}
                 ${(g.pagos||[]).length>0?`<button class="btn btn-sm" style="background:#f1f5f9;color:var(--gray)" onclick="event.stopPropagation();verHistorialCXP('${g.id}')" title="Historial de pagos">📋</button>`:''}
+                ${(currentUser?.role==='admin'||canDo('eliminar')||currentUser?.permisos?.borrarCxp)?`<button class="btn btn-sm" style="background:var(--red2);color:var(--red);padding:4px 8px" onclick="event.stopPropagation();eliminarRegistroCXP('${g.id}','${g._origen}')" title="Eliminar">🗑️</button>`:''}
               </div>
             </td>
           </tr>`;
@@ -6953,6 +6962,20 @@ function renderCXP(){
   const fs=document.getElementById('cxp-filtro-sup');if(fs)fs.value=filtroSup;
   const fv=document.getElementById('cxp-filtro-veh');if(fv)fv.value=filtroVeh;
   const fm=document.getElementById('cxp-filtro-moneda');if(fm)fm.value=filtroMoneda;
+}
+
+function eliminarRegistroCXP(id,origen){
+  if(!canDo('eliminar')&&!currentUser?.permisos?.borrarCxp&&currentUser?.role!=='admin'){toast('No tienes permiso para eliminar','error');return;}
+  if(!confirm('¿Eliminar este registro de CXP? Esta acción no se puede deshacer.'))return;
+  if(origen==='manual'){
+    DB.cxp=(DB.cxp||[]).filter(g=>g.id!==id);
+    sDB('cxp');
+  } else {
+    DB.gastosVehiculos=(DB.gastosVehiculos||[]).filter(g=>g.id!==id);
+    sDB('gastosVehiculos');
+  }
+  toast('Registro eliminado','success');
+  renderCXP();
 }
 
 function actualizarCuentasCXPP(){
