@@ -9782,7 +9782,7 @@ async function fbGuardar(key){
 
 async function fbCargar(){
   const keys=['config','config_logo','users','vehiculos','clientes','suplidores','ventas','cotizaciones',
-    'caja','gastos','nomina','nominaPagos','gastosVehiculos','cxp','cxc','autorizaciones','seguros','facturasExternas','log'];
+    'caja','gastos','nomina','nominaPagos','gastosVehiculos','cxp','cxc','autorizaciones','seguros','facturasExternas','log','bitacora'];
   let loaded=false;
   // Cargar TODAS las colecciones en paralelo — mucho más rápido que secuencial
   const resultados = await Promise.allSettled(
@@ -9880,7 +9880,7 @@ function _mostrarErrorFirebase(){
 function fbActivarListeners(){
   const keys=['config','config_logo','users','vehiculos','clientes','suplidores',
     'ventas','cotizaciones','caja','gastos','nomina','nominaPagos',
-    'gastosVehiculos','cxp','cxc','autorizaciones'];
+    'gastosVehiculos','cxp','cxc','autorizaciones','bitacora'];
   
   keys.forEach(key=>{
     _fbDB.collection(_fbCol).doc(key).onSnapshot(snap=>{
