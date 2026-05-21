@@ -359,6 +359,7 @@ async function publicarNuevaVersion(silencioso){
     <div class="nav-item" onclick="showPage('cumpleanos')" id="nav-cumpleanos"><span class="ico">🎂</span>Cumpleaños</div>
     <div class="nav-item" onclick="showPage('cuentas')" id="nav-cuentas"><span class="ico">🏦</span>Cuentas</div>
     <div class="nav-item" id="nav-backup" style="display:none;color:var(--green)" onclick="showPage('backup')"><span class="ico">💾</span>Backup</div>
+    <div class="nav-item" id="nav-bitacora" style="display:none;color:#a78bfa" onclick="showPage('bitacora')"><span class="ico">🔍</span>Bitácora</div>
     <div class="nav-item" onclick="showPage('config')" id="nav-config"><span class="ico">⚙️</span>Configuración</div>
     <div style="margin-top:auto;border-top:1px solid var(--gray3)">
       <div style="padding:10px 16px 6px;font-size:10px;color:#94a3b8;text-align:center;line-height:1.5">
@@ -406,6 +407,7 @@ async function publicarNuevaVersion(silencioso){
       <div class="page" id="page-cumpleanos"></div>
       <div class="page" id="page-cuentas"></div>
       <div class="page" id="page-backup"></div>
+      <div class="page" id="page-bitacora"></div>
       <div class="page" id="page-chat"></div>
     </div>
   </div>
@@ -468,7 +470,8 @@ let DB={
   seguros:ls('seguros')||[],
   facturasExternas:ls('facturasExternas')||[],
   chat:ls('chat')||{},
-  presencia:ls('presencia')||{}
+  presencia:ls('presencia')||{},
+  bitacora:ls('bitacora')||[]
 };
 function sDB(k){
   if(!window._fbActivo){
@@ -698,6 +701,7 @@ function doLogin(){
     setTimeout(()=>{if(DB.config?.colores)aplicarColoresSistema();},500);
     setTimeout(()=>{if(DB.config?.colores)aplicarColoresSistema();},1500);
     actualizarLogoSidebar();
+    logBit('Sesión','Inició sesión','—');
     showPage('dashboard');
     setTimeout(checkAlerts,1500);
     // Iniciar presencia global al entrar (no depende del chat)
@@ -783,6 +787,8 @@ function aplicarPermisosNav(){
 
   const nbk=document.getElementById('nav-backup');
   if(nbk)nbk.style.display=currentUser.role==='admin'?'':'none';
+  const nbit=document.getElementById('nav-bitacora');
+  if(nbit)nbit.style.display=currentUser.role==='admin'?'':'none';
 }
 function cambiarMiContrasena(){
   openModal('🔑 Cambiar Mi Contraseña',`
@@ -809,6 +815,7 @@ function guardarCambioContrasena(){
 }
 function doLogout(){
   if(currentUser){
+    logBit('Sesión','Cerró sesión','—');
     try{const p=JSON.parse(localStorage.getItem('fayre_presencia')||'{}');delete p[currentUser.id];localStorage.setItem('fayre_presencia',JSON.stringify(p));}catch{}
     if(_presenciaBC)try{_presenciaBC.postMessage({uid:currentUser.id,ts:0});}catch{}
     if(_presenciaGlobalInterval)clearInterval(_presenciaGlobalInterval);
@@ -820,6 +827,141 @@ function doLogout(){
   document.getElementById('li-pass').value='';
 }
 
+/* ═══════════════════════════════════════════
+   BITÁCORA DE ACTIVIDAD — máx 200 entradas
+═══════════════════════════════════════════ */
+const _MOD_LABELS={dashboard:'Inicio',inventario:'Reg. Vehículo',gastosVeh:'Gastos Vehículo',
+  cxp:'Cuentas x Pagar',clientes:'Clientes',ventas:'Ventas',cxc:'Cuentas x Cobrar',
+  gastos:'Gastos Empresa',nomina:'Nómina',caja:'Caja',cotizaciones:'Cotizaciones',
+  autorizaciones:'Autorización',seguros:'Seguros',facturaExterna:'Facturas Ext.',
+  suplidores:'Suplidores',informes:'Informes',usuarios:'Usuarios',config:'Configuración',
+  cuentas:'Cuentas',backup:'Backup',bitacora:'Bitácora',alertas:'Alertas',chat:'Chat'};
+
+function logBit(modulo,accion,detalle){
+  if(!currentUser)return;
+  if(!DB.bitacora)DB.bitacora=[];
+  const ahora=new Date();
+  const fecha=ahora.toLocaleDateString('es-DO',{year:'numeric',month:'2-digit',day:'2-digit'});
+  const hora=ahora.toLocaleTimeString('es-DO',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  DB.bitacora.unshift({
+    id:uid(),
+    fecha,hora,
+    usuario:currentUser.nombre||currentUser.username||'—',
+    userId:currentUser.id||'',
+    role:currentUser.role||'',
+    modulo:_MOD_LABELS[modulo]||modulo,
+    accion,
+    detalle:(detalle||'').substring(0,120)
+  });
+  if(DB.bitacora.length>200)DB.bitacora=DB.bitacora.slice(0,200);
+  sDB('bitacora');
+}
+
+function renderBitacora(){
+  if(currentUser?.role!=='admin'){
+    document.getElementById('page-bitacora').innerHTML='<div style="text-align:center;padding:48px"><div style="font-size:48px;margin-bottom:12px">🔒</div><div style="font-size:18px;font-weight:700;color:var(--navy)">Acceso restringido</div><p style="color:var(--gray);margin-top:8px">Solo el administrador puede ver la bitácora.</p></div>';
+    return;
+  }
+  const bits=DB.bitacora||[];
+  // Filtros
+  const fUsuario=document.getElementById('bit-f-usuario')?.value||'';
+  const fModulo=document.getElementById('bit-f-modulo')?.value||'';
+  const fFecha=document.getElementById('bit-f-fecha')?.value||'';
+  const fBuscar=(document.getElementById('bit-f-buscar')?.value||'').toLowerCase();
+
+  const lista=bits.filter(b=>{
+    if(fUsuario&&b.usuario!==fUsuario)return false;
+    if(fModulo&&b.modulo!==fModulo)return false;
+    if(fFecha){
+      // fFecha es yyyy-mm-dd, b.fecha es dd/mm/yyyy
+      const [y,m,d]=fFecha.split('-');
+      const fmtFecha=`${d}/${m}/${y}`;
+      if(b.fecha!==fmtFecha)return false;
+    }
+    if(fBuscar&&!(b.accion+b.detalle+b.modulo+b.usuario).toLowerCase().includes(fBuscar))return false;
+    return true;
+  });
+
+  // Opciones únicas para filtros
+  const usuarios=[...new Set(bits.map(b=>b.usuario))].sort();
+  const modulos=[...new Set(bits.map(b=>b.modulo))].sort();
+
+  // Colores por acción
+  function badgeAccion(a){
+    const l=a.toLowerCase();
+    if(l.includes('inici')&&l.includes('ses'))return'background:#dcfce7;color:#16a34a';
+    if(l.includes('cerr')&&l.includes('ses'))return'background:#fee2e2;color:#dc2626';
+    if(l.includes('elimin')||l.includes('borr'))return'background:#fee2e2;color:#dc2626';
+    if(l.includes('guard')||l.includes('nuevo')||l.includes('regist')||l.includes('creó')||l.includes('agreg'))return'background:#dbeafe;color:#2563eb';
+    if(l.includes('edit')||l.includes('actua')||l.includes('modif'))return'background:#fef3c7;color:#d97706';
+    if(l.includes('pag')||l.includes('abon')||l.includes('cobr'))return'background:#ede9fe;color:#7c3aed';
+    if(l.includes('venta'))return'background:#dcfce7;color:#16a34a';
+    return'background:#f1f5f9;color:#475569';
+  }
+
+  const filas=lista.length?lista.map(b=>`
+    <tr>
+      <td style="white-space:nowrap;font-size:11px;color:var(--gray)">${b.fecha}</td>
+      <td style="white-space:nowrap;font-size:11px;color:var(--gray)">${b.hora}</td>
+      <td><div style="font-weight:700;font-size:12px">${escHtml(b.usuario)}</div>
+          <div style="font-size:10px;color:var(--gray)">${escHtml(b.role||'')}</div></td>
+      <td><span style="background:#f1f5f9;color:#334155;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600">${escHtml(b.modulo)}</span></td>
+      <td><span style="padding:2px 9px;border-radius:10px;font-size:11px;font-weight:700;${badgeAccion(b.accion)}">${escHtml(b.accion)}</span></td>
+      <td style="font-size:12px;color:var(--navy);max-width:260px">${escHtml(b.detalle||'—')}</td>
+    </tr>`).join('')
+    :'<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--gray)">No hay registros con los filtros seleccionados</td></tr>';
+
+  const usados=Math.round(JSON.stringify(DB.bitacora).length/1024);
+
+  document.getElementById('page-bitacora').innerHTML=`
+    <div class="page-header">
+      <div>
+        <h1>🔍 Bitácora de Actividad</h1>
+        <p style="color:var(--gray);font-size:13px">${bits.length} registros de ${bits.length>=200?'200 (máximo)':'200 máx'} · ${usados} KB usados · Solo visible para Administrador</p>
+      </div>
+      <button class="btn btn-red btn-sm" onclick="if(confirm('¿Limpiar toda la bitácora? Esta acción no se puede deshacer.')){DB.bitacora=[];sDB('bitacora');renderBitacora();toast('Bitácora limpiada','success')}">🗑 Limpiar todo</button>
+    </div>
+    <div class="card">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:10px;align-items:end;margin-bottom:14px">
+        <div>
+          <label style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--gray);display:block;margin-bottom:4px">Usuario</label>
+          <select id="bit-f-usuario" onchange="renderBitacora()" style="width:100%;padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
+            <option value="">Todos</option>
+            ${usuarios.map(u=>`<option value="${escHtml(u)}" ${fUsuario===u?'selected':''}>${escHtml(u)}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--gray);display:block;margin-bottom:4px">Módulo</label>
+          <select id="bit-f-modulo" onchange="renderBitacora()" style="width:100%;padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
+            <option value="">Todos</option>
+            ${modulos.map(m=>`<option value="${escHtml(m)}" ${fModulo===m?'selected':''}>${escHtml(m)}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--gray);display:block;margin-bottom:4px">Fecha</label>
+          <input type="date" id="bit-f-fecha" value="${fFecha}" onchange="renderBitacora()" style="width:100%;padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
+        </div>
+        <div>
+          <label style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--gray);display:block;margin-bottom:4px">Buscar</label>
+          <input type="text" id="bit-f-buscar" value="${escHtml(fBuscar)}" oninput="renderBitacora()" placeholder="Acción, detalle..." style="width:100%;padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('bit-f-usuario').value='';document.getElementById('bit-f-modulo').value='';document.getElementById('bit-f-fecha').value='';document.getElementById('bit-f-buscar').value='';renderBitacora()">✕ Limpiar</button>
+      </div>
+      <div style="font-size:12px;color:var(--gray);margin-bottom:10px">Mostrando <strong>${lista.length}</strong> de <strong>${bits.length}</strong> registros</div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Fecha</th><th>Hora</th><th>Usuario</th><th>Módulo</th><th>Acción</th><th>Detalle</th>
+            </tr>
+          </thead>
+          <tbody>${filas}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+/* ═══════════════════════════════════════════ */
+
 // Modal NO cierra con click fuera ni Escape — solo con botón explícito
 
 function showPage(id){
@@ -827,7 +969,7 @@ function showPage(id){
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   const sb=document.getElementById('sidebar');const ov=document.getElementById('sidebar-overlay');
   if(sb&&window.innerWidth<=768){sb.classList.remove('open');if(ov)ov.classList.remove('open');}
-  const r={dashboard:renderDashboard,inventario:renderInventario,ventas:renderVentas,cotizaciones:renderCotizaciones,clientes:renderClientes,suplidores:renderSuplidores,caja:renderCaja,gastos:renderGastos,nomina:renderNomina,informes:renderInformes,usuarios:renderUsuarios,config:renderConfig,gastosVeh:renderGastosVeh,cxp:renderCXP,cxc:renderCXC,autorizaciones:renderAutorizaciones,seguros:renderSeguros,facturaExterna:renderFacturaExterna,alertas:renderAlertas,chat:renderChat,cumpleanos:renderCumpleanos,cuentas:renderCuentas,backup:renderBackup};
+  const r={dashboard:renderDashboard,inventario:renderInventario,ventas:renderVentas,cotizaciones:renderCotizaciones,clientes:renderClientes,suplidores:renderSuplidores,caja:renderCaja,gastos:renderGastos,nomina:renderNomina,informes:renderInformes,usuarios:renderUsuarios,config:renderConfig,gastosVeh:renderGastosVeh,cxp:renderCXP,cxc:renderCXC,autorizaciones:renderAutorizaciones,seguros:renderSeguros,facturaExterna:renderFacturaExterna,alertas:renderAlertas,chat:renderChat,cumpleanos:renderCumpleanos,cuentas:renderCuentas,backup:renderBackup,bitacora:renderBitacora};
   // Refresh Firebase si han pasado más de 60 segundos
   const ahora=Date.now();
   if(window._fbActivo&&window._fbCargado&&(!window._lastFbRefresh||ahora-window._lastFbRefresh>60000)){
@@ -1379,7 +1521,7 @@ function guardarVehiculo(id){
     DB.vehiculos.push(obj);
   }
   sDB('vehiculos');
-  toast(id?'Vehículo actualizado ✓':'Vehículo agregado ✓','success');
+  logBit('inventario',id?'Editó vehículo':'Registró vehículo',document.getElementById('inv-codigo')?.value||'');toast(id?'Vehículo actualizado ✓':'Vehículo agregado ✓','success');
   renderInventario();
   closeModal();
 }
@@ -1925,7 +2067,7 @@ function guardarCajaMov(tipo){
     descripcion:desc,monto,moneda,banco,cuenta,
     referencia:banco+(cuenta?' / '+cuenta:''),
     responsable:document.getElementById('cj-resp').value});
-  sDB('caja');closeModal();toast('Registro guardado ✓','success');renderCaja();
+  logBit('caja','Registro manual de caja','');sDB('caja');closeModal();toast('Registro guardado ✓','success');renderCaja();
 }
 
 // ══ GASTOS ══
@@ -1989,7 +2131,7 @@ function guardarEditGasto(i){
   DB.gastos[i].formaPago=document.getElementById('g-forma').value;
   DB.gastos[i].statusGasto=document.getElementById('g-status').value;
   DB.gastos[i].descripcion=document.getElementById('g-desc').value;
-  sDB('gastos');closeModal();toast('Gasto actualizado ✓','success');renderGastos();
+  logBit('gastos','Editó gasto empresa','');sDB('gastos');closeModal();toast('Gasto actualizado ✓','success');renderGastos();
 }
 function imprimirGastos(){
   const mes=new Date().toISOString().slice(0,7);
@@ -2133,7 +2275,7 @@ function guardarGasto(idx){
   else DB.gastos.push(g);
   if(g.formaPago==='CONTADO'&&montoAbonado>0)
     DB.caja.push({id:uid(),fecha:g.fecha,tipo:'SALIDA',categoria:'Gasto de Empresa',descripcion:'Gasto: '+desc,monto:montoAbonado,responsable:g.responsable});
-  sDB('gastos');sDB('caja');closeModal();toast('Gasto guardado ✓','success');renderGastos();
+  logBit('gastos','Guardó gasto empresa','');sDB('gastos');sDB('caja');closeModal();toast('Gasto guardado ✓','success');renderGastos();
 }
 
 // ══ NÓMINA ══
@@ -2346,7 +2488,7 @@ function guardarPagoNomina(i){
   DB.caja.push({id:uid(),fecha:today(),tipo:'SALIDA',categoria:'Nómina/Salario',
     descripcion:'Pago nómina: '+e.nombre+' ('+tipoLabel+')',
     monto,referencia:cuenta,responsable:currentUser.nombre});
-  sDB('nominaPagos');sDB('caja');closeModal();toast('Pago registrado ✓','success');renderNomina();
+  logBit('nomina','Pagó nómina','');sDB('nominaPagos');sDB('caja');closeModal();toast('Pago registrado ✓','success');renderNomina();
 }
 function imprimirPagosNomina(){
   const pagos=DB.nominaPagos||[];
@@ -2771,7 +2913,7 @@ function guardarEmpleado(idx){
   const activoVal=document.getElementById('e-activo')?.value;
   const e={id:idx!==undefined?DB.nomina[idx].id:uid(),nombre,cargo:document.getElementById('e-cargo').value,documento:document.getElementById('e-doc')?.value||'',fechaIngreso:document.getElementById('e-ingreso').value,formaPago:document.getElementById('e-pago').value,salario,telefono:document.getElementById('e-tel').value,activo:activoVal!=='false',docFrente:fEl?.style.display!=='none'&&fEl?.src?fEl.src:(idx!==undefined?DB.nomina[idx]?.docFrente||'':''),docDorso:dEl?.style.display!=='none'&&dEl?.src?dEl.src:(idx!==undefined?DB.nomina[idx]?.docDorso||'':''),pagos:idx!==undefined?DB.nomina[idx].pagos||[]:[]};
   if(idx!==undefined)DB.nomina[idx]=e;else DB.nomina.push(e);
-  sDB('nomina');closeModal();toast('Empleado guardado ✓','success');renderNomina();
+  logBit('nomina','Guardó empleado','');sDB('nomina');closeModal();toast('Empleado guardado ✓','success');renderNomina();
 }
 function editarEmpleado(i){
   const e=DB.nomina[i];
@@ -2802,7 +2944,7 @@ function guardarUsuario(idx){
   else DB.users.push({id:uid(),nombre,username:user,password:pass,role:document.getElementById('u-role').value,activo:true,modulos:nuevosMods,permisos:nuevosPerms});
   sDB('users');
   if(typeof fbGuardar==='function'&&window._fbActivo)fbGuardar('users').catch(()=>{});
-  closeModal();toast('Usuario guardado ✓','success');renderUsuarios();
+  logBit('usuarios','Creó usuario','');closeModal();toast('Usuario guardado ✓','success');renderUsuarios();
   // Re-renderizar página activa para que permisos apliquen de inmediato
   const _ap2=document.querySelector('.page.active');
   if(_ap2){
@@ -4411,6 +4553,9 @@ function nuevoGastoVeh(){
           <button type="button" class="btn btn-secondary btn-sm" onclick="agregarTipoGastoVeh()" title="Agregar tipo">➕</button>
         </div>
       </div>
+      <div class="form-field"><label>No. Factura</label>
+        <input type="text" id="ngv-nofactura" placeholder="Ej: FAC-0001">
+      </div>
       <div class="form-field"><label class="required">Moneda</label>
         <select id="ngv-moneda" onchange="toggleGVehMoneda();calcPendienteGVeh()">
           <option value="RD$">RD$ — Pesos</option>
@@ -4452,6 +4597,10 @@ function nuevoGastoVeh(){
       <div class="form-field"><label>Fecha de Pago</label>
         <input type="date" id="ngv-fechapago">
       </div>
+    </div>
+    <div class="form-field">
+      <label>Observación / Comentario</label>
+      <textarea id="ngv-obs" rows="2" placeholder="Notas adicionales sobre este gasto..."></textarea>
     </div>`,
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
      <button class="btn btn-primary" onclick="guardarNuevoGastoVeh()">💾 Guardar</button>`);
@@ -4530,6 +4679,8 @@ function guardarNuevoGastoVeh(){
     montoPendiente:pendiente,
     fecha:document.getElementById('ngv-fecha').value,
     fechaPago:document.getElementById('ngv-fechapago').value,
+    noFactura:document.getElementById('ngv-nofactura')?.value.trim()||'',
+    observacion:document.getElementById('ngv-obs')?.value.trim()||'',
     statusGasto:pendiente<=0?'PAGADO':abono>0?'ABONADO':'PENDIENTE'
   };
   if(!DB.gastosVehiculos)DB.gastosVehiculos=[];
@@ -4542,7 +4693,7 @@ function guardarNuevoGastoVeh(){
     sDB('vehiculos');
   }
   sDB('gastosVehiculos');
-  toast('Gasto registrado ✓','success');
+  logBit('gastosVeh','Registró gasto',tipo+' — '+sup+' '+fmtMoneyDisplay(factura));toast('Gasto registrado ✓','success');
   renderGastosVeh();
   closeModal();
 }
@@ -4595,7 +4746,7 @@ function confirmarAbonoGastoVeh(i){
   }
   sDB('gastosVehiculos');
   closeModal();
-  toast('Pago registrado ✓','success');
+  logBit('gastosVeh','Registró pago/abono','');toast('Pago registrado ✓','success');
   renderGastosVeh();
 }
 
@@ -4656,6 +4807,14 @@ function editarGastoVeh(gid){
       <div class="form-field"><label>Fecha de Pago</label>
         <input type="date" id="egv-fechapago" value="${g.fechaPago||''}">
       </div>
+    </div>
+    <div class="form-field">
+      <label>No. Factura</label>
+      <input type="text" id="egv-nofactura" value="${escHtml(g.noFactura||'')}" placeholder="Ej: FAC-0001">
+    </div>
+    <div class="form-field">
+      <label>Observación / Comentario</label>
+      <textarea id="egv-obs" rows="2" placeholder="Notas adicionales sobre este gasto...">${escHtml(g.observacion||'')}</textarea>
     </div>`,
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
      <button class="btn btn-primary" onclick="guardarEditGastoVeh(${i})">💾 Actualizar</button>`);
@@ -4691,6 +4850,8 @@ function guardarEditGastoVeh(i){
   DB.gastosVehiculos[i].montoFactura=factura;
   DB.gastosVehiculos[i].montoPagado=pagado;
   DB.gastosVehiculos[i].montoPendiente=pendiente<=0?0:pendiente;
+  DB.gastosVehiculos[i].noFactura=document.getElementById('egv-nofactura')?.value.trim()||'';
+  DB.gastosVehiculos[i].observacion=document.getElementById('egv-obs')?.value.trim()||'';
   DB.gastosVehiculos[i].statusGasto=pendiente<=0?'PAGADO':pagado>0?'ABONADO':'PENDIENTE';
   // Recalcular costo del vehículo
   const vid=DB.gastosVehiculos[i].vehiculoId;
@@ -4702,7 +4863,7 @@ function guardarEditGastoVeh(i){
   }
   sDB('gastosVehiculos');
   closeModal();
-  toast('Gasto actualizado ✓','success');
+  logBit('gastosVeh','Editó gasto',DB.gastosVehiculos[i]?.tipo||'');toast('Gasto actualizado ✓','success');
   renderGastosVeh();
 }
 
@@ -4829,7 +4990,7 @@ function _generarHojaCostosPDF(gastos,filtroVeh){
   <title>Hoja de Costos${veh?' — '+veh.codigo:''}</title>
   <style>
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:Arial,sans-serif;font-size:9px;color:#0f172a;background:#fff;padding:10px 14px}
+  body{font-family:Arial,sans-serif;font-size:10px;color:#0f172a;background:#fff;padding:10px 14px}
   .hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0f172a;padding-bottom:7px;margin-bottom:7px}
   .hdr img{max-height:44px;max-width:110px;object-fit:contain;display:block;margin-bottom:3px}
   .hdr-emp{font-size:9px;color:#475569;line-height:1.5}
@@ -4845,18 +5006,18 @@ function _generarHojaCostosPDF(gastos,filtroVeh){
   .vc .v{font-weight:700;font-size:10px}
   table{width:100%;border-collapse:collapse}
   .th{background:#0f172a;color:#fff}
-  .th th{padding:4px 6px;font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.2px;white-space:nowrap}
-  td{padding:3px 6px;border-bottom:1px solid #e2e8f0;vertical-align:middle;font-size:9px}
+  .th th{padding:4px 6px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.2px;white-space:nowrap}
+  td{padding:2px 5px;border-bottom:1px solid #e2e8f0;vertical-align:middle;font-size:11px}
   tr:nth-child(even) td{background:#f8fafc}
   .urow td{background:#eff6ff!important}
-  .num{width:20px;text-align:center;color:#94a3b8;font-size:8px}
-  .desc{font-weight:600;font-size:9px}.sup{color:#64748b;font-size:8px}
-  .mon{text-align:center;font-size:8px;font-weight:700;color:#64748b;width:26px}
-  .amt{text-align:right;font-family:'Courier New',monospace;white-space:nowrap;width:90px;font-size:9px}
-  .ok{color:#1d4ed8}.nd{color:#dc2626;font-weight:700}.st{text-align:center;width:52px}
-  .sh td{background:#e2e8f0!important;font-weight:800;font-size:8px;text-transform:uppercase;color:#334155;letter-spacing:.4px;padding:2px 6px}
-  .sr td{background:#fef9c3!important;font-weight:800;font-size:9px}
-  .su td{background:#dbeafe!important;font-weight:800;font-size:9px}
+  .num{width:20px;text-align:center;color:#94a3b8;font-size:9px}
+  .desc{font-weight:600;font-size:11px}.sup{color:#64748b;font-size:10px}
+  .mon{text-align:center;font-size:9px;font-weight:700;color:#64748b;width:26px}
+  .amt{text-align:right;font-family:'Courier New',monospace;white-space:nowrap;width:95px;font-size:11px}
+  .ok{color:#1d4ed8}.nd{color:#dc2626;font-weight:700}.st{text-align:center;width:54px}
+  .sh td{background:#e2e8f0!important;font-weight:800;font-size:9px;text-transform:uppercase;color:#334155;letter-spacing:.4px;padding:2px 6px}
+  .sr td{background:#fef9c3!important;font-weight:800;font-size:10px}
+  .su td{background:#dbeafe!important;font-weight:800;font-size:10px}
   .b{display:inline-block;padding:1px 5px;border-radius:6px;font-size:8px;font-weight:700}
   .g{background:#dbeafe;color:#1d4ed8}.r{background:#fee2e2;color:#dc2626}.a{background:#fef3c7;color:#d97706}
   .res{margin-top:8px;border:1px solid #334155;border-radius:4px;overflow:hidden}
@@ -5531,7 +5692,7 @@ function confirmarEliminarVenta(id){
     DB.cxc=DB.cxc.filter(x=>x.ventaId!==id);sDB('cxc');
   }
   DB.ventas=DB.ventas.filter(x=>x.id!==id);
-  sDB('ventas');closeModal();toast('Venta eliminada','success');renderVentas();
+  logBit('ventas','Eliminó venta',v?.factura||'');sDB('ventas');closeModal();toast('Venta eliminada','success');renderVentas();
 }
 function toggleVehRecibido(){
   const cb=document.getElementById('sv-tiene-recibido');
@@ -5783,7 +5944,7 @@ function confirmarVenta(nf){
   closeModal();
   // Imprimir recibo automáticamente
   imprimirFactura(venta.id);
-  toast('Venta registrada ✓ — Generando recibo...','success');
+  logBit('ventas','Registró venta',`${_vRef?.codigo||''} ${_vRef?.marca||''} ${_vRef?.modelo||''}`);toast('Venta registrada ✓ — Generando recibo...','success');
   renderVentas();
 }
 
@@ -5847,7 +6008,7 @@ function confirmarAbVenta(vid){
   DB.caja.push({id:uid(),fecha:document.getElementById('ab-fecha').value,tipo:'ENTRADA',categoria:'Cobro de Venta',descripcion:`Cobro ${DB.ventas[i].factura}: ${DB.ventas[i].cliente}`,monto,referencia:document.getElementById('ab-cuenta')?.value||'',responsable:currentUser.nombre});
   sDB('ventas');sDB('caja');
   closeModal();
-  toast('Cobro registrado ✓','success');
+  logBit('ventas','Registró cobro','');toast('Cobro registrado ✓','success');
   renderVentas();
 }
 
@@ -6500,7 +6661,7 @@ function guardarCliente(idx){
   const fEl=document.getElementById('c-doc-frente-prev');const dEl=document.getElementById('c-doc-dorso-prev');
   const c={id:idx!==undefined?DB.clientes[idx].id:uid(),nombre,tipoDoc:document.getElementById('c-tipodoc').value,documento:document.getElementById('c-doc').value.trim(),ingresos:parseFloat((document.getElementById('c-ingresos')?.value||'0').replace(/,/g,''))||0,ciudad:document.getElementById('c-ciudad').value,provincia:document.getElementById('c-prov').value,telefono:document.getElementById('c-tel').value,telefono2:document.getElementById('c-tel2').value,whatsapp:document.getElementById('c-whatsapp')?.value||'',fechaCumpleanos:document.getElementById('c-cumpleanos')?.value||'',direccion:document.getElementById('c-dir').value,refNombre:document.getElementById('c-ref-nombre')?.value||'',refTel:document.getElementById('c-ref-tel')?.value||'',docFrente:fEl?.style.display!=='none'&&fEl?.src?fEl.src:(idx!==undefined?DB.clientes[idx]?.docFrente||'':''),docDorso:dEl?.style.display!=='none'&&dEl?.src?dEl.src:(idx!==undefined?DB.clientes[idx]?.docDorso||'':'')};
   if(idx!==undefined)DB.clientes[idx]=c;else DB.clientes.push(c);
-  sDB('clientes');closeModal();toast('Cliente guardado ✓','success');renderClientes();
+  logBit('clientes','Guardó cliente','');sDB('clientes');closeModal();toast('Cliente guardado ✓','success');renderClientes();
 }
 
 // ══ SUPLIDORES ══
@@ -7117,6 +7278,13 @@ function nuevaCXPManual(){
     </div>
     <div class="form-row c2">
       <div class="form-field"><label>Fecha Límite Pago</label><input type="date" id="cxpm-flim"></div>
+      <div class="form-field"><label>No. Factura</label>
+        <input type="text" id="cxpm-nofactura" placeholder="Ej: FAC-0001">
+      </div>
+    </div>
+    <div class="form-field">
+      <label>Comentario</label>
+      <textarea id="cxpm-comentario" rows="2" placeholder="Notas adicionales sobre esta cuenta por pagar..."></textarea>
     </div>`,
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
      <button class="btn btn-primary" onclick="guardarCXPManual()">💾 Guardar</button>`);
@@ -7148,13 +7316,15 @@ function guardarCXPManual(){
   if(!DB.cxp)DB.cxp=[];
   DB.cxp.push({
     id:uid(),tipo:'MANUAL',suplidor:sup||'',descripcion:desc,
+    noFactura:document.getElementById('cxpm-nofactura')?.value.trim()||'',
+    comentario:document.getElementById('cxpm-comentario')?.value.trim()||'',
     moneda,montoFactura:monto,montoPagado:abono,montoPendiente:pendiente,
     banco,cuenta,fecha:document.getElementById('cxpm-fecha')?.value||today(),
     fechaLimite:document.getElementById('cxpm-flim')?.value||'',
     statusGasto:pendiente<=0?'PAGADO':abono>0?'ABONADO':'PENDIENTE',
     pagos:[]
   });
-  sDB('cxp');
+  logBit('cxp','Nueva CXP manual',desc+' — '+fmtMoneyDisplay(monto));sDB('cxp');
   closeModal();toast('CXP manual guardada ✓','success');renderCXP();
 }
 function abonarCXPManual(gid){
