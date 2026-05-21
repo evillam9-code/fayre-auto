@@ -4479,9 +4479,10 @@ function renderGastosVeh(){
           <th>Vehículo</th>
           <th>Suplidor</th>
           <th>Tipo de Gasto</th>
+          <th>No. Factura</th>
           <th>Moneda</th>
           <th>Banco / Cuenta</th>
-          <th>Factura</th>
+          <th>M. Factura</th>
           <th>Abonado</th>
           <th>Pendiente</th>
           <th>F. Pago</th>
@@ -4501,7 +4502,8 @@ function renderGastosVeh(){
             <td style="font-size:12px">${fmtDate(g.fecha)}</td>
             <td style="font-size:12px;font-weight:600">${v?escHtml(v.codigo+' '+v.marca+' '+v.modelo):'—'}</td>
             <td style="font-size:12px">${escHtml(g.suplidor||'—')}</td>
-            <td><span class="badge badge-amber" style="font-size:11px">${escHtml(g._origen==='manual'?(g.descripcion||g.tipo||'—'):g.tipo||'—')}</span></td>
+            <td><span class="badge badge-amber" style="font-size:11px">${escHtml(g._origen==='manual'?(g.descripcion||g.tipo||'—'):g.tipo||'—')}</span>${g.noFactura?`<div style="font-family:monospace;font-size:10px;color:var(--blue);margin-top:2px">${escHtml(g.noFactura)}</div>`:''}</td>
+            <td style="font-family:monospace;font-size:11px;color:var(--navy)">${escHtml(g.noFactura||'—')}</td>
             <td><span class="badge ${esUSD?'badge-blue':'badge-green'}" style="font-size:11px">${g.moneda||'RD$'}</span></td>
             <td style="font-size:12px">${escHtml(g.cuenta||'—')}</td>
             <td style="font-weight:700;color:var(--navy)">${fV(g.montoFactura)}</td>
@@ -4510,7 +4512,7 @@ function renderGastosVeh(){
             <td style="font-size:12px;color:var(--gray)">${fmtDate(g.fechaPago)||'—'}</td>
             <td><span class="badge ${sColor[g.statusGasto||'PENDIENTE']||'badge-gray'}">${g.statusGasto||'PENDIENTE'}</span></td>
           </tr>`;
-        }).join(''):'<tr><td colspan="12" style="text-align:center;padding:24px;color:var(--gray)">Sin gastos registrados</td></tr>'}
+        }).join(''):'<tr><td colspan="13" style="text-align:center;padding:24px;color:var(--gray)">Sin gastos registrados</td></tr>'}
         </tbody>
       </table></div>
     </div>`;
@@ -7069,7 +7071,8 @@ function renderCXP(){
           <th>Suplidor</th>
           <th style="min-width:130px">Vehículo / VIN</th>
           <th style="max-width:130px">Tipo de Gasto</th>
-          <th>Factura</th>
+          <th>No. Factura</th>
+          <th>M. Factura</th>
           <th>Pagado</th>
           <th>Pendiente</th>
           <th>F. Pago</th>
@@ -7101,7 +7104,8 @@ function renderCXP(){
             <td style="font-size:11px;color:var(--gray)">${fmtDate(g.fecha)}</td>
             <td style="font-weight:600;font-size:12px;max-width:120px">${escHtml(g.suplidor||'—')}</td>
             <td style="min-width:140px">${nombreVeh?`<div style="font-weight:700;font-size:12px">${escHtml(nombreVeh)}</div><div style="font-family:monospace;font-size:10px;color:var(--blue);margin-top:2px">${escHtml(vinFinal||'Sin VIN')}</div>`:'<span style="color:var(--gray)">—</span>'}</td>
-            <td style="max-width:130px"><span class="badge badge-amber" style="font-size:10px;white-space:normal;line-height:1.3">${escHtml(g._origen==='manual'?(g.descripcion||g.tipo||'—'):g.tipo||'—')}</span></td>
+            <td style="max-width:130px"><span class="badge badge-amber" style="font-size:10px;white-space:normal;line-height:1.3">${escHtml(g._origen==='manual'?(g.descripcion||g.tipo||'—'):g.tipo||'—')}</span>${g.noFactura?`<div style="font-family:monospace;font-size:10px;color:var(--blue);margin-top:2px">${escHtml(g.noFactura)}</div>`:''}</td>
+            <td style="font-family:monospace;font-size:11px;color:var(--navy)">${escHtml(g.noFactura||'—')}</td>
             <td style="font-weight:600">${fmtMon(g.montoFactura||0)}</td>
             <td style="color:var(--green)">${fmtMon(g.montoPagado||0)}</td>
             <td style="font-weight:800;color:var(--red)">${fmtMon(g.montoPendiente||0)}</td>
@@ -7116,7 +7120,7 @@ function renderCXP(){
               </div>
             </td>
           </tr>`;
-        }).join(''):'<tr><td colspan="10" style="text-align:center;padding:32px;color:var(--gray)">✅ Sin cuentas pendientes por pagar</td></tr>'}
+        }).join(''):'<tr><td colspan="11" style="text-align:center;padding:32px;color:var(--gray)">✅ Sin cuentas pendientes por pagar</td></tr>'}
         </tbody>
       </table></div>
     </div>`;
@@ -7192,6 +7196,14 @@ function editarCXP(gid, origen){
       <div class="form-field"><label>Fecha</label>
         <input type="date" id="ecxp-fecha" value="${g.fecha||today()}">
       </div>
+    </div>
+    <div class="form-row c2">
+      <div class="form-field"><label>No. Factura</label>
+        <input type="text" id="ecxp-nofactura" value="${escHtml(g.noFactura||'')}" placeholder="Ej: FAC-0001">
+      </div>
+      <div class="form-field"><label>Comentario</label>
+        <textarea id="ecxp-comentario" rows="2" placeholder="Notas adicionales...">${escHtml(g.comentario||g.observacion||'')}</textarea>
+      </div>
     </div>`,
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
      <button class="btn btn-primary" onclick="guardarEditCXP('${gid}','${origen}')">💾 Actualizar</button>`);
@@ -7223,6 +7235,8 @@ function guardarEditCXP(gid, origen){
   arr[i].montoPagado = pagado;
   arr[i].montoPendiente = pendiente;
   arr[i].fecha = document.getElementById('ecxp-fecha').value;
+  arr[i].noFactura = document.getElementById('ecxp-nofactura')?.value.trim()||'';
+  arr[i].comentario = document.getElementById('ecxp-comentario')?.value.trim()||'';
   arr[i].statusGasto = pendiente<=0?'PAGADO':pagado>0?'ABONADO':'PENDIENTE';
   if(origen==='manual') sDB('cxp'); else sDB('gastosVehiculos');
   closeModal();
