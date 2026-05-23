@@ -853,8 +853,9 @@ function logBit(modulo,accion,detalle){
     accion,
     detalle:(detalle||'').substring(0,120)
   });
-  if(DB.bitacora.length>200)DB.bitacora=DB.bitacora.slice(0,200);
+  if(DB.bitacora.length>500)DB.bitacora=DB.bitacora.slice(0,500);
   sDB('bitacora');
+  if(typeof fbGuardar==='function'&&window._fbActivo){fbGuardar('bitacora').catch(()=>{});}
 }
 
 function renderBitacora(){
@@ -5459,8 +5460,9 @@ function nuevaVenta(){
       <div class="form-field"><label>Fecha de Venta</label><input type="date" id="sv-fecha" value="${today()}"></div>
       <div class="form-field"><label>Método de Pago</label>
         <select id="sv-pago">
-          <option>Contado</option><option>Financiamiento</option>
+          <option>Efectivo</option><option>Financiamiento</option>
           <option>Transferencia</option><option>Cheque</option><option>Mixto</option>
+          <option>Tarjeta de Crédito</option><option>Tarjeta de Débito</option>
         </select>
       </div>
       <div class="form-field"><label>Banco</label>
@@ -6042,7 +6044,7 @@ function editarVenta(vid){
     </div>
     <div class="form-row c2">
       <div class="form-field"><label>Método de Pago</label>
-        <select id="ev-pago">${['Contado','Financiamiento','Transferencia','Cheque','Mixto'].map(p=>`<option ${p===v.metodoPago?'selected':''}>${p}</option>`).join('')}</select>
+        <select id="ev-pago">${['Efectivo','Financiamiento','Transferencia','Cheque','Mixto','Tarjeta de Crédito','Tarjeta de Débito'].map(p=>`<option ${p===v.metodoPago?'selected':''}>${p}</option>`).join('')}</select>
       </div>
       <div class="form-field"><label>Notas</label><input type="text" id="ev-motivo" value="${escHtml(v.motivoTransito||'')}"></div>
     </div>`,
@@ -10151,6 +10153,8 @@ window.forzarSincronizacion = async function(){
     toast('Error al sincronizar: '+e.message,'error');
   }
 };
+
+
 
 window.fbIniciar = async function(){
   const dot=document.getElementById('fb-dot');
