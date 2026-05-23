@@ -1605,7 +1605,7 @@ function eliminarVehiculo(id){
   const v=DB.vehiculos.find(x=>x.id===id);
   openModal('Eliminar Vehículo',`<p>¿Eliminar <strong>${v?.marca} ${v?.modelo} ${v?.anio}</strong>?</p>`,
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
-     <button class="btn btn-red" onclick="DB.vehiculos=DB.vehiculos.filter(x=>x.id!=='${id}');sDB('vehiculos');closeModal();toast('Eliminado','success');renderInventario()">🗑 Eliminar</button>`);
+     <button class="btn btn-red" onclick="DB.vehiculos=DB.vehiculos.filter(x=>x.id!=='${id}');sDB('vehiculos');logBit('inventario','Eliminó vehículo','${v?.codigo||''} ${v?.marca||''} ${v?.modelo||''}');closeModal();toast('Eliminado','success');renderInventario()">🗑 Eliminar</button>`);
 }
 
 // ══ GASTOS DEL VEHÍCULO ══
@@ -1706,7 +1706,7 @@ function agregarGastoVeh(vid){
   toast('Gasto agregado ✓','success');
   gastosVehiculo(vid);
 }
-function eliminarGastoVeh(gid,vid){if(currentUser?.role!=='admin'&&!canDo('eliminar')){toast('No tienes permiso para eliminar','error');return;}DB.gastosVehiculos=(DB.gastosVehiculos||[]).filter(g=>g.id!==gid);sDB('gastosVehiculos');toast('Eliminado','success');gastosVehiculo(vid);}
+function eliminarGastoVeh(gid,vid){if(currentUser?.role!=='admin'&&!canDo('eliminar')){toast('No tienes permiso para eliminar','error');return;}const _gv=(DB.gastosVehiculos||[]).find(g=>g.id===gid);DB.gastosVehiculos=(DB.gastosVehiculos||[]).filter(g=>g.id!==gid);sDB('gastosVehiculos');logBit('gastosVeh','Eliminó gasto vehículo',(_gv?.tipo||'')+(` — `)+(_gv?.descripcion||''));toast('Eliminado','success');gastosVehiculo(vid);}
 
 function imprimirGastosVehiculo(vid){
   const v=DB.vehiculos.find(x=>x.id===vid);if(!v)return;
@@ -1928,7 +1928,7 @@ function renderCaja(){
           <td style="font-weight:700;color:${c.tipo==='ENTRADA'?'var(--green)':'var(--red)'}">${fmt(c.monto)}</td>
           <td style="font-size:12px;color:var(--gray)">${escHtml(c.referencia||'—')}</td>
           <td style="font-size:12px">${escHtml(c.responsable||'—')}</td>
-          <td>${(currentUser?.role==='admin'||canDo('eliminar'))?`<button class="btn btn-red btn-sm" onclick="DB.caja.splice(${i},1);sDB('caja');renderCaja()">🗑</button>`:''}</td>
+          <td>${(currentUser?.role==='admin'||canDo('eliminar'))?`<button class="btn btn-red btn-sm" onclick="logBit('caja','Eliminó registro de caja',DB.caja[${i}]?.descripcion||'');DB.caja.splice(${i},1);sDB('caja');renderCaja()">🗑</button>`:''}</td>
         </tr>`;}).join('')||'<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--gray)">Sin registros</td></tr>'}
         </tbody></table></div>
     </div>`;
@@ -2111,7 +2111,7 @@ function gasAccion(accion){
   if(!gasSelectedId)return;
   const i=DB.gastos.findIndex(g=>g.id===gasSelectedId);if(i<0)return;
   if(accion==='editar'&&!canDo('editar')){toast('No tienes permiso para editar','error');return;}else if(accion==='editar')editarGasto(i);
-  else if(accion==='eliminar'&&!canDo('eliminar')){toast('No tienes permiso para eliminar','error');return;}else if(accion==='eliminar'){if(currentUser?.role!=='admin'&&!canDo('eliminar')){toast('No tienes permiso para eliminar','error');return;}DB.gastos.splice(i,1);sDB('gastos');toast('Eliminado','success');gasSelectedId=null;renderGastos();}
+  else if(accion==='eliminar'&&!canDo('eliminar')){toast('No tienes permiso para eliminar','error');return;}else if(accion==='eliminar'){if(currentUser?.role!=='admin'&&!canDo('eliminar')){toast('No tienes permiso para eliminar','error');return;}const _gd=DB.gastos[i];logBit('gastos','Eliminó gasto empresa',_gd?.descripcion||'');DB.gastos.splice(i,1);sDB('gastos');toast('Eliminado','success');gasSelectedId=null;renderGastos();}
 }
 function editarGasto(i){
   const g=DB.gastos[i];
@@ -2423,7 +2423,7 @@ function nomAccion(accion){
   else if(accion==='pago')registrarPagoNomina(idx);
   else if(accion==='eliminar'&&!canDo('eliminar')){toast('No tienes permiso para eliminar','error');return;}else if(accion==='eliminar'){
     if(currentUser?.role!=='admin'&&!canDo('eliminar')){toast('No tienes permiso para eliminar empleados','error');return;}
-    DB.nomina.splice(idx,1);sDB('nomina');nomSelectedId=null;renderNomina();
+    const _ne=DB.nomina[idx];logBit('nomina','Eliminó empleado',_ne?.nombre||'');DB.nomina.splice(idx,1);sDB('nomina');nomSelectedId=null;renderNomina();
   }
 }
 function guardarEditPagoNomina(pid){
@@ -2832,7 +2832,7 @@ function eliminarUsuario(i){
   if(u.id==='u1'){toast('No puedes eliminar el administrador principal','error');return;}
   openModal('Eliminar Usuario',`<p>¿Eliminar al usuario <strong>${escHtml(u.nombre)}</strong>? Esta acción no se puede deshacer.</p>`,
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
-     <button class="btn btn-red" onclick="DB.users.splice(${i},1);sDB('users');closeModal();renderUsuarios();toast('Usuario eliminado','success')">🗑 Eliminar</button>`);
+     <button class="btn btn-red" onclick="logBit('usuarios','Eliminó usuario',DB.users[${i}]?.nombre||'');DB.users.splice(${i},1);sDB('users');closeModal();renderUsuarios();toast('Usuario eliminado','success')">🗑 Eliminar</button>`);
 }
 
 function editarUsuario(i){
@@ -3195,7 +3195,9 @@ function borrarClienteCumple(id){
      <button class="btn btn-red" onclick="confirmarBorrarClienteCumple('${id}')">🗑️ Eliminar</button>`);
 }
 function confirmarBorrarClienteCumple(id){
+  const _cc=(DB.clientes||[]).find(x=>x.id===id);
   DB.clientes=(DB.clientes||[]).filter(x=>x.id!==id);
+  logBit('cumpleanos','Eliminó cliente',_cc?.nombre||'');
   sDB('clientes');closeModal();toast('Cliente eliminado','success');renderCumpleanos();
 }
 
@@ -6325,7 +6327,7 @@ function cotAccion(accion){
     if(currentUser?.role!=='admin'&&!canDo('eliminar')){toast('No tienes permiso para eliminar','error');return;}
     openModal('Eliminar',`<p>¿Eliminar cotización de <strong>${escHtml(DB.cotizaciones[i].cliente)}</strong>?</p>`,
       `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
-       <button class="btn btn-red" onclick="DB.cotizaciones.splice(${i},1);sDB('cotizaciones');closeModal();toast('Eliminado','success');renderCotizaciones()">🗑 Eliminar</button>`);
+       <button class="btn btn-red" onclick="logBit('cotizaciones','Eliminó cotización',DB.cotizaciones[${i}]?.cliente||'');DB.cotizaciones.splice(${i},1);sDB('cotizaciones');closeModal();toast('Eliminado','success');renderCotizaciones()">🗑 Eliminar</button>`);
   }
 }
 // ══ CLIENTES ══
@@ -6370,7 +6372,7 @@ function renderClientes(){
 }
 function nuevoCliente(){openModal('Nuevo Cliente',formCliente(null),`<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="guardarCliente()">💾 Guardar</button>`);}
 function editarCliente(i){openModal('Editar Cliente',formCliente(DB.clientes[i]),`<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="guardarCliente(${i})">💾 Actualizar</button>`);}
-function eliminarCliente(i){if(currentUser?.role!=='admin'&&!canDo('eliminar')){toast('No tienes permiso para eliminar','error');return;}openModal('Eliminar',`<p>¿Eliminar <strong>${escHtml(DB.clientes[i].nombre)}</strong>?</p>`,`<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-red" onclick="DB.clientes.splice(${i},1);sDB('clientes');closeModal();toast('Eliminado','success');renderClientes()">🗑 Eliminar</button>`);}
+function eliminarCliente(i){if(currentUser?.role!=='admin'&&!canDo('eliminar')){toast('No tienes permiso para eliminar','error');return;}openModal('Eliminar',`<p>¿Eliminar <strong>${escHtml(DB.clientes[i].nombre)}</strong>?</p>`,`<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-red" onclick="logBit('clientes','Eliminó cliente','${escHtml(DB.clientes[i].nombre)}');DB.clientes.splice(${i},1);sDB('clientes');closeModal();toast('Eliminado','success');renderClientes()">🗑 Eliminar</button>`);}
 
 
 // ══ COTIZACIONES (funciones) ══
@@ -6955,7 +6957,7 @@ function supAccion(accion){
   const idx=DB.suplidores.findIndex((x,i)=>(x.id||String(i))===supSelectedId);
   if(idx<0)return;
   if(accion==='editar'&&!canDo('editar')){toast('No tienes permiso para editar','error');return;}else if(accion==='editar')editarSuplidor(idx);
-  else if(accion==='eliminar'&&!canDo('eliminar')){toast('No tienes permiso para eliminar','error');return;}else if(accion==='eliminar'){if(currentUser?.role!=='admin'&&!canDo('eliminar')){toast('No tienes permiso para eliminar','error');return;}DB.suplidores.splice(idx,1);sDB('suplidores');toast('Eliminado','success');renderSuplidores();}
+  else if(accion==='eliminar'&&!canDo('eliminar')){toast('No tienes permiso para eliminar','error');return;}else if(accion==='eliminar'){if(currentUser?.role!=='admin'&&!canDo('eliminar')){toast('No tienes permiso para eliminar','error');return;}const _sp=DB.suplidores[idx];logBit('suplidores','Eliminó suplidor',_sp?.empresa||_sp?.nombre||'');DB.suplidores.splice(idx,1);sDB('suplidores');toast('Eliminado','success');renderSuplidores();}
 }
 
 function supAccionDirecta(accion,id){
@@ -6966,7 +6968,7 @@ function supAccionDirecta(accion,id){
   else if(accion==='eliminar'){
     if(currentUser?.role!=='admin'&&!canDo('eliminar')){toast('No tienes permiso para eliminar','error');return;}
     if(!confirm('¿Eliminar este suplidor?'))return;
-    DB.suplidores.splice(idx,1);sDB('suplidores');toast('Suplidor eliminado','success');renderSuplidores();
+    const _spd=DB.suplidores[idx];logBit('suplidores','Eliminó suplidor',_spd?.empresa||_spd?.nombre||'');DB.suplidores.splice(idx,1);sDB('suplidores');toast('Suplidor eliminado','success');renderSuplidores();
   }
 }
 
@@ -8596,7 +8598,7 @@ function authAccion(accion){
   else if(accion==='eliminar'&&!canDo('eliminar')){toast('No tienes permiso para eliminar','error');return;}else if(accion==='eliminar'){
     openModal('Eliminar Autorización',`<p>¿Eliminar esta autorización de compra para <strong>${escHtml(a.suplidor)}</strong>?</p>`,
       `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
-       <button class="btn btn-red" onclick="DB.autorizaciones.splice(${idx},1);sDB('autorizaciones');closeModal();authSelectedId=null;renderAutorizaciones();toast('Eliminada','success')">🗑 Eliminar</button>`);
+       <button class="btn btn-red" onclick="logBit('autorizaciones','Eliminó autorización',DB.autorizaciones[${idx}]?.suplidor||'');DB.autorizaciones.splice(${idx},1);sDB('autorizaciones');closeModal();authSelectedId=null;renderAutorizaciones();toast('Eliminada','success')">🗑 Eliminar</button>`);
   }
 }
 function nuevaAutorizacion(){
