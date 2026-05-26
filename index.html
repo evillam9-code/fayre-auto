@@ -5069,7 +5069,7 @@ function _generarHojaCostosPDF(gastos,filtroVeh){
   <div class="hdr">
     <div>${logo?`<img src="${logo}">`:''}
       <div class="hdr-emp"><strong>${escHtml(empresa)}</strong>
-        ${rnc?`<strong>RNC: ${escHtml(rnc)}</strong><br>`:''}${dir?`${escHtml(dir)}<br>`:''}${tel?`Tel: ${escHtml(tel)}`:''}
+        ${rnc?`RNC: ${escHtml(rnc)}<br>`:''}${dir?`${escHtml(dir)}<br>`:''}${tel?`Tel: ${escHtml(tel)}`:''}
       </div>
     </div>
     <div><div class="hdr-titulo">Hoja de Costos</div>
@@ -5216,7 +5216,7 @@ function _generarPDFGastosVeh(gastos,tasa,filtroSup,filtroVeh,soloUnVeh){
     <div>
       ${logo?`<img src="${logo}" style="max-height:60px;max-width:160px;object-fit:contain;margin-bottom:8px;display:block">`:''}
       <h2>${escHtml(empresa)}</h2>
-      ${rnc?`<div style="font-size:11px;color:#475569"><strong>RNC: ${escHtml(rnc)}</strong></div>`:''}
+      ${rnc?`<div style="font-size:11px;color:#475569">RNC: ${escHtml(rnc)}</div>`:''}
       ${tel?`<div style="font-size:11px;color:#475569">Tel: ${escHtml(tel)}</div>`:''}
       ${dir?`<div style="font-size:11px;color:#475569">${escHtml(dir)}</div>`:''}
       <h3 style="margin-top:6px">REPORTE DE GASTOS DE VEHÍCULO — ${filtroLabel}</h3>
@@ -6545,22 +6545,22 @@ function imprimirCotizacion(i){
   const precio=parseFloat(c.precio||0);
   const precioRD=esUSD?(precio*tasa):precio;
   const fmtPrecioRD='RD$ '+precioRD.toLocaleString('es-DO',{minimumFractionDigits:2,maximumFractionDigits:2});
-  const marca=escHtml(vObj?.marca||c.marca||'\u2014');
-  const modelo=escHtml(vObj?.modelo||c.modelo||'\u2014');
-  const anio=vObj?.anio||c.anio||'\u2014';
-  const color=escHtml(vObj?.color||c.color||'\u2014');
-  const vin=escHtml(vObj?.vin||c.vin||'\u2014');
-  const placa=escHtml(vObj?.placa||c.placa||'EN TR\u00c1MITE');
-  const cliente=escHtml(c.cliente||'\u2014');
-  const tipoDoc=escHtml(c.tipoDoc||'C\u00e9dula');
-  const documento=escHtml(c.documento||c.cedula||'\u2014');
-  const banco=escHtml(c.banco||'\u2014');
+  const marca=escHtml(vObj?.marca||c.marca||'—');
+  const modelo=escHtml(vObj?.modelo||c.modelo||'—');
+  const anio=vObj?.anio||c.anio||'—';
+  const color=escHtml(vObj?.color||c.color||'—');
+  const vin=escHtml(vObj?.vin||c.vin||'—');
+  const placa=escHtml(vObj?.placa||c.placa||'EN TRÁMITE');
+  const cliente=escHtml(c.cliente||'—');
+  const tipoDoc=escHtml(c.tipoDoc||'Cédula');
+  const documento=escHtml(c.documento||c.cedula||'—');
+  const banco=escHtml(c.banco||'—');
   const telefCli=c.telefono?`, Tel: <strong>${escHtml(c.telefono)}</strong>`:'';
   const fechaStr=fmtDate(c.fecha);
-  const vence=c.fechaVence?` | V\u00e1lida hasta: ${fmtDate(c.fechaVence)}`:'';
+  const vence=c.fechaVence?` | Válida hasta: ${fmtDate(c.fechaVence)}`:'';
   const win=window.open('','_blank','width=820,height=900');
   win.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
-  <title>Cotizaci\u00f3n \u2014 ${cliente}</title>
+  <title>Cotización — ${cliente}</title>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:'Times New Roman',Times,serif;font-size:13px;color:#0f172a;background:#fff}
@@ -6602,12 +6602,12 @@ function imprimirCotizacion(i){
         <div>
           <div class="emp-nombre">${escHtml(empresa)}</div>
           <div class="emp-sub">${escHtml(direccion)}</div>
-          <div class="emp-sub">Tel: ${escHtml(telefono)} &amp;nbsp;·&amp;nbsp; <a href="mailto:${escHtml(correo)}" style="color:#2563eb;text-decoration:none">${escHtml(correo)}</a></div>
-          <div class="emp-sub"><strong><strong>RNC: ${escHtml(rnc)}</strong></strong></div>
+          <div class="emp-sub">Tel: ${escHtml(telefono)} &nbsp;·&nbsp; <a href="mailto:${escHtml(correo)}" style="color:#2563eb;text-decoration:none">${escHtml(correo)}</a></div>
+          <div class="emp-sub"><strong>RNC: ${escHtml(rnc)}</strong></div>
         </div>
       </div>
       <div>
-        <div class="titulo-doc">Cotizaci\u00f3n</div>
+        <div class="titulo-doc">Cotización</div>
         <div class="fecha-info">Fecha: ${fechaStr}${vence}</div>
       </div>
     </div>
@@ -6617,16 +6617,16 @@ function imprimirCotizacion(i){
     </div>
     <div class="intro">
       Por medio de la presente, ${escHtml(empresa)} se dirige a <strong>${banco}</strong>
-      con la finalidad de presentar la cotizaci\u00f3n del siguiente veh\u00edculo a nombre de
+      con la finalidad de presentar la cotización del siguiente vehículo a nombre de
       <strong>${cliente}</strong>, ${tipoDoc}: <strong>${documento}</strong>${telefCli},
       para fines de financiamiento vehicular.
     </div>
     <div style="margin-bottom:16px">
-      <div class="sec-tit">\ud83d\ude97 Veh\u00edculo a Financiar</div>
+      <div class="sec-tit">🚗 Vehículo a Financiar</div>
       <div class="g3">
         <div class="campo"><label>Marca</label><span>${marca}</span></div>
         <div class="campo"><label>Modelo</label><span>${modelo}</span></div>
-        <div class="campo"><label>A\u00f1o</label><span>${anio}</span></div>
+        <div class="campo"><label>Año</label><span>${anio}</span></div>
         <div class="campo"><label>Color</label><span>${color}</span></div>
         <div class="campo"><label>Chasis / VIN</label><span class="mono">${vin}</span></div>
         <div class="campo"><label>Placa</label><span>${placa}</span></div>
@@ -6640,7 +6640,7 @@ function imprimirCotizacion(i){
     </div>
     <div class="cierre">
       Para aclarar cualquier punto, comunicarse al Tel: <strong>${escHtml(telefono)}</strong> | Correo: <a href="mailto:${escHtml(correo)}" style="color:#2563eb;text-decoration:none">${escHtml(correo)}</a>.<br>
-      Quedamos a su entera disposici\u00f3n.<br><br>Muy Atentamente,
+      Quedamos a su entera disposición.<br><br>Muy Atentamente,
     </div>
     <div class="firma-wrap">
       <div class="firma-box">
@@ -6652,12 +6652,13 @@ function imprimirCotizacion(i){
       </div>
     </div>
     <div class="noprint">
-      <button onclick="window.print()" style="padding:12px 32px;background:#1e3a8a;color:#fff;border:none;border-radius:8px;font-size:15px;cursor:pointer;font-weight:700">\ud83d\udda8\ufe0f Imprimir / PDF</button>
-      <button onclick="window.close()" style="padding:12px 20px;background:#e2e8f0;color:#0f172a;border:none;border-radius:8px;font-size:14px;cursor:pointer;font-weight:600">\u2716 Cerrar</button>
+      <button onclick="window.print()" style="padding:12px 32px;background:#1e3a8a;color:#fff;border:none;border-radius:8px;font-size:15px;cursor:pointer;font-weight:700">🖨️ Imprimir / PDF</button>
+      <button onclick="window.close()" style="padding:12px 20px;background:#e2e8f0;color:#0f172a;border:none;border-radius:8px;font-size:14px;cursor:pointer;font-weight:600">✖ Cerrar</button>
     </div>
-  </div></body></html>\`);
+  </div></body></html>`);
   win.document.close();
 }
+
 
 // ══ CLIENTES (mejorado: solo RD, foto docs, referencia) ══
 function formCliente(c){return`
@@ -8284,7 +8285,7 @@ function imprimirCXC(){
     <div>
       ${logo?`<img src="${logo}" style="max-height:55px;max-width:150px;object-fit:contain;margin-bottom:6px;display:block">`:''} 
       <h2>${escHtml(empresa)}</h2>
-      ${rnc?`<div style="font-size:11px;color:#475569"><strong>RNC: ${escHtml(rnc)}</strong></div>`:''}
+      ${rnc?`<div style="font-size:11px;color:#475569">RNC: ${escHtml(rnc)}</div>`:''}
       ${tel?`<div style="font-size:11px;color:#475569">Tel: ${escHtml(tel)}</div>`:''}
       ${dir?`<div style="font-size:11px;color:#475569">${escHtml(dir)}</div>`:''}
       <h3>CUENTAS POR COBRAR — ${esUSD?'USD DÓLARES':'RD$ PESOS'}</h3>
@@ -9049,7 +9050,7 @@ function verFormLavado(i){
     </div>
 
     <div class="pie">
-      ${escHtml(direccion)} &bull; <strong>Tel.: ${escHtml(telefono)}</strong> &bull; e-mail: ${escHtml(correo)} &bull; <strong><strong>RNC: ${escHtml(rnc)}</strong></strong>
+      ${escHtml(direccion)} &bull; <strong>Tel.: ${escHtml(telefono)}</strong> &bull; e-mail: ${escHtml(correo)} &bull; <strong>RNC: ${escHtml(rnc)}</strong>
     </div>
   </div>
 
@@ -9147,7 +9148,7 @@ function verFormLavado(i){
     </div>
 
     <div class="pie">
-      ${escHtml(direccion)} &bull; <strong>Tel.: ${escHtml(telefono)}</strong> &bull; e-mail: ${escHtml(correo)} &bull; <strong><strong>RNC: ${escHtml(rnc)}</strong></strong>
+      ${escHtml(direccion)} &bull; <strong>Tel.: ${escHtml(telefono)}</strong> &bull; e-mail: ${escHtml(correo)} &bull; <strong>RNC: ${escHtml(rnc)}</strong>
     </div>
 
     <div class="noprint">
