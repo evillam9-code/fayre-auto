@@ -343,6 +343,7 @@ async function publicarNuevaVersion(silencioso){
     <div class="nav-item" onclick="showPage('clientes')" id="nav-clientes"><span class="ico">👤</span>Clientes</div>
     <div class="nav-item" onclick="showPage('ventas')" id="nav-ventas"><span class="ico">💰</span>Ventas</div>
     <div class="nav-item" onclick="showPage('cxc')" id="nav-cxc"><span class="ico">📬</span>Cuentas por Cobrar</div>
+    <div class="nav-item" onclick="showPage('lavado')" id="nav-lavado"><span class="ico">🛡️</span>Lavado de Activos</div>
     <div class="sb-sec">FINANZAS</div>
     <div class="nav-item" onclick="showPage('gastos')" id="nav-gastos"><span class="ico">🏢</span>Gastos Empresa</div>
     <div class="nav-item" onclick="showPage('nomina')" id="nav-nomina"><span class="ico">👷</span>Nómina</div>
@@ -401,6 +402,7 @@ async function publicarNuevaVersion(silencioso){
       <div class="page" id="page-gastosVeh"></div>
       <div class="page" id="page-cxp"></div>
       <div class="page" id="page-cxc"></div>
+      <div class="page" id="page-lavado"></div>
       <div class="page" id="page-autorizaciones"></div>
       <div class="page" id="page-seguros"></div>
       <div class="page" id="page-facturaExterna"></div>
@@ -466,6 +468,7 @@ let DB={
   gastosVehiculos:ls('gastosVehiculos')||[],
   cxp:ls('cxp')||[],
   cxc:ls('cxc')||[],
+  lavado:ls('lavado')||[],
   autorizaciones:ls('autorizaciones')||[],
   seguros:ls('seguros')||[],
   facturasExternas:ls('facturasExternas')||[],
@@ -776,7 +779,7 @@ function aplicarPermisosNav(){
   if(!currentUser)return;
   // Ocultar nav-items de módulos sin acceso
   const MODS_NAV=['dashboard','informes','suplidores','inventario','gastosVeh','cxp',
-    'clientes','ventas','cxc','gastos','nomina','caja','cotizaciones','autorizaciones','seguros','facturaExterna','alertas','verSaldoCaja','chat','usuarios','config','cumpleanos','cuentas'];
+    'clientes','ventas','cxc','lavado','gastos','nomina','caja','cotizaciones','autorizaciones','seguros','facturaExterna','alertas','verSaldoCaja','chat','usuarios','config','cumpleanos','cuentas'];
   MODS_NAV.forEach(id=>{
     const nav=document.getElementById('nav-'+id);
     if(!nav)return;
@@ -970,7 +973,7 @@ function showPage(id){
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   const sb=document.getElementById('sidebar');const ov=document.getElementById('sidebar-overlay');
   if(sb&&window.innerWidth<=768){sb.classList.remove('open');if(ov)ov.classList.remove('open');}
-  const r={dashboard:renderDashboard,inventario:renderInventario,ventas:renderVentas,cotizaciones:renderCotizaciones,clientes:renderClientes,suplidores:renderSuplidores,caja:renderCaja,gastos:renderGastos,nomina:renderNomina,informes:renderInformes,usuarios:renderUsuarios,config:renderConfig,gastosVeh:renderGastosVeh,cxp:renderCXP,cxc:renderCXC,autorizaciones:renderAutorizaciones,seguros:renderSeguros,facturaExterna:renderFacturaExterna,alertas:renderAlertas,chat:renderChat,cumpleanos:renderCumpleanos,cuentas:renderCuentas,backup:renderBackup,bitacora:renderBitacora};
+  const r={dashboard:renderDashboard,inventario:renderInventario,ventas:renderVentas,cotizaciones:renderCotizaciones,clientes:renderClientes,suplidores:renderSuplidores,caja:renderCaja,gastos:renderGastos,nomina:renderNomina,informes:renderInformes,usuarios:renderUsuarios,config:renderConfig,gastosVeh:renderGastosVeh,cxp:renderCXP,cxc:renderCXC,lavado:renderLavado,autorizaciones:renderAutorizaciones,seguros:renderSeguros,facturaExterna:renderFacturaExterna,alertas:renderAlertas,chat:renderChat,cumpleanos:renderCumpleanos,cuentas:renderCuentas,backup:renderBackup,bitacora:renderBitacora};
   // Refresh Firebase si han pasado más de 60 segundos
   const ahora=Date.now();
   if(window._fbActivo&&window._fbCargado&&(!window._lastFbRefresh||ahora-window._lastFbRefresh>60000)){
@@ -6504,91 +6507,425 @@ function editarCotizacion(i){
 function imprimirCotizacion(i){
   const c=DB.cotizaciones[i];if(!c)return;
   const vObj=c.vehiculoId?DB.vehiculos.find(v=>v.id===c.vehiculoId):null;
-  const tasa=parseFloat(DB.config.tasaCambio||60);
-  const esUSD=c.moneda==='USD';
-  const fV=(n)=>esUSD?'$'+parseFloat(n||0).toLocaleString('en-US',{minimumFractionDigits:2})+' USD':fmt(n);
-  const empresa=DB.config.empresa||'DealerSystem';
+  const empresa=DB.config.empresa||'Credit Fayre';
   const logo=DB.config.logoData||DB.config.logo||'';
-  const win=window.open('','_blank','width=820,height=750');
-  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
-  <title>Cotización — ${escHtml(c.cliente||'')} — ${escHtml(c.vehiculo||'')}</title>
-  <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',Arial,sans-serif;font-size:12px;color:#0f172a}
-  .page{max-width:700px;margin:0 auto;padding:32px}
-  .hdr{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:16px;border-bottom:4px solid #2563eb;margin-bottom:20px}
-  .logo-box{width:60px;height:60px;background:#2563eb;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:900;color:#fff;flex-shrink:0}
-  .emp{margin-left:14px}.emp-nombre{font-size:18px;font-weight:900}.emp-sub{font-size:10px;color:#6b7280;margin-top:2px}
-  .titulo-doc{font-size:20px;font-weight:900;color:#2563eb;text-transform:uppercase}
-  .banco-dest{font-size:13px;font-weight:700;margin-top:6px}.fecha-info{font-size:11px;color:#6b7280;margin-top:4px}
-  .intro{background:#f8fafc;border-radius:8px;padding:14px;margin-bottom:18px;font-size:12px;line-height:1.6;color:#374151}
-  .sec-titulo{font-size:10px;font-weight:800;text-transform:uppercase;color:#fff;background:#0f172a;padding:4px 10px;border-radius:4px;margin-bottom:10px;display:inline-block}
-  .g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px}
-  .campo label{font-size:9px;font-weight:700;text-transform:uppercase;color:#94a3b8;display:block;margin-bottom:2px}
-  .campo span{font-size:12px;font-weight:600;display:block;padding:5px 8px;background:#f8fafc;border-radius:4px;border-left:3px solid #2563eb}
-  .monto-box{background:#f0fdf4;border:2px solid #16a34a;border-radius:8px;padding:16px;text-align:center;margin:16px 0}
-  .monto-label{font-size:11px;font-weight:700;text-transform:uppercase;color:#16a34a;margin-bottom:6px}
-  .monto-val{font-size:30px;font-weight:900;color:#16a34a}
-  .monto-sub{font-size:11px;color:#6b7280;margin-top:4px}
-  .firma{margin-top:48px;text-align:center}
-  .firma-linea{border-top:1px solid #000;padding-top:5px;font-size:11px;color:#475569;display:inline-block;min-width:200px}
-  .pie{text-align:center;font-size:9px;color:#94a3b8;margin-top:20px;padding-top:10px;border-top:1px solid #e2e8f0}
-  @media print{.noprint{display:none}}</style></head><body><div class="page">
+  const direccion=DB.config.direccion||'Av. Duarte km 16, Tramo Santiago la Vega, Santiago, República Dominicana';
+  const telefono=DB.config.telefono||'(809) 770-4184';
+  const correo=DB.config.correo||'info@creditfayre.com';
+  const rnc=DB.config.rnc||'1-31-65403-7';
+  const responsable=DB.config.responsable||empresa;
+  // Precio siempre en RD$ (sin mostrar tasa)
+  const precio=parseFloat(c.precio||0);
+  const precioRD=c.moneda==='USD'?(precio*(parseFloat(DB.config.tasaCambio||60))):precio;
+  const fmtPrecioRD='RD$ '+precioRD.toLocaleString('es-DO',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const marca=escHtml(vObj?.marca||c.marca||'');
+  const modelo=escHtml(vObj?.modelo||c.modelo||'');
+  const anio=vObj?.anio||c.anio||'';
+  const color=escHtml(vObj?.color||c.color||'');
+  const vin=escHtml(vObj?.vin||c.vin||'');
+  const placa=escHtml(vObj?.placa||c.placa||'TRAMITE');
+  const cliente=escHtml(c.cliente||'');
+  const tipoDoc=escHtml(c.tipoDoc||'Cédula');
+  const documento=escHtml(c.documento||c.cedula||'');
+  const banco=escHtml(c.banco||'');
+  const fechaStr=fmtDate(c.fecha);
+  const win=window.open('','_blank','width=860,height=800');
+  win.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+  <title>Cotización — ${cliente} — ${marca} ${modelo}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;color:#0f172a;background:#fff}
+    .page{max-width:720px;margin:0 auto;padding:36px 40px}
+    /* HEADER */
+    .hdr{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:0;padding-bottom:14px;border-bottom:3px solid #1a2a6c}
+    .logo-wrap{display:flex;align-items:center;gap:14px}
+    .logo-img{height:80px;max-width:180px;object-fit:contain}
+    .logo-fallback{width:80px;height:80px;background:#1a2a6c;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:900;color:#fff}
+    .emp-info{font-size:10px;color:#6b7280;line-height:1.6;margin-top:4px}
+    .hdr-right{text-align:right}
+    .doc-titulo{font-size:22px;font-weight:900;color:#1a2a6c;text-transform:uppercase;letter-spacing:1px;text-decoration:underline}
+    .hdr-lugar{font-size:11px;color:#6b7280;margin-top:4px}
+    /* SALUDO */
+    .saludo{margin:18px 0 14px;font-size:12.5px;line-height:1.75;color:#374151}
+    /* TABLA VEHÍCULO */
+    .veh-table{width:100%;border-collapse:collapse;margin:16px 0}
+    .veh-table td{padding:7px 12px;font-size:12px;border:1px solid #e2e8f0;vertical-align:middle}
+    .veh-table .lbl{font-weight:800;text-transform:uppercase;font-size:10px;color:#1a2a6c;width:38%;text-align:right;background:#f1f5f9}
+    .veh-table .val{font-weight:700;color:#0f172a;background:#fff}
+    /* MONTO */
+    .monto-wrap{margin:18px 0;text-align:center}
+    .monto-inner{display:inline-block;border:2px solid #1a2a6c;border-radius:8px;padding:14px 36px}
+    .monto-label{font-size:10px;font-weight:700;text-transform:uppercase;color:#1a2a6c;letter-spacing:.5px;margin-bottom:4px}
+    .monto-val{font-size:28px;font-weight:900;color:#1a2a6c}
+    /* EDITABLE */
+    [contenteditable]{outline:none;border-bottom:1px dashed #94a3b8;min-width:30px;display:inline-block;cursor:text}
+    [contenteditable]:focus{border-bottom:1px solid #2563eb;background:#eff6ff}
+    /* CIERRE */
+    .cierre{font-size:12px;color:#374151;line-height:1.7;margin-top:16px}
+    /* FIRMA */
+    .firma-wrap{margin-top:50px;display:flex;justify-content:flex-end}
+    .firma-box{text-align:center}
+    .firma-linea{border-top:1px solid #0f172a;padding-top:5px;min-width:220px;font-size:11px;color:#475569}
+    .firma-nombre{font-size:13px;font-weight:800;color:#0f172a;margin-top:2px}
+    /* FOOTER */
+    .pie{margin-top:28px;padding-top:10px;border-top:2px solid #1a2a6c;display:flex;align-items:center;gap:10px;font-size:10px;color:#6b7280;line-height:1.5}
+    .pie-logo{height:30px;max-width:70px;object-fit:contain}
+    .pie-logo-fb{width:30px;height:30px;background:#1a2a6c;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:900;color:#fff;flex-shrink:0}
+    /* LAVADO */
+    .lav-section{margin-top:30px;padding-top:20px;border-top:3px double #1a2a6c;page-break-before:always}
+    .lav-title{font-size:14px;font-weight:900;text-align:center;text-decoration:underline;color:#1a2a6c;margin-bottom:4px}
+    .lav-subtitle{font-size:11px;font-weight:700;text-align:center;color:#1a2a6c;margin-bottom:14px}
+    .lav-hdr-row{display:flex;gap:16px;margin-bottom:10px;font-size:11px}
+    .lav-hdr-field{flex:1}
+    .lav-hdr-field label{font-size:10px;font-weight:700;text-transform:uppercase;color:#94a3b8;display:block;margin-bottom:2px}
+    .lav-hdr-field .fe{border:none;border-bottom:1px solid #cbd5e1;width:100%;font-size:11px;font-family:'Segoe UI',Arial,sans-serif;outline:none;padding:2px 0;color:#0f172a;background:transparent}
+    .lav-section-hdr{background:#1a2a6c;color:#fff;font-size:10px;font-weight:700;text-transform:uppercase;padding:4px 10px;margin:10px 0 6px;letter-spacing:.5px}
+    .lav-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px}
+    .lav-grid2{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px}
+    .lav-field label{font-size:9px;font-weight:700;text-transform:uppercase;color:#6b7280;display:block;margin-bottom:2px}
+    .lav-field .fe{border:none;border-bottom:1px solid #cbd5e1;width:100%;font-size:11px;font-family:'Segoe UI',Arial,sans-serif;outline:none;padding:2px 0;color:#0f172a;background:transparent}
+    .lav-tbl{width:100%;border-collapse:collapse;font-size:11px;margin-bottom:8px}
+    .lav-tbl th{background:#e2e8f0;padding:5px 8px;font-size:9px;font-weight:700;text-transform:uppercase;color:#475569;text-align:left;border:1px solid #cbd5e1}
+    .lav-tbl td{padding:4px 8px;border:1px solid #e2e8f0;vertical-align:middle}
+    .lav-tbl .fe{border:none;width:100%;font-size:11px;font-family:'Segoe UI',Arial,sans-serif;outline:none;background:transparent;color:#0f172a}
+    .pep-box{background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:10px 12px;margin-bottom:8px;font-size:11px}
+    .pep-q{font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:8px}
+    .check-row{display:flex;align-items:center;gap:4px;font-size:11px;margin-right:12px}
+    .origen-grid{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 8px;font-size:11px}
+    .origen-item{display:flex;align-items:center;gap:4px}
+    .txn-tbl{width:100%;border-collapse:collapse;font-size:11px;margin-bottom:8px}
+    .txn-tbl th{background:#e2e8f0;padding:5px 8px;font-size:9px;font-weight:700;text-transform:uppercase;color:#475569;border:1px solid #cbd5e1}
+    .txn-tbl td{padding:6px 8px;border:1px solid #e2e8f0}
+    .txn-tbl .fe{border:none;width:100%;font-size:11px;font-family:'Segoe UI',Arial,sans-serif;outline:none;background:transparent;color:#0f172a}
+    .decl-box{font-size:10px;color:#374151;line-height:1.6;margin:10px 0;text-align:justify;border:1px solid #e2e8f0;padding:10px;border-radius:6px;background:#f8fafc}
+    .firma2-row{display:flex;justify-content:space-between;margin-top:30px;gap:20px}
+    .firma2-box{flex:1;text-align:center}
+    .firma2-linea{border-top:1px solid #0f172a;padding-top:4px;font-size:10px;color:#475569}
+    .uso-interno{background:#fff3cd;border:1px solid #ffc107;border-radius:6px;padding:10px 12px;margin-top:12px;font-size:11px}
+    .uso-interno-title{font-weight:700;font-size:11px;margin-bottom:6px;color:#92400e}
+    .riesgo-row{display:flex;gap:20px;margin-top:6px;font-size:11px;align-items:center}
+    .noprint{margin-top:20px;text-align:center}
+    @media print{
+      .noprint{display:none!important}
+      [contenteditable]{border-bottom:none}
+      .fe:focus{outline:none}
+      body{font-size:11px}
+    }
+  </style>
+  </head><body>
+  <div class="page">
+
+  <!-- ══ ENCABEZADO ══ -->
   <div class="hdr">
-    <div style="display:flex;align-items:center">
-      ${logo?`<img src="${logo}" style="width:60px;height:60px;object-fit:contain;border-radius:10px">`:`<div class="logo-box">${escHtml(empresa[0])}</div>`}
-      <div class="emp">
-        <div class="emp-nombre">${escHtml(empresa)}</div>
-        <div class="emp-sub">Venta de Vehículos</div>
-        ${DB.config.direccion?`<div class="emp-sub">${escHtml(DB.config.direccion)}</div>`:''}
-        ${DB.config.telefono?`<div class="emp-sub">Tel: ${escHtml(DB.config.telefono)}</div>`:''}
-        ${DB.config.rnc?`<div class="emp-sub">RNC: ${escHtml(DB.config.rnc)}</div>`:''}
+    <div class="logo-wrap">
+      ${logo?`<img src="${logo}" class="logo-img" alt="Logo">`:`<div class="logo-fallback">${escHtml(empresa[0]||'C')}</div>`}
+    </div>
+    <div class="hdr-right">
+      <div class="doc-titulo">Cotización</div>
+      <div class="hdr-lugar">Santiago de los Caballeros, Rep. Dom.<br>
+        <span contenteditable="true">${fechaStr}</span>
       </div>
     </div>
-    <div style="text-align:right">
-      <div class="titulo-doc">Cotización</div>
-      <div class="banco-dest">Dirigido a: <strong>${escHtml(c.banco||'—')}</strong></div>
-      <div class="fecha-info">Fecha: ${fmtDate(c.fecha)}${c.fechaVence?` | Válida hasta: ${fmtDate(c.fechaVence)}`:''}</div>
+  </div>
+
+  <!-- ══ DESTINATARIO ══ -->
+  <div class="saludo">
+    <strong>Señores:</strong><br>
+    <span contenteditable="true" style="font-weight:700">${banco}</span><br><br>
+    <strong>Estimados Señores,</strong><br>
+    Después de un cordial saludo, nos dirigimos a ustedes con la finalidad de presentarle la siguiente cotización,
+    a nombre del señor(a) <span contenteditable="true" style="font-weight:700">${cliente}</span>,
+    portador(a) de la cédula de identidad y electoral no.
+    <span contenteditable="true" style="font-weight:700">${documento}</span>.
+    Del vehículo que se describe a continuación.
+  </div>
+
+  <!-- ══ DATOS DEL VEHÍCULO ══ -->
+  <table class="veh-table">
+    <tr>
+      <td class="lbl">Tipo de Vehículo</td>
+      <td class="val" contenteditable="true">CAMIONETA</td>
+      <td class="lbl">Color</td>
+      <td class="val" contenteditable="true">${color}</td>
+    </tr>
+    <tr>
+      <td class="lbl">Marca</td>
+      <td class="val" contenteditable="true">${marca}</td>
+      <td class="lbl">Placa</td>
+      <td class="val" contenteditable="true">${placa}</td>
+    </tr>
+    <tr>
+      <td class="lbl">Modelo</td>
+      <td class="val" contenteditable="true">${modelo}</td>
+      <td class="lbl">Año</td>
+      <td class="val" contenteditable="true">${anio}</td>
+    </tr>
+    <tr>
+      <td class="lbl">Chasis / VIN</td>
+      <td class="val" colspan="3" style="font-family:monospace" contenteditable="true">${vin}</td>
+    </tr>
+    <tr>
+      <td class="lbl">Valor</td>
+      <td class="val" colspan="3" contenteditable="true" style="font-size:15px;font-weight:900;color:#1a2a6c">${fmtPrecioRD}</td>
+    </tr>
+  </table>
+
+  <!-- ══ CIERRE ══ -->
+  <div class="cierre">
+    Si desea más información favor comunicarse al no.
+    <strong>${escHtml(telefono)}</strong>.<br>
+    Agradeciéndole de antemano, queda de ustedes.
+  </div>
+
+  <!-- ══ FIRMA ══ -->
+  <div class="firma-wrap">
+    <div class="firma-box">
+      <div style="height:52px"></div>
+      <div class="firma-linea">
+        <div class="firma-nombre"><span contenteditable="true">${escHtml(responsable)}</span></div>
+        Firma del Propietario / Responsable
+      </div>
     </div>
   </div>
-  <div class="intro">
-    Por medio de la presente, <strong>${escHtml(empresa)}</strong> se dirige a <strong>${escHtml(c.banco||'la entidad bancaria')}</strong>
-    con la finalidad de presentar la cotización del siguiente vehículo a nombre de
-    <strong>${escHtml(c.cliente||'—')}</strong>,
-    ${escHtml(c.tipoDoc||'Cédula')}: <strong>${escHtml(c.documento||c.cedula||'—')}</strong>${c.telefono?`, Tel: <strong>${escHtml(c.telefono)}</strong>`:''},
-    para fines de <strong>financiamiento vehicular</strong>.
-  </div>
-  <div style="margin-bottom:14px">
-    <div class="sec-titulo">🚗 Vehículo a Financiar</div>
-    <div class="g3">
-      <div class="campo"><label>Marca</label><span>${escHtml(vObj?.marca||c.marca||'—')}</span></div>
-      <div class="campo"><label>Modelo</label><span>${escHtml(vObj?.modelo||c.modelo||'—')}</span></div>
-      <div class="campo"><label>Año</label><span>${vObj?.anio||c.anio||'—'}</span></div>
-      <div class="campo"><label>Color</label><span>${escHtml(vObj?.color||c.color||'—')}</span></div>
-      <div class="campo"><label>Chasis / VIN</label><span style="font-family:monospace">${escHtml(vObj?.vin||c.vin||'—')}</span></div>
-      <div class="campo"><label>Placa</label><span>${escHtml(vObj?.placa||c.placa||'EN TRÁMITE')}</span></div>
+
+  <!-- ══ PIE DE PÁGINA ══ -->
+  <div class="pie">
+    ${logo?`<img src="${logo}" class="pie-logo" alt="">`:`<div class="pie-logo-fb">${escHtml(empresa[0]||'C')}</div>`}
+    <div>
+      <strong>${escHtml(empresa)}</strong><br>
+      <span>📍 ${escHtml(direccion)}</span><br>
+      <span>📞 Tel: ${escHtml(telefono)}</span>
+      ${correo?` &bull; ✉️ <a href="mailto:${escHtml(correo)}" style="color:inherit">${escHtml(correo)}</a>`:''}
+      ${rnc?` &bull; <strong>RNC: ${escHtml(rnc)}</strong>`:''}
     </div>
   </div>
-  <div class="monto-box">
-    <div class="monto-label">Monto Cotizado para Financiamiento</div>
-    <div class="monto-val">${fV(c.precio)}</div>
-    ${esUSD?`<div class="monto-sub">Equivalente: ${fmt(parseFloat(c.precio||0)*tasa)} | Tasa: RD$ ${tasa} x USD</div>`:''}
-  </div>
-  ${c.notas?`<div style="background:#fef3c7;border-radius:6px;padding:10px 14px;margin-bottom:16px;font-size:12px;color:#92400e">📝 <strong>Observaciones:</strong> ${escHtml(c.notas)}</div>`:''}
-  <div style="font-size:11px;color:#475569;margin-top:16px;line-height:1.7">
-    Para aclarar cualquier punto, comunicarse al Tel: <strong>${escHtml(DB.config.telefono||'—')}</strong>${DB.config.correo?` | Correo: <strong>${escHtml(DB.config.correo)}</strong>`:''}.<br>
-    Quedamos a su entera disposición.<br><br>Muy Atentamente,
-  </div>
-  <div class="firma">
-    <div style="height:50px"></div>
-    <div class="firma-linea">
-      <div style="font-size:13px;font-weight:700;color:#0f172a">${escHtml(DB.config.responsable||empresa)}</div>
-      Firma del Propietario / Responsable
+
+  <!-- ══════════════════════════════════════════════ -->
+  <!-- ══ FORMULARIO LAVADO DE ACTIVOS (Página 2) ══ -->
+  <!-- ══════════════════════════════════════════════ -->
+  <div class="lav-section">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      ${logo?`<img src="${logo}" style="height:60px;max-width:140px;object-fit:contain" alt="">`:`<div class="logo-fallback" style="width:60px;height:60px;font-size:18px">${escHtml(empresa[0]||'C')}</div>`}
+      <div style="flex:1;text-align:center">
+        <div class="lav-title">FORMULARIO DEBIDA DILIGENCIA</div>
+        <div class="lav-subtitle">Conozca su Cliente — Persona Física</div>
+      </div>
     </div>
+
+    <div class="lav-hdr-row">
+      <div class="lav-hdr-field"><label>Fecha</label><input class="fe" type="text" value="${fechaStr}"></div>
+      <div class="lav-hdr-field"><label>Aprobado por</label><input class="fe" type="text" value=""></div>
+      <div class="lav-hdr-field"><label>Oficina</label><input class="fe" type="text" value="Santiago"></div>
+      <div class="lav-hdr-field"><label>Código Cliente Sistema</label><input class="fe" type="text" value=""></div>
+      <div class="lav-hdr-field"><label>No. Expediente</label><input class="fe" type="text" value=""></div>
+    </div>
+
+    <div class="lav-section-hdr">Información del Cliente (Persona Física)</div>
+    <div class="lav-grid">
+      <div class="lav-field"><label>Nombres</label><input class="fe" type="text" value="${cliente.split(' ').slice(0,2).join(' ')}"></div>
+      <div class="lav-field"><label>Apellidos</label><input class="fe" type="text" value="${cliente.split(' ').slice(2).join(' ')}"></div>
+      <div class="lav-field"><label>Actividad Laboral</label><input class="fe" type="text" value=""></div>
+    </div>
+    <div class="lav-grid">
+      <div class="lav-field"><label>Tipo Documento</label><input class="fe" type="text" value="${tipoDoc}"></div>
+      <div class="lav-field"><label>Número Documento</label><input class="fe" type="text" value="${documento}"></div>
+      <div class="lav-field"><label>Profesión</label><input class="fe" type="text" value=""></div>
+    </div>
+    <div class="lav-grid">
+      <div class="lav-field"><label>Estatus Civil</label><input class="fe" type="text" value=""></div>
+      <div class="lav-field"><label>Nacionalidad</label><input class="fe" type="text" value="Dominicana"></div>
+      <div class="lav-field"><label>Otras Nacionalidades</label><input class="fe" type="text" value=""></div>
+    </div>
+    <div class="lav-grid2" style="margin-bottom:8px">
+      <div class="lav-field"><label>Dirección</label><input class="fe" type="text" value=""></div>
+      <div class="lav-field"><label>Ciudad / Provincia / País</label><input class="fe" type="text" value="Rep. Dominicana"></div>
+    </div>
+    <div class="lav-grid">
+      <div class="lav-field"><label>Teléfono / Fax</label><input class="fe" type="text" value=""></div>
+      <div class="lav-field"><label>Celular</label><input class="fe" type="text" value=""></div>
+      <div class="lav-field"><label>E-Mail</label><input class="fe" type="text" value=""></div>
+    </div>
+    <div class="lav-grid2" style="margin-bottom:8px">
+      <div class="lav-field"><label>Teléfono de Trabajo</label><input class="fe" type="text" value=""></div>
+      <div class="lav-field"><label>Dirección de Trabajo / Lugar de Trabajo</label><input class="fe" type="text" value=""></div>
+    </div>
+
+    <div class="lav-section-hdr">Referencias — Personas de Contacto</div>
+    <table class="lav-tbl">
+      <thead><tr><th>Nombre y Apellidos</th><th>Teléfono</th><th>Cédula / Pasaporte</th></tr></thead>
+      <tbody>
+        <tr><td><input class="fe" type="text" value=""></td><td><input class="fe" type="text" value=""></td><td><input class="fe" type="text" value=""></td></tr>
+        <tr><td><input class="fe" type="text" value=""></td><td><input class="fe" type="text" value=""></td><td><input class="fe" type="text" value=""></td></tr>
+        <tr><td><input class="fe" type="text" value=""></td><td><input class="fe" type="text" value=""></td><td><input class="fe" type="text" value=""></td></tr>
+      </tbody>
+    </table>
+
+    <div class="pep-box">
+      <div class="lav-section-hdr" style="margin:0 -12px 8px;padding-left:12px">Persona Expuesta Políticamente (PEP)</div>
+      <div class="pep-q">
+        ¿Tiene usted un cargo político o ha ocupado en los últimos 3 años un cargo político?
+        <label class="check-row"><input type="checkbox"> Sí</label>
+        <label class="check-row"><input type="checkbox" checked> No</label>
+      </div>
+      <div style="display:flex;gap:14px;font-size:11px;margin:4px 0">
+        <div class="lav-field" style="flex:1"><label>Especifique Cargo</label><input class="fe" type="text" value=""></div>
+        <div class="lav-field" style="flex:1"><label>Institución</label><input class="fe" type="text" value=""></div>
+      </div>
+      <div class="pep-q" style="margin-top:6px">
+        ¿Usted tiene algún parentesco con un funcionario o ex funcionario público?
+        <label class="check-row"><input type="checkbox"> Sí</label>
+        <label class="check-row"><input type="checkbox" checked> No</label>
+      </div>
+      <div style="display:flex;gap:14px;font-size:11px;margin:4px 0">
+        <div class="lav-field" style="flex:1"><label>Nombre del funcionario</label><input class="fe" type="text" value=""></div>
+        <div class="lav-field" style="flex:1"><label>Cargo</label><input class="fe" type="text" value=""></div>
+        <div class="lav-field" style="flex:1"><label>Institución</label><input class="fe" type="text" value=""></div>
+      </div>
+    </div>
+
+    <div class="lav-section-hdr">Empresas Afiliadas, Subsidiarias y Compañías Relacionadas</div>
+    <table class="lav-tbl">
+      <thead><tr><th>Empresa</th><th>Teléfono</th></tr></thead>
+      <tbody>
+        <tr><td><input class="fe" type="text" value=""></td><td><input class="fe" type="text" value=""></td></tr>
+        <tr><td><input class="fe" type="text" value=""></td><td><input class="fe" type="text" value=""></td></tr>
+      </tbody>
+    </table>
+
+    <div class="lav-section-hdr">Referencias Bancarias Domésticas y Extranjeras</div>
+    <table class="lav-tbl">
+      <thead><tr><th>Nombre Banco</th><th>Fecha Apertura</th><th>Jurisdicción</th></tr></thead>
+      <tbody>
+        <tr><td><input class="fe" type="text" value=""></td><td><input class="fe" type="text" value=""></td><td><input class="fe" type="text" value=""></td></tr>
+        <tr><td><input class="fe" type="text" value=""></td><td><input class="fe" type="text" value=""></td><td><input class="fe" type="text" value=""></td></tr>
+      </tbody>
+    </table>
+
+    <div class="lav-section-hdr">Origen de los Fondos</div>
+    <div class="origen-grid">
+      <label class="origen-item"><input type="checkbox"> Aporte de Socios</label>
+      <label class="origen-item"><input type="checkbox"> Financiamiento</label>
+      <label class="origen-item"><input type="checkbox" checked> Operación de la Empresa</label>
+      <label class="origen-item"><input type="checkbox"> Traslado de Fondos a Terceros</label>
+      <label class="origen-item"><input type="checkbox"> Intermediación Financiera</label>
+      <label class="origen-item"><input type="checkbox"> Venta Inmueble</label>
+      <label class="origen-item"><input type="checkbox"> Herencia</label>
+      <label class="origen-item"><input type="checkbox"> Licitación Ganada</label>
+      <label class="origen-item"><input type="checkbox"> Otros (Especificar)</label>
+    </div>
+    <div class="lav-field" style="margin-bottom:8px"><label>Detallar</label><input class="fe" type="text" value="Compra / Traspaso de Vehículo — ${marca} ${modelo} ${anio}"></div>
+
+    <div style="display:flex;gap:14px;margin-bottom:8px;font-size:11px">
+      <div class="lav-field" style="flex:2"><label>Monto del Pago Inicial / Retainer</label><input class="fe" type="text" value="${fmtPrecioRD}"></div>
+      <div class="lav-field" style="flex:1"><label>Moneda</label>
+        <span style="margin-right:8px"><input type="checkbox" checked> RD$</span>
+        <span><input type="checkbox"> US$</span>
+      </div>
+      <div class="lav-field" style="flex:1"><label>Forma de Pago</label>
+        <span style="margin-right:6px"><input type="checkbox"> Efectivo</span>
+        <span style="margin-right:6px"><input type="checkbox"> Cheque</span>
+        <span><input type="checkbox" checked> Transferencia/Depósito</span>
+      </div>
+    </div>
+
+    <div class="lav-section-hdr">Servicios que Solicita</div>
+    <div class="origen-grid">
+      <label class="origen-item"><input type="checkbox"> Constituir Sociedad</label>
+      <label class="origen-item"><input type="checkbox"> Registro Domicilio</label>
+      <label class="origen-item"><input type="checkbox"> Uso Cuenta Oficina</label>
+      <label class="origen-item"><input type="checkbox"> Solicitar Abrir Cuenta Bancaria</label>
+      <label class="origen-item"><input type="checkbox"> Directores</label>
+      <label class="origen-item"><input type="checkbox" checked> Compra Venta Vehículo</label>
+      <label class="origen-item"><input type="checkbox"> Compra / Traspaso Acciones</label>
+    </div>
+
+    <div class="lav-section-hdr">Actividad Transaccional Esperada</div>
+    <table class="txn-tbl">
+      <thead><tr><th></th><th>Efectivo</th><th>Cheque</th><th>Transferencias</th><th>Total</th></tr></thead>
+      <tbody>
+        <tr><td style="font-weight:700;font-size:10px">Promedio Mensual</td>
+          <td><input class="fe" type="text" value=""></td>
+          <td><input class="fe" type="text" value=""></td>
+          <td><input class="fe" type="text" value="${fmtPrecioRD}"></td>
+          <td><input class="fe" type="text" value="${fmtPrecioRD}"></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="decl-box">
+      <strong>DECLARACIÓN JURADA:</strong> El(los) aquí firmante(s) y anteriormente identificado(s) declara(n) que ha(n) llenado este formulario proporcionando información veraz y exacta al mejor de su conocimiento y autoriza(n) a realizar las revisiones y/o requerimientos de lugar sobre su historial crediticio. Asimismo, autorizo a suministrar información necesaria requerida por las autoridades correspondientes para el cumplimiento de la ley No. 155-17 contra Lavado de Activos y Financiamiento al Terrorismo, en virtud de los artículos 56 y 57 de la misma.<br><br>
+      Asimismo, declara(n) bajo la fe de juramento que los fondos pagados a esta empresa provienen de la manera indicada anteriormente en este formulario, originados de operaciones realizadas con estricto apego a la legislación vigente del país y por tanto no contraviene las disposiciones establecidas en la Ley No. 155-17 Contra el Lavado de Activos y Financiamiento al Terrorismo de fecha 1ro de junio de 2017.<br><br>
+      El Cliente declara expresamente que conoce y acepta las condiciones contractuales que rigen los productos y servicios de esta empresa.
+    </div>
+
+    <div class="firma2-row">
+      <div class="firma2-box">
+        <div style="height:44px"></div>
+        <div class="firma2-linea">Firma(s) Titular(es) y/o Autorizado(s)</div>
+      </div>
+      <div class="firma2-box">
+        <div style="height:44px"></div>
+        <div class="firma2-linea">Firma(s) Titular(es) y/o Autorizado(s)</div>
+      </div>
+    </div>
+
+    <div class="uso-interno">
+      <div class="uso-interno-title">⬛ Espacio para Uso Interno</div>
+      <div class="lav-field" style="margin-bottom:6px"><label>Observaciones</label><input class="fe" type="text" value="" style="width:100%"></div>
+      <div style="font-size:10px;margin-bottom:6px"><strong>Declaro haber aplicado la Debida Diligencia en Cumplimiento de la Política "Conozca Su Cliente"</strong></div>
+      <div style="display:flex;gap:20px;margin-bottom:8px">
+        <div class="lav-field" style="flex:1"><label>Nombre Completo</label><input class="fe" type="text" value=""></div>
+        <div class="lav-field" style="flex:1"><label>Firma</label><input class="fe" type="text" value=""></div>
+      </div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:6px;font-size:10px">
+        <div class="lav-field"><label>Fecha Bureau de Crédito</label><input class="fe" type="text" value="" style="width:120px"></div>
+        <div class="lav-field"><label>Fecha Consejo Seg. ONU</label><input class="fe" type="text" value="" style="width:120px"></div>
+        <div class="lav-field"><label>Cliente Referido por</label><input class="fe" type="text" value="" style="width:120px"></div>
+        <div class="lav-field"><label>Interpol</label><input class="fe" type="text" value="" style="width:80px"></div>
+        <div class="lav-field"><label>Lista GAFI</label><input class="fe" type="text" value="" style="width:80px"></div>
+      </div>
+      <div class="riesgo-row">
+        <strong>Categoría de Riesgo:</strong>
+        <label class="check-row"><input type="checkbox"> Alto</label>
+        <label class="check-row"><input type="checkbox"> Medio</label>
+        <label class="check-row"><input type="checkbox" checked> Bajo</label>
+        <div class="lav-field" style="margin:0"><label style="display:inline">Nota:</label> <input class="fe" type="text" value="" style="width:100px"></div>
+        &nbsp;&nbsp;<strong>Se recomienda:</strong>
+        <label class="check-row"><input type="checkbox" checked> Sí</label>
+        <label class="check-row"><input type="checkbox"> No</label>
+      </div>
+      <div style="display:flex;gap:20px;margin-top:8px">
+        <div class="lav-field" style="flex:1"><label>Nombre Oficial Cumplimiento</label><input class="fe" type="text" value=""></div>
+        <div class="lav-field" style="flex:1"><label>Firma</label><input class="fe" type="text" value=""></div>
+      </div>
+      <div style="display:flex;gap:12px;margin-top:6px;font-size:10px">
+        <div class="lav-field" style="flex:1"><label>Nombre Oficial de Cumplimiento</label><input class="fe" type="text" value=""></div>
+        <div class="lav-field" style="flex:1"><label>Teléfono</label><input class="fe" type="text" value=""></div>
+        <div class="lav-field" style="flex:1"><label>Correo Electrónico</label><input class="fe" type="text" value=""></div>
+      </div>
+    </div>
+
+    <!-- PIE pág 2 -->
+    <div class="pie" style="margin-top:20px">
+      ${logo?`<img src="${logo}" class="pie-logo" alt="">`:`<div class="pie-logo-fb">${escHtml(empresa[0]||'C')}</div>`}
+      <div>
+        <strong>${escHtml(empresa)}</strong> &bull;
+        ${escHtml(direccion)} &bull;
+        Tel: ${escHtml(telefono)} &bull;
+        ${correo} &bull;
+        <strong>RNC: ${escHtml(rnc)}</strong>
+      </div>
+    </div>
+  </div><!-- fin lav-section -->
+
+  <!-- BOTONES NO IMPRIMIBLES -->
+  <div class="noprint" style="margin-top:24px;text-align:center;display:flex;justify-content:center;gap:12px">
+    <button onclick="window.print()" style="padding:12px 32px;background:#1a2a6c;color:#fff;border:none;border-radius:8px;font-size:15px;cursor:pointer;font-weight:700">🖨️ Imprimir / Guardar PDF</button>
+    <button onclick="window.close()" style="padding:12px 20px;background:#e2e8f0;color:#0f172a;border:none;border-radius:8px;font-size:14px;cursor:pointer;font-weight:600">✖ Cerrar</button>
   </div>
-  <div class="pie">${escHtml(empresa)} | ${escHtml(DB.config.direccion||'')} | Tel: ${escHtml(DB.config.telefono||'')} | RNC: ${escHtml(DB.config.rnc||'')}</div>
-  <div class="noprint" style="margin-top:20px;text-align:center">
-    <button onclick="window.print()" style="padding:10px 28px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;font-weight:700">🖨️ Imprimir / Guardar PDF</button>
-  </div>
-  </div></body></html>`);
+
+  </div><!-- fin .page -->
+  </body></html>`);
   win.document.close();
 }
 // ══ CLIENTES (mejorado: solo RD, foto docs, referencia) ══
@@ -8545,6 +8882,314 @@ ${JSON.stringify(ventasData,null,2)}`;
 }
 
 
+// ══ LAVADO DE ACTIVOS ══
+function renderLavado(){
+  const lavados=DB.lavado||[];
+  document.getElementById('page-lavado').innerHTML=`
+    <div class="page-header">
+      <div><h1>🛡️ Lavado de Activos</h1><p>Formularios de Debida Diligencia — Conozca su Cliente (Persona Física) | ${lavados.length} registro(s)</p></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="nuevoFormLavado()">➕ Nuevo Formulario</button>
+      </div>
+    </div>
+    <div style="background:#fef3c7;border:1px solid #fbbf24;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:12px;color:#92400e">
+      ⚖️ <strong>Ley No. 155-17</strong> — Contra el Lavado de Activos y Financiamiento al Terrorismo. Los formularios completados se almacenan en el sistema y se pueden imprimir junto con la cotización correspondiente.
+    </div>
+    <div class="card">
+      <div class="search-wrap"><input class="search-input" placeholder="Buscar por cliente, cédula, documento..." oninput="filterTable('lav-tbl',this.value)"></div>
+      <div class="table-wrap"><table id="lav-tbl">
+        <thead><tr>
+          <th>Fecha</th><th>Cliente</th><th>Documento</th><th>Actividad</th><th>Origen Fondos</th><th>Riesgo</th><th>Estado</th><th style="width:100px">Acciones</th>
+        </tr></thead>
+        <tbody>${lavados.length?lavados.slice().reverse().map((f,ri)=>{
+          const i=lavados.length-1-ri;
+          const rColor={Alto:'badge-red',Medio:'badge-amber',Bajo:'badge-green'};
+          return`<tr>
+            <td style="font-size:12px">${fmtDate(f.fecha)||'—'}</td>
+            <td style="font-weight:700">${escHtml(f.cliente||'—')}</td>
+            <td style="font-size:12px;font-family:monospace">${escHtml(f.documento||'—')}</td>
+            <td style="font-size:12px">${escHtml(f.actividad||'—')}</td>
+            <td style="font-size:12px">${escHtml(f.origenFondos||'—')}</td>
+            <td><span class="badge ${rColor[f.riesgo]||'badge-gray'}">${f.riesgo||'—'}</span></td>
+            <td><span class="badge ${f.aprobado?'badge-green':'badge-amber'}">${f.aprobado?'Aprobado':'Pendiente'}</span></td>
+            <td><div style="display:flex;gap:4px">
+              <button class="btn btn-sm" style="background:var(--blue3);color:var(--blue);padding:4px 8px" onclick="verFormLavado(${i})" title="Ver/Imprimir">🖨️</button>
+              <button class="btn btn-sm" style="background:var(--amber2);color:var(--amber);padding:4px 8px" onclick="editarFormLavado(${i})" title="Editar">✏️</button>
+              ${currentUser?.role==='admin'?`<button class="btn btn-sm" style="background:var(--red2);color:var(--red);padding:4px 8px" onclick="eliminarFormLavado(${i})" title="Eliminar">🗑</button>`:''}
+            </div></td>
+          </tr>`;
+        }).join(''):'<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--gray)">Sin formularios registrados. Cree uno con ➕ Nuevo Formulario.</td></tr>'}
+        </tbody>
+      </table></div>
+    </div>`;
+}
+function formLavadoHTML(f){
+  f=f||{};
+  const PROVINCIAS=['Azua','Bahoruco','Barahona','Dajabón','Distrito Nacional','Duarte','El Seibo','Elías Piña','Espaillat','Hato Mayor','Hermanas Mirabal','Independencia','La Altagracia','La Romana','La Vega','María Trinidad Sánchez','Monseñor Nouel','Monte Cristi','Monte Plata','Pedernales','Peravia','Puerto Plata','Samaná','San Cristóbal','San José de Ocoa','San Juan','San Pedro de Macorís','Sánchez Ramírez','Santiago','Santiago Rodríguez','Santo Domingo','Valverde'];
+  return`
+  <div class="form-row c3">
+    <div class="form-field"><label class="required">Cliente / Nombres</label><input type="text" id="lav-nombres" value="${escHtml(f.nombres||'')}"></div>
+    <div class="form-field"><label>Apellidos</label><input type="text" id="lav-apellidos" value="${escHtml(f.apellidos||'')}"></div>
+    <div class="form-field"><label>Tipo Documento</label>
+      <select id="lav-tipodoc"><option ${(f.tipoDoc||'Cédula')==='Cédula'?'selected':''}>Cédula</option><option ${f.tipoDoc==='Pasaporte'?'selected':''}>Pasaporte</option><option ${f.tipoDoc==='RNC'?'selected':''}>RNC</option></select>
+    </div>
+  </div>
+  <div class="form-row c3">
+    <div class="form-field"><label class="required">Número de Documento</label><input type="text" id="lav-documento" value="${escHtml(f.documento||'')}" maxlength="13" oninput="fmtDocInput('lav-tipodoc','lav-documento')"></div>
+    <div class="form-field"><label>Actividad Laboral</label><input type="text" id="lav-actividad" value="${escHtml(f.actividad||'')}"></div>
+    <div class="form-field"><label>Profesión</label><input type="text" id="lav-profesion" value="${escHtml(f.profesion||'')}"></div>
+  </div>
+  <div class="form-row c3">
+    <div class="form-field"><label>Nacionalidad</label><input type="text" id="lav-nacionalidad" value="${escHtml(f.nacionalidad||'Dominicana')}"></div>
+    <div class="form-field"><label>Estado Civil</label>
+      <select id="lav-civil"><option ${(f.civil||'Soltero')==='Soltero'?'selected':''}>Soltero</option><option ${f.civil==='Casado'?'selected':''}>Casado</option><option ${f.civil==='Divorciado'?'selected':''}>Divorciado</option><option ${f.civil==='Viudo'?'selected':''}>Viudo</option><option ${f.civil==='Unión Libre'?'selected':''}>Unión Libre</option></select>
+    </div>
+    <div class="form-field"><label>Otras Nacionalidades</label><input type="text" id="lav-otrasnac" value="${escHtml(f.otrasNac||'')}"></div>
+  </div>
+  <div class="form-row c2">
+    <div class="form-field"><label>Dirección</label><input type="text" id="lav-direccion" value="${escHtml(f.direccion||'')}"></div>
+    <div class="form-field"><label>Provincia</label>
+      <select id="lav-provincia"><option value="">Seleccionar...</option>${PROVINCIAS.map(p=>`<option ${p===f.provincia?'selected':''}>${p}</option>`).join('')}</select>
+    </div>
+  </div>
+  <div class="form-row c3">
+    <div class="form-field"><label>Teléfono</label><input type="text" id="lav-tel" value="${escHtml(f.tel||'')}" maxlength="12" oninput="fmtTelInput(this)"></div>
+    <div class="form-field"><label>Celular</label><input type="text" id="lav-celular" value="${escHtml(f.celular||'')}" maxlength="12" oninput="fmtTelInput(this)"></div>
+    <div class="form-field"><label>E-Mail</label><input type="email" id="lav-email" value="${escHtml(f.email||'')}"></div>
+  </div>
+  <div class="form-row c2">
+    <div class="form-field"><label>Lugar / Tel. de Trabajo</label><input type="text" id="lav-trabajo" value="${escHtml(f.trabajo||'')}"></div>
+    <div class="form-field"><label>Dirección de Trabajo</label><input type="text" id="lav-dirTrabajo" value="${escHtml(f.dirTrabajo||'')}"></div>
+  </div>
+  <div style="background:var(--gray2);border-radius:8px;padding:12px;margin-bottom:12px">
+    <div style="font-size:12px;font-weight:700;margin-bottom:8px">🔒 Persona Expuesta Políticamente (PEP)</div>
+    <div class="form-row c2" style="margin:0">
+      <div class="form-field" style="margin:0"><label>¿Es o fue PEP en los últimos 3 años?</label>
+        <select id="lav-pep"><option ${!f.esPep?'selected':''} value="No">No</option><option ${f.esPep==='Si'?'selected':''} value="Si">Sí</option></select>
+      </div>
+      <div class="form-field" style="margin:0"><label>¿Tiene parentesco con funcionario?</label>
+        <select id="lav-pepFam"><option ${!f.pepFam?'selected':''} value="No">No</option><option ${f.pepFam==='Si'?'selected':''} value="Si">Sí</option></select>
+      </div>
+    </div>
+  </div>
+  <div class="form-field"><label>Origen de los Fondos</label>
+    <select id="lav-origen">
+      <option ${(f.origenFondos||'')==='Operación de la Empresa'?'selected':''}>Operación de la Empresa</option>
+      <option ${f.origenFondos==='Aporte de Socios'?'selected':''}>Aporte de Socios</option>
+      <option ${f.origenFondos==='Financiamiento'?'selected':''}>Financiamiento</option>
+      <option ${f.origenFondos==='Venta Inmueble'?'selected':''}>Venta Inmueble</option>
+      <option ${f.origenFondos==='Herencia'?'selected':''}>Herencia</option>
+      <option ${f.origenFondos==='Licitación Ganada'?'selected':''}>Licitación Ganada</option>
+      <option ${f.origenFondos==='Otros'?'selected':''}>Otros</option>
+    </select>
+  </div>
+  <div class="form-field"><label>Detalle del Origen</label><textarea id="lav-detalle" rows="2">${escHtml(f.detalle||'')}</textarea></div>
+  <div class="form-row c2">
+    <div class="form-field"><label>Monto Pago Inicial</label><input type="text" id="lav-monto" value="${escHtml(f.monto||'')}" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)"></div>
+    <div class="form-field"><label>Forma de Pago</label>
+      <select id="lav-formapago"><option ${(f.formaPago||'Transferencia/Depósito')==='Transferencia/Depósito'?'selected':''}>Transferencia/Depósito</option><option ${f.formaPago==='Cheque'?'selected':''}>Cheque</option><option ${f.formaPago==='Efectivo'?'selected':''}>Efectivo</option></select>
+    </div>
+  </div>
+  <div class="form-row c2">
+    <div class="form-field"><label>Categoría de Riesgo</label>
+      <select id="lav-riesgo"><option ${(f.riesgo||'Bajo')==='Bajo'?'selected':''}>Bajo</option><option ${f.riesgo==='Medio'?'selected':''}>Medio</option><option ${f.riesgo==='Alto'?'selected':''}>Alto</option></select>
+    </div>
+    <div class="form-field"><label>Estado</label>
+      <select id="lav-estado"><option value="0" ${!f.aprobado?'selected':''}>Pendiente</option><option value="1" ${f.aprobado?'selected':''}>Aprobado</option></select>
+    </div>
+  </div>
+  <div class="form-field"><label>Observaciones</label><textarea id="lav-obs" rows="2">${escHtml(f.observaciones||'')}</textarea></div>`;
+}
+function nuevoFormLavado(){
+  openModal('➕ Nuevo Formulario — Debida Diligencia',formLavadoHTML(),
+    `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+     <button class="btn btn-primary" onclick="guardarFormLavado()">💾 Guardar</button>`);
+}
+function editarFormLavado(i){
+  const f=DB.lavado[i];
+  openModal('✏️ Editar Formulario — Debida Diligencia',formLavadoHTML(f),
+    `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+     <button class="btn btn-primary" onclick="guardarFormLavado(${i})">💾 Actualizar</button>`);
+}
+function guardarFormLavado(idx){
+  const nombres=document.getElementById('lav-nombres').value.trim();
+  const documento=document.getElementById('lav-documento').value.trim();
+  if(!nombres){toast('El nombre es requerido','error');return;}
+  if(!documento){toast('El documento es requerido','error');return;}
+  const f={
+    id:idx!==undefined?DB.lavado[idx].id:uid(),
+    fecha:today(),
+    nombres,apellidos:document.getElementById('lav-apellidos').value.trim(),
+    tipoDoc:document.getElementById('lav-tipodoc').value,
+    documento,
+    cliente:nombres+' '+document.getElementById('lav-apellidos').value.trim(),
+    actividad:document.getElementById('lav-actividad').value.trim(),
+    profesion:document.getElementById('lav-profesion').value.trim(),
+    nacionalidad:document.getElementById('lav-nacionalidad').value.trim(),
+    civil:document.getElementById('lav-civil').value,
+    otrasNac:document.getElementById('lav-otrasnac').value.trim(),
+    direccion:document.getElementById('lav-direccion').value.trim(),
+    provincia:document.getElementById('lav-provincia').value,
+    tel:document.getElementById('lav-tel').value.trim(),
+    celular:document.getElementById('lav-celular').value.trim(),
+    email:document.getElementById('lav-email').value.trim(),
+    trabajo:document.getElementById('lav-trabajo').value.trim(),
+    dirTrabajo:document.getElementById('lav-dirTrabajo').value.trim(),
+    esPep:document.getElementById('lav-pep').value,
+    pepFam:document.getElementById('lav-pepFam').value,
+    origenFondos:document.getElementById('lav-origen').value,
+    detalle:document.getElementById('lav-detalle').value.trim(),
+    monto:document.getElementById('lav-monto').value.trim(),
+    formaPago:document.getElementById('lav-formapago').value,
+    riesgo:document.getElementById('lav-riesgo').value,
+    aprobado:document.getElementById('lav-estado').value==='1',
+    observaciones:document.getElementById('lav-obs').value.trim()
+  };
+  if(!DB.lavado)DB.lavado=[];
+  if(idx!==undefined)DB.lavado[idx]=f;else DB.lavado.push(f);
+  sDB('lavado');closeModal();toast('Formulario guardado ✓','success');renderLavado();
+}
+function eliminarFormLavado(i){
+  openModal('Eliminar',`<p>¿Eliminar formulario de <strong>${escHtml(DB.lavado[i].cliente)}</strong>?</p>`,
+    `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+     <button class="btn btn-red" onclick="DB.lavado.splice(${i},1);sDB('lavado');closeModal();toast('Eliminado','success');renderLavado()">🗑 Eliminar</button>`);
+}
+function verFormLavado(i){
+  const f=DB.lavado[i];if(!f)return;
+  const empresa=DB.config.empresa||'Credit Fayre';
+  const logo=DB.config.logoData||DB.config.logo||'';
+  const direccion=DB.config.direccion||'Av. Duarte km 16, Tramo Santiago la Vega, Santiago, R.D.';
+  const telefono=DB.config.telefono||'(809) 770-4184';
+  const correo=DB.config.correo||'info@creditfayre.com';
+  const rnc=DB.config.rnc||'1-31-65403-7';
+  const win=window.open('','_blank','width=820,height=750');
+  win.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Debida Diligencia — ${escHtml(f.cliente||'')}</title>
+  <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',Arial,sans-serif;font-size:11px;color:#0f172a}
+  .page{max-width:720px;margin:0 auto;padding:32px 36px}
+  .hdr{display:flex;align-items:center;justify-content:space-between;border-bottom:3px solid #1a2a6c;padding-bottom:12px;margin-bottom:14px}
+  .logo-img{height:70px;max-width:160px;object-fit:contain}
+  .logo-fb{width:70px;height:70px;background:#1a2a6c;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:900;color:#fff}
+  .doc-titulo{font-size:16px;font-weight:900;text-align:center;text-decoration:underline;color:#1a2a6c}
+  .doc-sub{font-size:11px;font-weight:700;text-align:center;color:#1a2a6c;margin-top:2px}
+  .sec{background:#1a2a6c;color:#fff;font-size:9px;font-weight:700;text-transform:uppercase;padding:3px 8px;margin:10px 0 6px;letter-spacing:.5px}
+  .g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:6px}
+  .g2{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px}
+  .f label{font-size:8px;font-weight:700;text-transform:uppercase;color:#94a3b8;display:block;margin-bottom:1px}
+  .f .fe{border:none;border-bottom:1px solid #e2e8f0;width:100%;font-size:11px;font-family:'Segoe UI',Arial,sans-serif;outline:none;padding:1px 0;background:transparent}
+  .tbl{width:100%;border-collapse:collapse;font-size:10px;margin-bottom:8px}
+  .tbl th{background:#e2e8f0;padding:4px 6px;font-size:8px;font-weight:700;text-transform:uppercase;border:1px solid #cbd5e1;text-align:left}
+  .tbl td{padding:3px 6px;border:1px solid #e2e8f0}.tbl .fe{border:none;width:100%;font-size:10px;font-family:'Segoe UI',Arial,sans-serif;outline:none;background:transparent}
+  .pep{background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px;padding:8px;margin-bottom:8px}
+  .origen{display:flex;flex-wrap:wrap;gap:4px;margin:4px 0 6px;font-size:10px}
+  .oitem{display:flex;align-items:center;gap:3px}
+  .decl{font-size:9px;color:#374151;line-height:1.5;border:1px solid #e2e8f0;padding:8px;border-radius:4px;background:#f8fafc;margin:8px 0;text-align:justify}
+  .firma2{display:flex;justify-content:space-between;margin-top:24px;gap:16px}
+  .f2b{flex:1;text-align:center}.f2l{border-top:1px solid #0f172a;padding-top:3px;font-size:9px;color:#475569}
+  .uso{background:#fff3cd;border:1px solid #ffc107;border-radius:4px;padding:8px;margin-top:10px;font-size:10px}
+  .pie{margin-top:16px;padding-top:8px;border-top:2px solid #1a2a6c;font-size:9px;color:#6b7280;display:flex;gap:8px;align-items:center}
+  .noprint{margin-top:16px;text-align:center}
+  @media print{.noprint{display:none}.fe:focus{outline:none}}</style>
+  </head><body><div class="page">
+  <div class="hdr">
+    ${logo?`<img src="${logo}" class="logo-img" alt="">`:`<div class="logo-fb">${escHtml(empresa[0]||'C')}</div>`}
+    <div style="flex:1;text-align:center">
+      <div class="doc-titulo">FORMULARIO DEBIDA DILIGENCIA</div>
+      <div class="doc-sub">Conozca su Cliente — Persona Física</div>
+    </div>
+    <div style="text-align:right;font-size:10px;color:#6b7280">
+      Fecha: <input class="fe" type="text" value="${fmtDate(f.fecha)}" style="width:100px"><br>
+      Aprobado por: <input class="fe" type="text" value="" style="width:100px"><br>
+      Oficina: <input class="fe" type="text" value="Santiago" style="width:80px">
+    </div>
+  </div>
+  <div class="sec">Información del Cliente</div>
+  <div class="g3">
+    <div class="f"><label>Nombres</label><input class="fe" type="text" value="${escHtml(f.nombres||'')}"></div>
+    <div class="f"><label>Apellidos</label><input class="fe" type="text" value="${escHtml(f.apellidos||'')}"></div>
+    <div class="f"><label>Actividad Laboral</label><input class="fe" type="text" value="${escHtml(f.actividad||'')}"></div>
+  </div>
+  <div class="g3">
+    <div class="f"><label>Tipo Doc / Número</label><input class="fe" type="text" value="${escHtml(f.tipoDoc||'')} — ${escHtml(f.documento||'')}"></div>
+    <div class="f"><label>Profesión</label><input class="fe" type="text" value="${escHtml(f.profesion||'')}"></div>
+    <div class="f"><label>Estado Civil</label><input class="fe" type="text" value="${escHtml(f.civil||'')}"></div>
+  </div>
+  <div class="g3">
+    <div class="f"><label>Nacionalidad</label><input class="fe" type="text" value="${escHtml(f.nacionalidad||'')}"></div>
+    <div class="f"><label>Otras Nacionalidades</label><input class="fe" type="text" value="${escHtml(f.otrasNac||'')}"></div>
+    <div class="f"><label>Provincia</label><input class="fe" type="text" value="${escHtml(f.provincia||'')}"></div>
+  </div>
+  <div class="g2">
+    <div class="f"><label>Dirección</label><input class="fe" type="text" value="${escHtml(f.direccion||'')}"></div>
+    <div class="f"><label>Teléfono / Celular / E-Mail</label><input class="fe" type="text" value="${escHtml(f.tel||'')} / ${escHtml(f.celular||'')} / ${escHtml(f.email||'')}"></div>
+  </div>
+  <div class="g2">
+    <div class="f"><label>Lugar de Trabajo / Tel.</label><input class="fe" type="text" value="${escHtml(f.trabajo||'')}"></div>
+    <div class="f"><label>Dirección de Trabajo</label><input class="fe" type="text" value="${escHtml(f.dirTrabajo||'')}"></div>
+  </div>
+  <div class="sec">Referencias — Personas de Contacto</div>
+  <table class="tbl"><thead><tr><th>Nombre y Apellidos</th><th>Teléfono</th><th>Cédula / Pasaporte</th></tr></thead>
+  <tbody><tr><td><input class="fe" type="text" value=""></td><td><input class="fe" type="text" value=""></td><td><input class="fe" type="text" value=""></td></tr>
+  <tr><td><input class="fe" type="text" value=""></td><td><input class="fe" type="text" value=""></td><td><input class="fe" type="text" value=""></td></tr>
+  <tr><td><input class="fe" type="text" value=""></td><td><input class="fe" type="text" value=""></td><td><input class="fe" type="text" value=""></td></tr></tbody></table>
+  <div class="pep">
+    <div class="sec" style="margin:0 0 6px;padding:3px 8px">Persona Expuesta Políticamente (PEP)</div>
+    ¿Tiene cargo político o lo ocupó en últimos 3 años? <strong>${f.esPep||'No'}</strong> &nbsp;&nbsp;
+    ¿Parentesco con funcionario? <strong>${f.pepFam||'No'}</strong><br>
+    <div style="display:flex;gap:12px;margin-top:4px">
+      <div class="f" style="flex:1"><label>Cargo / Institución</label><input class="fe" type="text" value=""></div>
+      <div class="f" style="flex:1"><label>Nombre Funcionario / Cargo</label><input class="fe" type="text" value=""></div>
+    </div>
+  </div>
+  <div class="sec">Empresas Afiliadas y Referencias Bancarias</div>
+  <table class="tbl"><thead><tr><th>Empresa Relacionada</th><th>Teléfono</th><th>Banco</th><th>Fecha Apertura</th><th>Jurisdicción</th></tr></thead>
+  <tbody><tr><td><input class="fe" type="text" value=""></td><td><input class="fe" type="text" value=""></td><td><input class="fe" type="text" value=""></td><td><input class="fe" type="text" value=""></td><td><input class="fe" type="text" value=""></td></tr>
+  <tr><td><input class="fe" type="text" value=""></td><td><input class="fe" type="text" value=""></td><td><input class="fe" type="text" value=""></td><td><input class="fe" type="text" value=""></td><td><input class="fe" type="text" value=""></td></tr></tbody></table>
+  <div class="sec">Origen de los Fondos y Transaccionalidad</div>
+  <div class="origen">
+    <label class="oitem"><input type="checkbox" ${f.origenFondos==='Aporte de Socios'?'checked':''}> Aporte de Socios</label>
+    <label class="oitem"><input type="checkbox" ${f.origenFondos==='Financiamiento'?'checked':''}> Financiamiento</label>
+    <label class="oitem"><input type="checkbox" ${f.origenFondos==='Operación de la Empresa'?'checked':''}> Operación Empresa</label>
+    <label class="oitem"><input type="checkbox"> Traslado a Terceros</label>
+    <label class="oitem"><input type="checkbox"> Intermediación Financiera</label>
+    <label class="oitem"><input type="checkbox" ${f.origenFondos==='Venta Inmueble'?'checked':''}> Venta Inmueble</label>
+    <label class="oitem"><input type="checkbox" ${f.origenFondos==='Herencia'?'checked':''}> Herencia</label>
+    <label class="oitem"><input type="checkbox" ${f.origenFondos==='Licitación Ganada'?'checked':''}> Licitación Ganada</label>
+    <label class="oitem"><input type="checkbox" ${f.origenFondos==='Otros'?'checked':''}> Otros</label>
+  </div>
+  <div class="g2" style="margin-bottom:6px">
+    <div class="f"><label>Detalle</label><input class="fe" type="text" value="${escHtml(f.detalle||'')}"></div>
+    <div class="f"><label>Monto / Forma de Pago</label><input class="fe" type="text" value="${escHtml(f.monto||'')} — ${escHtml(f.formaPago||'')}"></div>
+  </div>
+  <table class="tbl"><thead><tr><th>Promedio Mensual</th><th>Efectivo</th><th>Cheque</th><th>Transferencias</th><th>Total</th></tr></thead>
+  <tbody><tr><td style="font-weight:700">Mensual</td><td><input class="fe" type="text" value=""></td><td><input class="fe" type="text" value=""></td><td><input class="fe" type="text" value="${escHtml(f.monto||'')}"></td><td><input class="fe" type="text" value="${escHtml(f.monto||'')}"></td></tr></tbody></table>
+  <div class="decl"><strong>DECLARACIÓN JURADA:</strong> El(los) aquí firmante(s) declara(n) que ha(n) llenado este formulario proporcionando información veraz y exacta al mejor de su conocimiento y autoriza(n) a realizar las revisiones y/o requerimientos de lugar sobre su historial crediticio. Asimismo, autorizo a suministrar información necesaria requerida por las autoridades correspondientes para el cumplimiento de la ley No. 155-17 contra Lavado de Activos y Financiamiento al Terrorismo.<br><br>
+  El Cliente declara expresamente que conoce y acepta las condiciones contractuales que rigen los productos y servicios de esta empresa.</div>
+  <div class="firma2">
+    <div class="f2b"><div style="height:36px"></div><div class="f2l">Firma(s) Titular(es) y/o Autorizado(s)</div></div>
+    <div class="f2b"><div style="height:36px"></div><div class="f2l">Firma(s) Titular(es) y/o Autorizado(s)</div></div>
+  </div>
+  <div class="uso">
+    <strong>⬛ Espacio para Uso Interno</strong><br>
+    Observaciones: <input class="fe" type="text" value="${escHtml(f.observaciones||'')}" style="width:80%"><br><br>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:4px">
+      <span>Categoría Riesgo: <strong>${f.riesgo||'—'}</strong></span>
+      <span>Estado: <strong>${f.aprobado?'Aprobado':'Pendiente'}</strong></span>
+      <span>Nombre Oficial Cumplimiento: <input class="fe" type="text" value="" style="width:140px"></span>
+      <span>Firma: <input class="fe" type="text" value="" style="width:80px"></span>
+    </div>
+  </div>
+  <div class="pie">
+    ${logo?`<img src="${logo}" style="height:24px;max-width:60px;object-fit:contain" alt="">`:`<div style="width:24px;height:24px;background:#1a2a6c;border-radius:3px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:8px;font-weight:700">${escHtml(empresa[0]||'C')}</div>`}
+    <div><strong>${escHtml(empresa)}</strong> &bull; ${escHtml(direccion)} &bull; Tel: ${escHtml(telefono)} &bull; ${correo} &bull; <strong>RNC: ${escHtml(rnc)}</strong></div>
+  </div>
+  <div class="noprint">
+    <button onclick="window.print()" style="padding:10px 28px;background:#1a2a6c;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;font-weight:700">🖨️ Imprimir / Guardar PDF</button>
+    <button onclick="window.close()" style="padding:10px 16px;background:#e2e8f0;color:#0f172a;border:none;border-radius:8px;font-size:13px;cursor:pointer;font-weight:600;margin-left:8px">✖ Cerrar</button>
+  </div>
+  </div></body></html>`);
+  win.document.close();
+}
+
 // ══ AUTORIZACIÓN DE COMPRA ══
 function renderAutorizaciones(){
   const esAdmin=currentUser?.role==='admin'||canDo('admin');
@@ -10204,7 +10849,7 @@ window.fbIniciar = async function(){
       const hayDatosReales=tieneVehiculos||tieneVentas||tieneUsers||tieneConfig;
       if(hayDatosReales){
         const keys=['config','users','vehiculos','clientes','suplidores','ventas','cotizaciones',
-          'caja','gastos','nomina','nominaPagos','gastosVehiculos','cxp','cxc','autorizaciones','seguros','facturasExternas','log'];
+          'caja','gastos','nomina','nominaPagos','gastosVehiculos','cxp','cxc','autorizaciones','seguros','facturasExternas','lavado','log'];
         for(const k of keys) await fbGuardar(k);
         console.log('✅ Firebase: datos iniciales guardados desde localStorage');
       } else {
