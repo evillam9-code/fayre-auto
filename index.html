@@ -5630,7 +5630,6 @@ function ventaAccion(accion){
   if(accion==='imprimir'&&!canDo('imprimir')){toast('No tienes permiso para imprimir','error');return;}else if(accion==='imprimir')imprimirFactura(ventaSelectedId);
   else if(accion==='cobrar')abonarVenta(ventaSelectedId);
   else if(accion==='editar'&&!canDo('editar')){toast('No tienes permiso para editar','error');return;}else if(accion==='editar'){
-    if(currentUser?.role!=='admin'){toast('Solo el administrador puede editar','error');return;}
     editarVenta(ventaSelectedId);
   }
   else if(accion==='eliminar'&&!canDo('eliminar')){toast('No tienes permiso para eliminar','error');return;}else if(accion==='eliminar'){
@@ -6085,7 +6084,7 @@ function editarVenta(vid){
 }
 
 function guardarEditarVenta(vid){
-  if(currentUser?.role!=='admin'){toast('Solo el administrador puede editar','error');return;}
+  if(!canDo('editar')&&currentUser?.role!=='admin'){toast('No tienes permiso para editar','error');return;}
   const i=DB.ventas.findIndex(x=>x.id===vid);if(i<0)return;
   const precio=parseFloat((document.getElementById('ev-precio').value||'0').replace(/,/g,''));
   const inicial=parseFloat((document.getElementById('ev-inicial').value||'0').replace(/,/g,''));
@@ -6508,7 +6507,7 @@ function guardarCotizacion(idx){
   sDB('cotizaciones');closeModal();toast('Cotización guardada ✓','success');renderCotizaciones();
 }
 function editarCotizacion(i){
-  if(currentUser?.role!=='admin'){toast('Solo el administrador puede editar','error');return;}
+  if(!canDo('editar')&&currentUser?.role!=='admin'){toast('No tienes permiso para editar','error');return;}
   const c=DB.cotizaciones[i];
   const _bcOpts2=(DB.config.cuentas||['Caja General']).map(ct=>`<option value="${escHtml(ct)}" ${ct===c.banco?'selected':''}>${escHtml(ct)}</option>`).join('');
   openModal('Editar Cotización',`
