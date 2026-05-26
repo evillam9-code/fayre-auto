@@ -766,14 +766,15 @@ function canDo(action){
   const rolesAdmin=['admin','dueño','dueno','gerente','owner'];
   if(rolesAdmin.some(r=>currentUser.role?.toLowerCase()===r.toLowerCase()))return true;
   const p=currentUser.permisos||{};
-  if(p[action]===true)return true;
+  const isTrue=v=>v===true||v==='true'||v===1;
+  if(isTrue(p[action]))return true;
   if(action==='editar'){
-    if(p.editar===true)return true;
-    return Object.keys(p).some(k=>k.startsWith('editar')&&p[k]===true);
+    if(isTrue(p.editar))return true;
+    return Object.keys(p).some(k=>k.startsWith('editar')&&isTrue(p[k]));
   }
   if(action==='eliminar'){
-    if(p.eliminar===true)return true;
-    return Object.keys(p).some(k=>k.startsWith('borrar')&&p[k]===true);
+    if(isTrue(p.eliminar))return true;
+    return Object.keys(p).some(k=>k.startsWith('borrar')&&isTrue(p[k]));
   }
   return false;
 }
