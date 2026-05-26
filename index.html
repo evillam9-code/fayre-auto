@@ -768,9 +768,11 @@ function canDo(action){
   const p=currentUser.permisos||{};
   if(p[action]===true)return true;
   if(action==='editar'){
+    if(p.editar===true)return true;
     return Object.keys(p).some(k=>k.startsWith('editar')&&p[k]===true);
   }
   if(action==='eliminar'){
+    if(p.eliminar===true)return true;
     return Object.keys(p).some(k=>k.startsWith('borrar')&&p[k]===true);
   }
   return false;
@@ -2759,7 +2761,7 @@ function crearUsuarioNuevo(){
   if(!nombre||!user||!pass){toast('Complete nombre, usuario y contraseña','error');return;}
   if(DB.users.find(u=>u.username===user)){toast('El usuario ya existe','error');return;}
   const MODS_IDS=['dashboard','informes','inventario','gastosVeh','cxp','clientes','ventas','cxc','lavado','suplidores','gastos','nomina','caja','cotizaciones','autorizaciones','seguros','facturaExterna','alertas','verSaldoCaja','chat','usuarios','config','cuentas','cumpleanos'];
-  const DEL_IDS=['ventas','clientes','suplidores','gastos','nomina','gastosVeh','cxc','inventario'];
+  const DEL_IDS=['ventas','clientes','suplidores','gastos','nomina','gastosVeh','cxc','inventario','cotizaciones','cxp','autorizaciones','seguros'];
   const modulos=role==='admin'?MODS_IDS:MODS_IDS.filter(id=>document.getElementById('nu-mod-'+id)?.checked);
   const puedeEliminar=role==='admin'||DEL_IDS.some(id=>document.getElementById('nu-del-'+id)?.checked);
   const puedeEditar=role==='admin'||DEL_IDS.some(id=>document.getElementById('nu-edit-'+id)?.checked);
@@ -3447,7 +3449,7 @@ function guardarPermisosUsuarioConfig(i){
     const puedeImprimir=document.getElementById(`cfg-print-${i}`)?.checked!==false;
     DB.users[i].modulos=mods;
     DB.users[i].alertasPermitidas=alertas;
-    DB.users[i].permisos={editar:puedeEditar,eliminar:puedeEliminar,imprimir:puedeImprimir};
+    DB.users[i].permisos=Object.assign({},DB.users[i].permisos||{},{editar:puedeEditar,eliminar:puedeEliminar,imprimir:puedeImprimir});
     if(currentUser.id===u.id){currentUser=DB.users[i];}
   }
   sDB('users');
