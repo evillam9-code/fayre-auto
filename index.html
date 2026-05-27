@@ -6568,7 +6568,7 @@ function imprimirCotizacion(i){
     body{font-family:'Times New Roman',Times,serif;font-size:13px;color:#0f172a;background:#fff}
     .page{max-width:720px;margin:0 auto;padding:32px 40px 28px}
     .hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #2563eb;padding-bottom:16px;margin-bottom:20px}
-    .logo-img{width:110px;height:110px;object-fit:contain;border-radius:10px;filter:contrast(1.1) brightness(1.02)}
+    .logo-img{width:140px;height:140px;object-fit:contain;border-radius:10px;filter:contrast(1.1) brightness(1.02)}
     .logo-ph{width:110px;height:110px;background:#f1f5f9;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:900;color:#1e3a8a;flex-shrink:0}
     .emp-area{display:flex;align-items:center;gap:16px}
     .emp-nombre{font-size:20px;font-weight:900;color:#1a2a6c;font-family:Arial,sans-serif}
@@ -6602,7 +6602,7 @@ function imprimirCotizacion(i){
       <div class="emp-area">
         ${logoStored?`<img src="${logoStored}" class="logo-img" alt="${escHtml(empresa)}">`:`<div class="logo-ph">${escHtml(empresa[0]||'C')}</div>`}
         <div>
-          <div class="emp-nombre">${escHtml(empresa)}</div>
+          <div class="emp-nombre">${empresa.includes('Fayre')||empresa.includes('fayre')?empresa.replace(/(Fayre)/gi,'<span style="color:#f97316">$1</span>'):escHtml(empresa)}</div>
           <div class="emp-sub">${escHtml(direccion)}</div>
           <div class="emp-sub">Tel: ${escHtml(telefono)} &nbsp;·&nbsp; <a href="mailto:${escHtml(correo)}" style="color:#2563eb;text-decoration:none">${escHtml(correo)}</a></div>
           <div class="emp-sub"><strong>RNC: ${escHtml(rnc)}</strong></div>
