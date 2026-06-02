@@ -222,7 +222,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
     localStorage.setItem('fayre_version',VERSION);
   }
   // Limpiar claves residuales de otros sistemas
-  try{const old=Object.keys(localStorage).filter(k=>k.startsWith('ds_')||k.startsWith('jeyco_')||k.startsWith('chinito_')||k.startsWith('maedig_'));old.forEach(k=>localStorage.removeItem(k));}catch{}
+  try{const old=Object.keys(localStorage).filter(k=>k.startsWith('ds_')||k.startsWith('jeyco_')||k.startsWith('chinito_')||k.startsWith('creditfayre_'));old.forEach(k=>localStorage.removeItem(k));}catch{}
   window._APP_VERSION=VERSION;
 })();
 </script>
@@ -443,7 +443,7 @@ const defaultConfig={
   ],
   tiposGastoVeh:['Compra Vehículo','Aduana','Flete','Reparación','Preparación','Documentos','Seguro','Impuestos','Otros'],
   categoriasGastos:['Alquiler','Servicios','Salarios','Papelería','Mantenimiento','Publicidad','Combustible','Otros'],
-  bancos:['Banco Popular','Banco BHD','Banco BanReservas','Banco Santa Cruz','Banco Caribe','Asociación Popular','Otra Entidad']
+  bancos:["Banreservas", "Banco Popular", "BANCO POPULAR - EMPRESA"],bancoCuentas:[{"banco": "Banreservas", "cuentas": [{"numero": "9601135173 - Personal", "tipo": "Corriente RD$", "banco": "Banreservas"}, {"numero": "9600627287 - Creditfayre", "tipo": "Corriente RD$", "banco": "Banreservas"}]}, {"banco": "Banco Popular", "cuentas": [{"numero": "801633066 - Personal", "tipo": "Ahorro USD", "banco": "Banco Popular"}, {"numero": "8219255930 - Credifayre", "tipo": "Corriente USD", "banco": "Banco Popular"}]}, {"banco": "BANCO POPULAR - EMPRESA", "cuentas": [{"numero": "832387831", "tipo": "Corriente RD$", "banco": "BANCO POPULAR - EMPRESA"}]}]
 };
 const defaultUsers=[{id:'u1',nombre:'Administrador',username:'admin',password:'admin123',role:'admin',activo:true}];
 
@@ -517,6 +517,15 @@ function genFactura(){const nums=DB.ventas.map(v=>{const m=(v.factura||'').match
 const escHtml=s=>{const d=document.createElement('div');d.textContent=s||'';return d.innerHTML};
 // ══ BANCOS Y CUENTAS HELPER ══
 function getBancoCuentas(){return DB.config.bancoCuentas||[];}
+// Helper: genera <option> planos desde bancoCuentas para dropdowns simples de cuenta
+function getCuentasFlat(selected){
+  const bcs=DB.config.bancoCuentas||[];
+  return bcs.flatMap(b=>(b.cuentas||[]).map(c=>{
+    const val=c.tipo+' — '+c.numero+' ('+b.banco+')';
+    return '<option value="'+escHtml(val)+'"'+(val===selected?' selected':'')+'>'+escHtml(b.banco+' | '+c.tipo+' — '+c.numero)+'</option>';
+  })).join('')||'<option value="">Sin cuentas configuradas</option>';
+}
+
 function getBancoOptions(selectedBanco){
   const bcs=getBancoCuentas();
   return bcs.map(b=>`<option value="${escHtml(b.banco)}" ${b.banco===selectedBanco?'selected':''}>${escHtml(b.banco)}</option>`).join('');
@@ -1662,7 +1671,7 @@ function gastosVehiculo(vid){
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px">
         <div class="form-field" style="margin:0"><label style="font-size:10px">Forma de Pago</label><select id="gv-forma"><option value="CONTADO">Contado</option><option value="CREDITO">Crédito</option></select></div>
-        <div class="form-field" style="margin:0"><label style="font-size:10px">Cuenta</label><select id="gv-cuenta">${(DB.config.cuentas||['Caja General']).map(c=>`<option>${escHtml(c)}</option>`).join('')}</select></div>
+        <div class="form-field" style="margin:0"><label style="font-size:10px">Cuenta</label><select id="gv-cuenta">${getCuentasFlat()}</select></div>
         <div class="form-field" style="margin:0"><label style="font-size:10px">Fecha</label><input type="date" id="gv-fecha" value="${today()}"></div>
         <div class="form-field" style="margin:0;display:flex;align-items:flex-end"><button class="btn btn-red btn-sm" style="width:100%" onclick="agregarGastoVeh('${vid}')">💾 Agregar</button></div>
       </div>
@@ -1935,12 +1944,66 @@ function renderCaja(){
           <td style="font-weight:700;color:${c.tipo==='ENTRADA'?'var(--green)':'var(--red)'}">${fmt(c.monto)}</td>
           <td style="font-size:12px;color:var(--gray)">${escHtml(c.referencia||'—')}</td>
           <td style="font-size:12px">${escHtml(c.responsable||'—')}</td>
-          <td>${(currentUser?.role==='admin'||canDo('eliminar'))?`<button class="btn btn-red btn-sm" onclick="logBit('caja','Eliminó registro de caja',DB.caja[${i}]?.descripcion||'');DB.caja.splice(${i},1);sDB('caja');renderCaja()">🗑</button>`:''}</td>
+          <td style="display:flex;gap:4px">${(currentUser?.role==='admin'||canDo('editar'))?`<button class="btn btn-secondary btn-sm" onclick="editarCaja(${i})" title="Editar">✏️</button>`:''} ${(currentUser?.role==='admin'||canDo('eliminar'))?`<button class="btn btn-red btn-sm" onclick="logBit('caja','Eliminó registro de caja',DB.caja[${i}]?.descripcion||'');DB.caja.splice(${i},1);sDB('caja');renderCaja()" title="Eliminar">🗑</button>`:''}</td>
         </tr>`;}).join('')||'<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--gray)">Sin registros</td></tr>'}
         </tbody></table></div>
     </div>`;
   document.getElementById('caja-mes').value=mes;
   document.getElementById('caja-tab').value=tab;
+}
+function editarCaja(i){
+  const c=DB.caja[i];
+  if(!c)return;
+  const bcs=DB.config.bancoCuentas||[];
+  const bancoOpts=bcs.map(b=>`<option value="${escHtml(b.banco)}" ${b.banco===c.banco?'selected':''}>${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos</option>';
+  const cuentaOpts=bcs.length?(()=>{const b=bcs.find(x=>x.banco===c.banco)||bcs[0];return(b?b.cuentas:[]).map(ct=>`<option value="${escHtml(ct.tipo+' — '+ct.numero)}" ${(ct.tipo+' — '+ct.numero)===c.cuenta?'selected':''}>${escHtml(ct.tipo)} — ${escHtml(ct.numero)}</option>`).join('');})():'';
+  const defCatE=DB.config.categoriasEntrada||['Venta de Vehículo','Abono de Cliente','Préstamo Recibido','Capital','Otra Entrada'];
+  const defCatS=DB.config.categoriasSalida||['Nómina/Salario','Gasto de Vehículo','Gasto de Empresa','Pago a Suplidor','Alquiler','Servicios/Utilidades','Publicidad','Impuestos','Otra Salida'];
+  const allCats=[...new Set([...defCatE,...defCatS])];
+  const catOpts=allCats.map(x=>`<option ${x===c.categoria?'selected':''}>${escHtml(x)}</option>`).join('');
+  openModal('✏️ Editar Movimiento de Caja',`
+    <div class="form-row c2">
+      <div class="form-field"><label class="required">Fecha</label><input type="date" id="ec-fecha" value="${c.fecha||today()}"></div>
+      <div class="form-field"><label class="required">Tipo</label>
+        <select id="ec-tipo" onchange="actualizarCuentasCajaEdit()">
+          <option value="ENTRADA" ${c.tipo==='ENTRADA'?'selected':''}>📥 Entrada</option>
+          <option value="SALIDA" ${c.tipo==='SALIDA'?'selected':''}>📤 Salida</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row c2">
+      <div class="form-field"><label>Categoría</label><select id="ec-cat">${catOpts}</select></div>
+      <div class="form-field"><label class="required">Monto</label><input type="number" id="ec-monto" value="${c.monto||0}" min="0" step="0.01"></div>
+    </div>
+    <div class="form-field"><label>Descripción</label><input type="text" id="ec-desc" value="${escHtml(c.descripcion||'')}"></div>
+    <div class="form-row c2">
+      <div class="form-field"><label>Banco</label><select id="ec-banco" onchange="actualizarCuentasCajaEdit()">${bancoOpts}</select></div>
+      <div class="form-field"><label>Cuenta</label><select id="ec-cuenta">${cuentaOpts}</select></div>
+    </div>
+  `,`<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+     <button class="btn btn-primary" onclick="guardarEditCaja(${i})">💾 Guardar</button>`);
+}
+function actualizarCuentasCajaEdit(){
+  const banco=document.getElementById('ec-banco')?.value;
+  const sel=document.getElementById('ec-cuenta');
+  if(!sel)return;
+  const bcs=DB.config.bancoCuentas||[];
+  const b=bcs.find(x=>x.banco===banco);
+  sel.innerHTML=(b?b.cuentas:[]).map(c=>`<option value="${escHtml(c.tipo+' — '+c.numero)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`).join('')||'<option value="">Sin cuentas</option>';
+}
+function guardarEditCaja(i){
+  const c=DB.caja[i];if(!c)return;
+  const fecha=document.getElementById('ec-fecha').value;
+  const tipo=document.getElementById('ec-tipo').value;
+  const cat=document.getElementById('ec-cat').value;
+  const monto=parseFloat(document.getElementById('ec-monto').value||0);
+  const desc=document.getElementById('ec-desc').value.trim();
+  const banco=document.getElementById('ec-banco').value;
+  const cuenta=document.getElementById('ec-cuenta').value;
+  if(!fecha||!monto){toast('Fecha y monto son requeridos','error');return;}
+  logBit('caja','Editó registro de caja',c.descripcion||'');
+  DB.caja[i]={...c,fecha,tipo,categoria:cat,monto,descripcion:desc,banco,cuenta,referencia:cuenta?banco+' / '+cuenta:c.referencia||''};
+  sDB('caja');closeModal();toast('Movimiento actualizado ✓','success');renderCaja();
 }
 function exportarCajaPDF(){
   const mesEl=document.getElementById('caja-mes');
@@ -2468,7 +2531,7 @@ function registrarPagoNomina(i){
         <input type="text" id="np-monto" value="${fmtMoneyDisplay(salario)}" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
       </div>
       <div class="form-field"><label>Cuenta</label>
-        <select id="np-cuenta">${(DB.config.cuentas||['Caja General']).map(c=>`<option>${escHtml(c)}</option>`).join('')}</select>
+        <select id="np-cuenta">${getCuentasFlat()}</select>
       </div>
     </div>
     <div class="form-field"><label>Nota</label><input type="text" id="np-nota" placeholder="Opcional"></div>`,
@@ -3696,21 +3759,7 @@ function renderConfig(){
         <button class="btn btn-green" onclick="guardarColores()">💾 Guardar Colores</button>
       </div>
     </div>
-    <!-- BANCOS Y CUENTAS -->
-    <div class="card" style="margin-top:16px">
-      <div class="card-title">🏦 Bancos y Cuentas</div>
-      <p style="font-size:13px;color:var(--gray);margin-bottom:12px">Configure los bancos y sus cuentas. Estos aparecerán en todos los registros de dinero (gastos, ventas, caja, nómina, etc.).</p>
-      <div id="cf-bancos-list" style="display:flex;flex-direction:column;gap:12px">
-        ${(DB.config.bancoCuentas||[]).map((b,bi)=>{
-          const cuentasHTML=(b.cuentas||[]).map((ct,ci)=>'<div style="display:flex;gap:6px;align-items:center"><select id="cf-banco-tipo-'+bi+'-'+ci+'" style="width:140px"><option value="Ahorro" '+(ct.tipo==='Ahorro'?'selected':'')+'>Ahorro</option><option value="Corriente" '+(ct.tipo==='Corriente'?'selected':'')+'>Corriente</option><option value="Caja" '+(ct.tipo==='Caja'?'selected':'')+'>Caja</option></select><select id="cf-banco-moneda-'+bi+'-'+ci+'" style="width:120px"><option value="RD$" '+((ct.moneda||'RD$')==='RD$'?'selected':'')+'>RD$ Pesos</option><option value="USD" '+(ct.moneda==='USD'?'selected':'')+'>USD Dólares</option></select><input type="text" id="cf-banco-cuenta-'+bi+'-'+ci+'" value="'+escHtml(ct.numero||'')+'" placeholder="Número de cuenta" style="flex:1"><button class="btn btn-red btn-sm" onclick="eliminarCuentaBanco('+bi+','+ci+')">🗑</button></div>').join('');
-          return '<div style="border:1.5px solid var(--blue3);border-radius:8px;padding:12px;background:#f8fafc;margin-bottom:8px"><div style="display:flex;gap:8px;align-items:center;margin-bottom:8px"><input type="text" id="cf-banco-nombre-'+bi+'" value="'+escHtml(b.banco||'')+'" placeholder="Nombre del banco" style="flex:1;font-weight:700"><button class="btn btn-red btn-sm" onclick="eliminarBancoConfig('+bi+')">🗑 Eliminar</button></div><div id="cf-banco-cuentas-'+bi+'" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">'+cuentasHTML+'</div><button class="btn btn-secondary btn-sm" onclick="agregarCuentaBanco('+bi+')">➕ Agregar Cuenta</button></div>';
-        }).join('')}
-      </div>
-      <div style="margin-top:12px;display:flex;gap:8px">
-        <button class="btn btn-secondary btn-sm" onclick="agregarBancoConfig()">➕ Agregar Banco</button>
-        <button class="btn btn-primary" onclick="guardarBancosConfig()">💾 Guardar Bancos</button>
-      </div>
-    </div>
+
     <!-- COMPAÑÍAS DE SEGUROS -->
     <div class="card">
       <div class="card-title">🛡️ Compañías de Seguros</div>
@@ -3774,39 +3823,7 @@ function renderConfig(){
       <div class="btn-row" style="margin-top:12px"><button class="btn btn-primary" onclick="guardarCategoriasGastos()">💾 Guardar</button></div>
     </div>
 
-    <!-- BANCOS Y CUENTAS -->
-    <div class="card">
-      <div class="card-title">🏦 Bancos y Cuentas Bancarias <span style="font-size:11px;font-weight:400;color:var(--gray)">(Para pagos y gastos)</span></div>
-      <p style="font-size:13px;color:var(--gray);margin-bottom:12px">Configure los bancos y sus cuentas asociadas. Cada banco puede tener múltiples cuentas en pesos o dólares.</p>
-      <div id="cf-bancoc-list">
-        ${(DB.config.bancoCuentas||[]).map((b,bi)=>`
-          <div class="bc-banco-block" style="background:var(--gray2);border-radius:10px;padding:14px;margin-bottom:12px;border:1px solid var(--gray3)" id="bcb-${bi}">
-            <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
-              <input type="text" id="bcb-nombre-${bi}" value="${escHtml(b.banco)}" placeholder="Nombre del banco" style="flex:1;font-weight:700">
-              <button class="btn btn-red btn-sm" onclick="document.getElementById('bcb-${bi}').remove()">🗑 Quitar banco</button>
-            </div>
-            <div style="font-size:11px;font-weight:700;color:var(--gray);text-transform:uppercase;margin-bottom:6px">Cuentas de este banco:</div>
-            <div id="bcb-cuentas-${bi}">
-              ${(b.cuentas||[]).map((c,ci)=>`
-                <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:6px;margin-bottom:6px" class="bc-cuenta-row">
-                  <input type="text" placeholder="Número de cuenta" value="${escHtml(c.numero||'')}" class="bc-cnum">
-                  <select class="bc-ctipo">
-                    <option value="Corriente RD$" ${(c.tipo||'Corriente RD$')==='Corriente RD$'?'selected':''}>Corriente RD$</option>
-                    <option value="Corriente USD" ${c.tipo==='Corriente USD'?'selected':''}>Corriente USD</option>
-                    <option value="Ahorro RD$" ${c.tipo==='Ahorro RD$'?'selected':''}>Ahorro RD$</option>
-                    <option value="Ahorro USD" ${c.tipo==='Ahorro USD'?'selected':''}>Ahorro USD</option>
-                  </select>
-                  <button class="btn btn-red btn-sm" onclick="this.closest('.bc-cuenta-row').remove()">✕</button>
-                </div>`).join('')}
-            </div>
-            <button class="btn btn-secondary btn-sm" style="margin-top:6px" onclick="agregarCuentaBanco(${bi})">➕ Agregar Cuenta</button>
-          </div>`).join('')}
-      </div>
-      <button class="btn btn-secondary btn-sm" onclick="agregarBancoConfig()">🏦 Agregar Banco</button>
-      <div class="btn-row" style="margin-top:12px"><button class="btn btn-primary" onclick="guardarBancoCuentas()">💾 Guardar</button></div>
-    </div>
-
-    <!-- RESPONSABLE Y OBSERVACIÓN RECIBO -->
+    
     <div class="card">
       <div class="card-title">📄 Datos del Recibo</div>
       <div class="form-row c2">
@@ -4554,7 +4571,6 @@ function renderGastosVeh(){
 }
 
 function nuevoGastoVeh(){
-  const cuentas=DB.config.cuentas&&DB.config.cuentas.length?DB.config.cuentas:['Caja General'];
   // Generar opciones de banco+cuenta
   const bancoCuentas=DB.config.bancoCuentas||[];
   const opcionesBanco=bancoCuentas.length
@@ -4740,7 +4756,6 @@ function abonarGastoVeh(gid){
   const i=gastos.findIndex(g=>g.id===gid);
   if(i<0)return;
   const g=gastos[i];
-  const cuentas=DB.config.cuentas&&DB.config.cuentas.length?DB.config.cuentas:['Caja General'];
   openModal('💵 Registrar Abono/Pago — '+escHtml(g.tipo),`
     <div style="background:var(--blue3);border-radius:8px;padding:10px;margin-bottom:14px;font-size:13px">
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
@@ -4754,7 +4769,7 @@ function abonarGastoVeh(gid){
         <input type="text" id="abgv-monto" value="${fmtMoneyDisplay(g.montoPendiente||0)}" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
       </div>
       <div class="form-field"><label>Cuenta de Salida</label>
-        <select id="abgv-cuenta">${cuentas.map(c=>`<option ${c===g.cuenta?'selected':''}>${escHtml(c)}</option>`).join('')}</select>
+        <select id="abgv-cuenta">${getCuentasFlat(g.cuenta)}</select>
       </div>
     </div>
     <div class="form-row c2">
@@ -4794,7 +4809,6 @@ function editarGastoVeh(gid){
   if(i<0)return;
   const g=gastos[i];
   const tiposGasto=(DB.config.tiposGastoVeh&&DB.config.tiposGastoVeh.length)?DB.config.tiposGastoVeh:TIPOS_GASTO_VEH;
-  const cuentas=DB.config.cuentas&&DB.config.cuentas.length?DB.config.cuentas:['Caja General'];
   const vActual=DB.vehiculos.find(x=>x.id===g.vehiculoId);
   openModal('✏️ Editar Gasto de Vehículo',`
     <div class="form-row c2">
@@ -4828,7 +4842,7 @@ function editarGastoVeh(gid){
         <input type="number" id="egv-tasa" value="${g.tasaCambio||DB.config.tasaCambio||60}" step="0.01" placeholder="Ej: 60.50">
       </div>
       <div class="form-field"><label>Cuenta Salida</label>
-        <select id="egv-cuenta">${cuentas.map(c=>`<option ${c===g.cuenta?'selected':''}>${escHtml(c)}</option>`).join('')}</select>
+        <select id="egv-cuenta">${getCuentasFlat(g.cuenta)}</select>
       </div>
       <div class="form-field"><label>Fecha</label>
         <input type="date" id="egv-fecha" value="${g.fecha||today()}">
@@ -5992,7 +6006,6 @@ function addDays(dateStr,days){
 
 function abonarVenta(vid){
   const v=DB.ventas.find(x=>x.id===vid);if(!v)return;
-  const cuentas=DB.config.cuentas&&DB.config.cuentas.length?DB.config.cuentas:['Caja General'];
   openModal('💵 Registrar Cobro — '+escHtml(v.factura),`
     <div style="background:var(--blue3);border-radius:8px;padding:10px;margin-bottom:14px">
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:12px">
@@ -6006,7 +6019,7 @@ function abonarVenta(vid){
         <input type="text" id="ab-monto" value="${fmtMoneyDisplay(v.pendiente)}" placeholder="0.00" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
       </div>
       <div class="form-field"><label>Cuenta</label>
-        <select id="ab-cuenta">${cuentas.map(c=>`<option>${escHtml(c)}</option>`).join('')}</select>
+        <select id="ab-cuenta">${getCuentasFlat()}</select>
       </div>
     </div>
     <div class="form-row c2">
@@ -6427,7 +6440,7 @@ function agregarBancoCotRapido(){
 }
 
 function nuevaCotizacion(){
-  const _bcOpts=(DB.config.cuentas||['Caja General']).map(c=>`<option value="${escHtml(c)}">${escHtml(c)}</option>`).join('');
+  const _bcOpts=getCuentasFlat();
   openModal('Nueva Cotización',`
     <div class="form-row c3">
       <div class="form-field"><label class="required">Nombre del Cliente / Empresa</label><input type="text" id="cot-cli"></div>
@@ -6509,7 +6522,7 @@ function guardarCotizacion(idx){
 function editarCotizacion(i){
   if(!canDo('editar')&&currentUser?.role!=='admin'){toast('No tienes permiso para editar','error');return;}
   const c=DB.cotizaciones[i];
-  const _bcOpts2=(DB.config.cuentas||['Caja General']).map(ct=>`<option value="${escHtml(ct)}" ${ct===c.banco?'selected':''}>${escHtml(ct)}</option>`).join('');
+  const _bcOpts2=getCuentasFlat(c.banco);
   openModal('Editar Cotización',`
     <div class="form-row c3">
       <div class="form-field"><label>Cliente / Empresa</label><input type="text" id="cot-cli" value="${escHtml(c.cliente||'')}"></div>
@@ -7487,7 +7500,6 @@ function abonarDesdeCXP(gid){
   if(i<0)return;
   const g=gastos[i];
   const v=DB.vehiculos.find(x=>x.id===g.vehiculoId);
-  const cuentas=DB.config.cuentas&&DB.config.cuentas.length?DB.config.cuentas:['Caja General'];
   const esUSD=g.moneda==='USD';
   const fV=(n)=>esUSD?'$'+parseFloat(n||0).toLocaleString('en-US',{minimumFractionDigits:2})+' USD':fmt(n);
   openModal('💵 Registrar Pago — '+escHtml(g.suplidor||'Suplidor'),`
@@ -7909,7 +7921,6 @@ function selCXC(id,tr){
 
 function nuevaCXCManual(){
   if(currentUser?.role!=='admin'&&!canDo('editar')&&!currentUser?.permisos?.editarCobros){toast('No tienes permiso para agregar CxC','error');return;}
-  const cuentas=DB.config.cuentas||['Caja General'];
   openModal('➕ Nueva Cuenta por Cobrar',`
     <div class="form-row c2">
       <div class="form-field"><label class="required">Cliente</label>
@@ -8174,7 +8185,6 @@ function abonarCXC(id){
   const ventaRel=DB.ventas.find(v=>v.id===x.ventaId);
   const esUSD=(x.moneda||ventaRel?.moneda||'RD$')==='USD';
   const fV=(n)=>esUSD?'$'+parseFloat(n||0).toLocaleString('en-US',{minimumFractionDigits:2})+' USD':fmt(n);
-  const cuentas=DB.config.cuentas&&DB.config.cuentas.length?DB.config.cuentas:['Caja General'];
   openModal('💵 Registrar Cobro — '+escHtml(x.cliente),`
     <div style="background:var(--blue3);border-radius:8px;padding:12px;margin-bottom:14px">
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:12px">
@@ -9559,7 +9569,6 @@ function renderSeguros(){
 
 function _formSeguro(s){
   const companias=(DB.config.companiasSeguro||['Universal','Mapfre BHD','Reservas','Patria','Atlantica','HUMANO','Otra']);
-  const cuentas=DB.config.cuentas&&DB.config.cuentas.length?DB.config.cuentas:['Caja General'];
   const abon=parseFloat(s?.abonado||0);
   const prim=parseFloat(s?.prima||0);
   return`
@@ -9599,7 +9608,7 @@ function _formSeguro(s){
       <div class="form-field"><label>Vigencia Desde</label><input type="date" id="sg-desde" value="${s?.desde||today()}"></div>
       <div class="form-field"><label>Vigencia Hasta</label><input type="date" id="sg-hasta" value="${s?.hasta||''}"></div>
       <div class="form-field"><label>Cuenta de Pago</label>
-        <select id="sg-cuenta">${cuentas.map(c=>`<option ${c===s?.cuenta?'selected':''}>${escHtml(c)}</option>`).join('')}</select>
+        <select id="sg-cuenta">${getCuentasFlat(s?.cuenta)}</select>
       </div>
     </div>
     <div class="form-field"><label>Observaciones</label>
@@ -9662,7 +9671,6 @@ function editarSeguro(id){
 }
 function abonarSeguro(id){
   const s=DB.seguros.find(x=>x.id===id);if(!s)return;
-  const cuentas=DB.config.cuentas&&DB.config.cuentas.length?DB.config.cuentas:['Caja General'];
   const pendiente=parseFloat(s.pendiente||0);
   openModal('💵 Registrar Abono — '+escHtml(s.compania),`
     <div style="background:var(--blue3);border-radius:8px;padding:10px;margin-bottom:14px">
@@ -9680,7 +9688,7 @@ function abonarSeguro(id){
         <input type="text" id="sgp-monto" value="${fmtMoneyDisplay(pendiente)}" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)" placeholder="0.00">
       </div>
       <div class="form-field"><label>Cuenta de Pago</label>
-        <select id="sgp-cuenta">${cuentas.map(c=>`<option ${c===s.cuenta?'selected':''}>${escHtml(c)}</option>`).join('')}</select>
+        <select id="sgp-cuenta">${getCuentasFlat(s.cuenta)}</select>
       </div>
     </div>
     <div class="form-field"><label>Fecha de Pago</label><input type="date" id="sgp-fecha" value="${today()}"></div>`,
@@ -10469,7 +10477,7 @@ function _ejecutarBackupAuto(){
     const pad=n=>String(n).padStart(2,'0');
     const meses=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     const fechaCorta=`${pad(ahora.getDate())}-${meses[ahora.getMonth()]}-${ahora.getFullYear()}`;
-    const filename=`BACKUP_Maedig_${fechaCorta}.json`;
+    const filename=`BACKUP_CreditFayre_${fechaCorta}.json`;
     const datos={
       _backupInfo:{empresa:DB.config.empresa||'',fecha:ahora.toISOString(),version:'dealer_v14',
         resumen:{vehiculos:(DB.vehiculos||[]).length,clientes:(DB.clientes||[]).length,ventas:(DB.ventas||[]).length}},
