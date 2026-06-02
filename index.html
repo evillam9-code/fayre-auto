@@ -4577,7 +4577,7 @@ function nuevoGastoVeh(){
     ?bancoCuentas.flatMap(b=>b.cuentas&&b.cuentas.length
       ?b.cuentas.map(ct=>`<option value="${escHtml(b.banco+' — '+ct.numero+' ('+ct.tipo+')')}">${escHtml(b.banco+' — '+ct.numero)}</option>`)
       :[`<option value="${escHtml(b.banco)}">${escHtml(b.banco)}</option>`])
-    :cuentas.map(ct=>`<option>${escHtml(ct)}</option>`);
+    :getCuentasFlat();
   // Tipos de gasto con botón +
   const tiposGasto=DB.config.tiposGastoVeh&&DB.config.tiposGastoVeh.length?DB.config.tiposGastoVeh:['Compra Vehículo','Aduana','Flete','Otros'];
   openModal('➕ Nuevo Gasto de Vehículo',`
@@ -10314,6 +10314,12 @@ window.addEventListener('load', ()=>{
     fbCargar().then(()=>{
       window._fbActivo=true;
       window._fbCargado=true;
+      // Auto-restore bancoCuentas si Firebase los tiene vacíos
+      if(!DB.config.bancoCuentas||DB.config.bancoCuentas.length===0){
+        DB.config.bancoCuentas=[{"banco": "Banreservas", "cuentas": [{"numero": "9601135173 - Personal", "tipo": "Corriente RD$", "banco": "Banreservas"}, {"numero": "9600627287 - Creditfayre", "tipo": "Corriente RD$", "banco": "Banreservas"}]}, {"banco": "Banco Popular", "cuentas": [{"numero": "801633066 - Personal", "tipo": "Ahorro USD", "banco": "Banco Popular"}, {"numero": "8219255930 - Credifayre", "tipo": "Corriente USD", "banco": "Banco Popular"}]}, {"banco": "BANCO POPULAR - EMPRESA", "cuentas": [{"numero": "832387831", "tipo": "Corriente RD$", "banco": "BANCO POPULAR - EMPRESA"}]}];
+        DB.config.bancos=DB.config.bancoCuentas.map(b=>b.banco);
+        if(typeof fbGuardar==='function')fbGuardar('config').catch(()=>{});
+      }
       if(typeof fbActivarListeners==='function') fbActivarListeners();
       if(btn){btn.textContent='Ingresar al sistema →';btn.disabled=false;}
       // Actualizar indicador Firebase
@@ -10795,6 +10801,12 @@ window.fbIniciar = async function(){
     if(loaded){
       setStatus('#22c55e','✓ Firebase');
       window._fbCargado=true;
+      // Auto-restore bancoCuentas si Firebase los tiene vacíos
+      if(!DB.config.bancoCuentas||DB.config.bancoCuentas.length===0){
+        DB.config.bancoCuentas=[{"banco": "Banreservas", "cuentas": [{"numero": "9601135173 - Personal", "tipo": "Corriente RD$", "banco": "Banreservas"}, {"numero": "9600627287 - Creditfayre", "tipo": "Corriente RD$", "banco": "Banreservas"}]}, {"banco": "Banco Popular", "cuentas": [{"numero": "801633066 - Personal", "tipo": "Ahorro USD", "banco": "Banco Popular"}, {"numero": "8219255930 - Credifayre", "tipo": "Corriente USD", "banco": "Banco Popular"}]}, {"banco": "BANCO POPULAR - EMPRESA", "cuentas": [{"numero": "832387831", "tipo": "Corriente RD$", "banco": "BANCO POPULAR - EMPRESA"}]}];
+        DB.config.bancos=DB.config.bancoCuentas.map(b=>b.banco);
+        if(typeof fbGuardar==='function')fbGuardar('config').catch(()=>{});
+      }
       // Activar listeners de tiempo real
       if(typeof fbActivarListeners==='function') fbActivarListeners();
       // Iniciar verificador de versión automática
@@ -10838,6 +10850,12 @@ window.fbIniciar = async function(){
         console.log('ℹ️ Firebase vacío y sin datos locales — solo conectando sin subir');
       }
       window._fbCargado=true;
+      // Auto-restore bancoCuentas si Firebase los tiene vacíos
+      if(!DB.config.bancoCuentas||DB.config.bancoCuentas.length===0){
+        DB.config.bancoCuentas=[{"banco": "Banreservas", "cuentas": [{"numero": "9601135173 - Personal", "tipo": "Corriente RD$", "banco": "Banreservas"}, {"numero": "9600627287 - Creditfayre", "tipo": "Corriente RD$", "banco": "Banreservas"}]}, {"banco": "Banco Popular", "cuentas": [{"numero": "801633066 - Personal", "tipo": "Ahorro USD", "banco": "Banco Popular"}, {"numero": "8219255930 - Credifayre", "tipo": "Corriente USD", "banco": "Banco Popular"}]}, {"banco": "BANCO POPULAR - EMPRESA", "cuentas": [{"numero": "832387831", "tipo": "Corriente RD$", "banco": "BANCO POPULAR - EMPRESA"}]}];
+        DB.config.bancos=DB.config.bancoCuentas.map(b=>b.banco);
+        if(typeof fbGuardar==='function')fbGuardar('config').catch(()=>{});
+      }
       setStatus('#22c55e','✓ Firebase');
     }
   } catch(e) {
