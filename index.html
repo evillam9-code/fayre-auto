@@ -518,6 +518,51 @@ const escHtml=s=>{const d=document.createElement('div');d.textContent=s||'';retu
 // ══ BANCOS Y CUENTAS HELPER ══
 function getBancoCuentas(){return DB.config.bancoCuentas||[];}
 // Helper: genera <option> planos desde bancoCuentas para dropdowns simples de cuenta
+
+// Helper: genera bloque Moneda→Banco→Cuenta con filtrado por moneda
+function getMonedaBancoCuentaFields(prefix, monedaSel, bancoSel, cuentaSel){
+  const bcs=DB.config.bancoCuentas||[];
+  // Filtrar bancos con cuentas compatibles con la moneda seleccionada
+  function bancosParaMoneda(moneda){
+    return bcs.filter(b=>(b.cuentas||[]).some(c=>
+      moneda==='USD'?c.tipo.includes('USD'):!c.tipo.includes('USD')
+    ));
+  }
+  function cuentasParaBanco(banco, moneda){
+    const b=bcs.find(x=>x.banco===banco);
+    if(!b)return[];
+    return (b.cuentas||[]).filter(c=>
+      moneda==='USD'?c.tipo.includes('USD'):!c.tipo.includes('USD')
+    );
+  }
+  const moneda=monedaSel||'RD$';
+  const bancosDisp=bancosParaMoneda(moneda);
+  const bancoPre=bancoSel&&bancosDisp.find(b=>b.banco===bancoSel)?bancoSel:(bancosDisp[0]?.banco||'');
+  const cuentasDisp=cuentasParaBanco(bancoPre,moneda);
+  const bancoOpts=bancosDisp.map(b=>`<option value="${escHtml(b.banco)}" ${b.banco===bancoPre?'selected':''}>${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos</option>';
+  const cuentaOpts=cuentasDisp.map(c=>{const v=c.tipo+' — '+c.numero;return`<option value="${escHtml(v)}" ${v===cuentaSel?'selected':''}>${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('')||'<option value="">Sin cuentas</option>';
+  return {bancoOpts, cuentaOpts, moneda, bancoPre};
+}
+function filtrarBancosPorMoneda(prefix){
+  const moneda=document.getElementById(prefix+'-moneda')?.value||'RD$';
+  const bancoEl=document.getElementById(prefix+'-banco');
+  const cuentaEl=document.getElementById(prefix+'-cuenta');
+  if(!bancoEl||!cuentaEl)return;
+  const bcs=DB.config.bancoCuentas||[];
+  const bancosDisp=bcs.filter(b=>(b.cuentas||[]).some(c=>moneda==='USD'?c.tipo.includes('USD'):!c.tipo.includes('USD')));
+  bancoEl.innerHTML=bancosDisp.map(b=>`<option value="${escHtml(b.banco)}">${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos</option>';
+  filtrarCuentasPorBanco(prefix);
+}
+function filtrarCuentasPorBanco(prefix){
+  const moneda=document.getElementById(prefix+'-moneda')?.value||'RD$';
+  const banco=document.getElementById(prefix+'-banco')?.value;
+  const cuentaEl=document.getElementById(prefix+'-cuenta');
+  if(!cuentaEl)return;
+  const bcs=DB.config.bancoCuentas||[];
+  const b=bcs.find(x=>x.banco===banco);
+  const cuentas=(b?b.cuentas:[]).filter(c=>moneda==='USD'?c.tipo.includes('USD'):!c.tipo.includes('USD'));
+  cuentaEl.innerHTML=cuentas.map(c=>{const v=c.tipo+' — '+c.numero;return`<option value="${escHtml(v)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('')||'<option value="">Sin cuentas</option>';
+}
 function getCuentasFlat(selected){
   const bcs=DB.config.bancoCuentas||[];
   return bcs.flatMap(b=>(b.cuentas||[]).map(c=>{
@@ -2254,9 +2299,15 @@ function nuevoGasto(){
         <input type="text" id="g-desc" placeholder="Descripción del gasto">
       </div>
     </div>
-    <div class="form-row c2">
+    <div class="form-row c3">
+      <div class="form-field"><label>Moneda</label>
+        <select id="g-moneda" onchange="filtrarBancosPorMoneda('g')">
+          <option value="RD$">RD$ — Pesos</option>
+          <option value="USD">USD — Dólares</option>
+        </select>
+      </div>
       <div class="form-field"><label>Banco</label>
-        <select id="g-banco" onchange="actualizarCuentasGasto()">${bancoOpts}</select>
+        <select id="g-banco" onchange="filtrarCuentasPorBanco('g')">${bancoOpts}</select>
       </div>
       <div class="form-field"><label>Cuenta Bancaria</label>
         <select id="g-cuenta">${cuentaOpts}</select>
@@ -2326,6 +2377,9 @@ function guardarGasto(idx){
   const desc=document.getElementById('g-desc').value.trim();
   const montoFactura=parseFloat(document.getElementById('g-monto-factura')?.value||document.getElementById('g-monto')?.value||0);
   if(!montoFactura||!desc){toast('Monto y descripción son requeridos','error');return;}
+  const _g_banco=document.getElementById('g-banco')?.value||'';
+  const _g_cuenta=document.getElementById('g-cuenta')?.value||'';
+  if(!_g_banco||!_g_cuenta){toast('Selecciona banco y cuenta para continuar','error');return;}
   const montoAbonado=parseFloat(document.getElementById('g-monto-abonado')?.value||0);
   const montoPendiente=Math.max(0,montoFactura-montoAbonado);
   const g={
@@ -2530,8 +2584,19 @@ function registrarPagoNomina(i){
       <div class="form-field"><label class="required">Monto</label>
         <input type="text" id="np-monto" value="${fmtMoneyDisplay(salario)}" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
       </div>
+      <div class="form-field"><label>Moneda</label>
+        <select id="np-moneda" onchange="filtrarBancosPorMoneda('np')">
+          <option value="RD$">RD$ — Pesos</option>
+          <option value="USD">USD — Dólares</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row c2">
+      <div class="form-field"><label>Banco</label>
+        <select id="np-banco" onchange="filtrarCuentasPorBanco('np')">${(()=>{const bcs=DB.config.bancoCuentas||[];const disp=bcs.filter(b=>(b.cuentas||[]).some(c=>!c.tipo.includes('USD')));return disp.map(b=>`<option value="${escHtml(b.banco)}">${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos</option>';})()}</select>
+      </div>
       <div class="form-field"><label>Cuenta</label>
-        <select id="np-cuenta">${getCuentasFlat()}</select>
+        <select id="np-cuenta">${(()=>{const bcs=DB.config.bancoCuentas||[];const b=bcs.find(x=>(x.cuentas||[]).some(c=>!c.tipo.includes('USD')));return(b?b.cuentas:[]).filter(c=>!c.tipo.includes('USD')).map(c=>{const v=c.tipo+' — '+c.numero;return`<option value="${escHtml(v)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('')||'<option value="">Sin cuentas</option>';})()}</select>
       </div>
     </div>
     <div class="form-field"><label>Nota</label><input type="text" id="np-nota" placeholder="Opcional"></div>`,
@@ -2547,17 +2612,22 @@ function calcMontoNomina(salario){
 function guardarPagoNomina(i){
   const monto=parseFloat((document.getElementById('np-monto').value||'0').replace(/,/g,''));
   if(!monto){toast('Ingresa el monto','error');return;}
+  const _np_banco=document.getElementById('np-banco')?.value||'';
+  const _np_cuenta=document.getElementById('np-cuenta')?.value||'';
+  if(!_np_banco||!_np_cuenta){toast('Selecciona banco y cuenta para continuar','error');return;}
   const e=DB.nomina[i];
   const mes=document.getElementById('np-mes').value;
   const tipo=document.getElementById('np-tipo').value;
   const cuenta=document.getElementById('np-cuenta').value;
+  const banco=document.getElementById('np-banco')?.value||'';
+  const moneda=document.getElementById('np-moneda')?.value||'RD$';
   const nota=document.getElementById('np-nota')?.value||'';
   const tipoLabel={MEN:'Mensual','1Q':'1ra Quincena','2Q':'2da Quincena',SEM:'Semanal',COM:'Comisión'}[tipo]||tipo;
   if(!DB.nominaPagos)DB.nominaPagos=[];
   DB.nominaPagos.push({id:uid(),empleadoId:e.id,empleadoNombre:e.nombre,mes,tipo,monto,cuenta,fecha:today(),nota});
   DB.caja.push({id:uid(),fecha:today(),tipo:'SALIDA',categoria:'Nómina/Salario',
     descripcion:'Pago nómina: '+e.nombre+' ('+tipoLabel+')',
-    monto,referencia:cuenta,responsable:currentUser.nombre});
+    monto,moneda,banco,cuenta,referencia:banco&&cuenta?banco+' / '+cuenta:cuenta,responsable:currentUser.nombre});
   logBit('nomina','Pagó nómina','');sDB('nominaPagos');sDB('caja');closeModal();toast('Pago registrado ✓','success');renderNomina();
 }
 function imprimirPagosNomina(){
@@ -4699,6 +4769,9 @@ function guardarNuevoGastoVeh(){
     return;
   }
   if(!tipo){toast('Selecciona el tipo de gasto','error');return;}
+  const _ngv_banco=document.getElementById('ngv-banco')?.value||'';
+  const _ngv_cuenta=document.getElementById('ngv-cuenta')?.value||'';
+  if(!_ngv_banco||!_ngv_cuenta){toast('Selecciona banco y cuenta para continuar','error');return;}
   const factura=parseFloat((document.getElementById('ngv-factura').value||'0').replace(/,/g,''));
   if(!factura){toast('El monto de factura es requerido','error');return;}
   const abono=parseFloat((document.getElementById('ngv-abono').value||'0').replace(/,/g,''));
@@ -4768,13 +4841,22 @@ function abonarGastoVeh(gid){
       <div class="form-field"><label class="required">Monto a Pagar</label>
         <input type="text" id="abgv-monto" value="${fmtMoneyDisplay(g.montoPendiente||0)}" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
       </div>
-      <div class="form-field"><label>Cuenta de Salida</label>
-        <select id="abgv-cuenta">${getCuentasFlat(g.cuenta)}</select>
-      </div>
-    </div>
-    <div class="form-row c2">
       <div class="form-field"><label>Fecha de Pago</label>
         <input type="date" id="abgv-fecha" value="${today()}">
+      </div>
+    </div>
+    <div class="form-row c3">
+      <div class="form-field"><label>Moneda</label>
+        <select id="abgv-moneda" onchange="filtrarBancosPorMoneda('abgv')">
+          <option value="RD$" ${(g.moneda||'RD$')==='RD$'?'selected':''}>RD$ — Pesos</option>
+          <option value="USD" ${g.moneda==='USD'?'selected':''}>USD — Dólares</option>
+        </select>
+      </div>
+      <div class="form-field"><label>Banco</label>
+        <select id="abgv-banco" onchange="filtrarCuentasPorBanco('abgv')">${(()=>{const m=g.moneda||'RD$';const bcs=DB.config.bancoCuentas||[];const disp=bcs.filter(b=>(b.cuentas||[]).some(c=>m==='USD'?c.tipo.includes('USD'):!c.tipo.includes('USD')));return disp.map(b=>`<option value="${escHtml(b.banco)}" ${b.banco===g.banco?'selected':''}>${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos</option>';})()}</select>
+      </div>
+      <div class="form-field"><label>Cuenta de Salida</label>
+        <select id="abgv-cuenta">${(()=>{const m=g.moneda||'RD$';const bcs=DB.config.bancoCuentas||[];const b=bcs.find(x=>x.banco===g.banco)||bcs.find(x=>(x.cuentas||[]).some(c=>m==='USD'?c.tipo.includes('USD'):!c.tipo.includes('USD')));const cts=(b?b.cuentas:[]).filter(c=>m==='USD'?c.tipo.includes('USD'):!c.tipo.includes('USD'));return cts.map(c=>{const v=c.tipo+' — '+c.numero;return`<option value="${escHtml(v)}" ${v===g.cuenta?'selected':''}>${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('')||'<option value="">Sin cuentas</option>';})()}</select>
       </div>
     </div>`,
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
@@ -4784,12 +4866,17 @@ function abonarGastoVeh(gid){
 function confirmarAbonoGastoVeh(i){
   const monto=parseFloat((document.getElementById('abgv-monto').value||'0').replace(/,/g,''));
   if(!monto||monto<=0){toast('Ingresa un monto válido','error');return;}
+  const _abgv_banco=document.getElementById('abgv-banco')?.value||'';
+  const _abgv_cuenta=document.getElementById('abgv-cuenta')?.value||'';
+  if(!_abgv_banco||!_abgv_cuenta){toast('Selecciona banco y cuenta para continuar','error');return;}
   const g=DB.gastosVehiculos[i];
   if(monto>parseFloat(g.montoPendiente||0)){toast('El monto no puede superar el pendiente','error');return;}
   DB.gastosVehiculos[i].montoPagado=(parseFloat(g.montoPagado||0)+monto);
   DB.gastosVehiculos[i].montoPendiente=(parseFloat(g.montoPendiente||0)-monto);
   DB.gastosVehiculos[i].fechaPago=document.getElementById('abgv-fecha').value;
   DB.gastosVehiculos[i].cuenta=document.getElementById('abgv-cuenta').value;
+  DB.gastosVehiculos[i].banco=document.getElementById('abgv-banco')?.value||g.banco||'';
+  DB.gastosVehiculos[i].moneda=document.getElementById('abgv-moneda')?.value||g.moneda||'RD$';
   if(DB.gastosVehiculos[i].montoPendiente<=0){
     DB.gastosVehiculos[i].montoPendiente=0;
     DB.gastosVehiculos[i].statusGasto='PAGADO';
@@ -4827,25 +4914,30 @@ function editarGastoVeh(gid){
         </select>
       </div>
     </div>
-    <div class="form-row c4" style="grid-template-columns:2fr 1fr 1fr 1fr;">
+    <div class="form-row c2">
       <div class="form-field"><label>Tipo de Gasto</label>
         <select id="egv-tipo">${tiposGasto.map(t=>`<option ${t===g.tipo?'selected':''}>${t}</option>`).join('')}</select>
       </div>
+      <div class="form-field"><label>Fecha</label>
+        <input type="date" id="egv-fecha" value="${g.fecha||today()}">
+      </div>
+    </div>
+    <div class="form-row c3">
       <div class="form-field"><label>Moneda</label>
-        <select id="egv-moneda" onchange="document.getElementById('egv-tasa-wrap').style.display=this.value==='USD'?'block':'none'">
-          <option value="RD$" ${(g.moneda||'RD$')==='RD$'?'selected':''}>RD$</option>
-          <option value="USD" ${g.moneda==='USD'?'selected':''}>USD</option>
+        <select id="egv-moneda" onchange="document.getElementById('egv-tasa-wrap').style.display=this.value==='USD'?'block':'none';filtrarBancosPorMoneda('egv')">
+          <option value="RD$" ${(g.moneda||'RD$')==='RD$'?'selected':''}>RD$ — Pesos</option>
+          <option value="USD" ${g.moneda==='USD'?'selected':''}>USD — Dólares</option>
         </select>
       </div>
       <div class="form-field" id="egv-tasa-wrap" style="display:${g.moneda==='USD'?'block':'none'}">
-        <label class="required">Tasa (RD$ x USD)</label>
+        <label>Tasa (RD$ x USD)</label>
         <input type="number" id="egv-tasa" value="${g.tasaCambio||DB.config.tasaCambio||60}" step="0.01" placeholder="Ej: 60.50">
       </div>
-      <div class="form-field"><label>Cuenta Salida</label>
-        <select id="egv-cuenta">${getCuentasFlat(g.cuenta)}</select>
+      <div class="form-field"><label>Banco</label>
+        <select id="egv-banco" onchange="filtrarCuentasPorBanco('egv')">${(()=>{const m=g.moneda||'RD$';const bcs=DB.config.bancoCuentas||[];const disp=bcs.filter(b=>(b.cuentas||[]).some(c=>m==='USD'?c.tipo.includes('USD'):!c.tipo.includes('USD')));return disp.map(b=>`<option value="${escHtml(b.banco)}" ${b.banco===g.banco?'selected':''}>${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos</option>';})()}</select>
       </div>
-      <div class="form-field"><label>Fecha</label>
-        <input type="date" id="egv-fecha" value="${g.fecha||today()}">
+      <div class="form-field"><label>Cuenta Salida</label>
+        <select id="egv-cuenta">${(()=>{const m=g.moneda||'RD$';const bcs=DB.config.bancoCuentas||[];const b=bcs.find(x=>x.banco===g.banco)||bcs.find(x=>(x.cuentas||[]).some(c=>m==='USD'?c.tipo.includes('USD'):!c.tipo.includes('USD')));const cts=(b?b.cuentas:[]).filter(c=>m==='USD'?c.tipo.includes('USD'):!c.tipo.includes('USD'));return cts.map(c=>{const v=c.tipo+' — '+c.numero;return`<option value="${escHtml(v)}" ${v===g.cuenta?'selected':''}>${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('')||'<option value="">Sin cuentas</option>';})()}</select>
       </div>
     </div>
     <div class="form-row c3">
@@ -4873,6 +4965,9 @@ function editarGastoVeh(gid){
 
 function guardarEditGastoVeh(i){
   if(currentUser?.role!=='admin'&&!canDo('editar')&&!currentUser?.permisos?.editarGastosVeh){toast('No tienes permiso para editar','error');return;}
+  const _egv_banco=document.getElementById('egv-banco')?.value||'';
+  const _egv_cuenta=document.getElementById('egv-cuenta')?.value||'';
+  if(!_egv_banco||!_egv_cuenta){toast('Selecciona banco y cuenta para continuar','error');return;}
   const factura=parseFloat((document.getElementById('egv-factura').value||'0').replace(/,/g,''));
   const pagado=parseFloat((document.getElementById('egv-pagado').value||'0').replace(/,/g,''));
   const pendiente=factura-pagado;
@@ -5511,24 +5606,25 @@ function nuevaVenta(){
           <option>Tarjeta de Crédito</option><option>Tarjeta de Débito</option>
         </select>
       </div>
-      <div class="form-field"><label>Banco</label>
-        <select id="sv-banco" onchange="actualizarCuentasVenta()">
-          ${(DB.config.bancoCuentas||[]).map(b=>`<option value="${escHtml(b.banco)}">${escHtml(b.banco)}</option>`).join('')||'<option value="Caja General">Caja General</option>'}
-        </select>
-      </div>
-      <div class="form-field"><label class="required">Cuenta de Cobro</label>
-        <select id="sv-cuenta">
-          ${(()=>{const bcs=DB.config.bancoCuentas||[];const b=bcs[0];return b?(b.cuentas||[]).map(c=>`<option value="${escHtml(c.tipo+' — '+c.numero)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`).join(''):'<option value="Caja General">Caja General</option>';})()}
-        </select>
-      </div>
-    </div>
-    <div class="form-row c3" style="margin-bottom:4px">
       <div class="form-field"><label>Moneda de Venta</label>
-        <select id="sv-moneda" onchange="toggleTasaVenta();calcPend()">
+        <select id="sv-moneda" onchange="toggleTasaVenta();calcPend();filtrarBancosPorMoneda('sv')">
           <option value="RD$">RD$ — Pesos</option>
           <option value="USD">USD — Dólares</option>
         </select>
       </div>
+      <div class="form-field"><label>Banco</label>
+        <select id="sv-banco" onchange="filtrarCuentasPorBanco('sv');actualizarCuentasVenta()">
+          ${(()=>{const bcs=DB.config.bancoCuentas||[];const disp=bcs.filter(b=>(b.cuentas||[]).some(c=>!c.tipo.includes('USD')));return disp.map(b=>`<option value="${escHtml(b.banco)}">${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos</option>';})()}
+        </select>
+      </div>
+      <div class="form-field"><label class="required">Cuenta de Cobro</label>
+        <select id="sv-cuenta">
+          ${(()=>{const bcs=DB.config.bancoCuentas||[];const b=bcs.find(x=>(x.cuentas||[]).some(c=>!c.tipo.includes('USD')));return(b?b.cuentas:[]).filter(c=>!c.tipo.includes('USD')).map(c=>`<option value="${escHtml(c.tipo+' — '+c.numero)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`).join('')||'<option value="">Sin cuentas</option>';})()}
+        </select>
+      </div>
+    </div>
+    <div class="form-row c3" style="margin-bottom:4px">
+      <div class="form-field" style="display:none"><!-- moneda movida arriba --></div>
       <div id="sv-tasa-wrap" style="display:none" class="form-field">
         <input type="hidden" id="sv-tasa" value="${DB.config.tasaCambio||60}">
       </div>
@@ -5815,6 +5911,9 @@ function calcPend(){
 function confirmarVenta(nf){
   const precio=parseFloat((document.getElementById('sv-precio').value||'0').replace(/,/g,''));
   if(!precio){toast('Ingresa el precio de venta','error');return;}
+  const _sv_banco=document.getElementById('sv-banco')?.value||'';
+  const _sv_cuenta=document.getElementById('sv-cuenta')?.value||'';
+  if(!_sv_banco||!_sv_cuenta){toast('Selecciona banco y cuenta para continuar','error');return;}
   const vid=document.getElementById('sv-veh').value;
   if(!vid){toast('Selecciona un vehículo','error');return;}
   const cliId=document.getElementById('sv-cli').value;
@@ -6018,14 +6117,23 @@ function abonarVenta(vid){
       <div class="form-field"><label class="required">Monto a Cobrar</label>
         <input type="text" id="ab-monto" value="${fmtMoneyDisplay(v.pendiente)}" placeholder="0.00" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
       </div>
+      <div class="form-field"><label>Fecha</label><input type="date" id="ab-fecha" value="${today()}"></div>
+    </div>
+    <div class="form-row c3">
+      <div class="form-field"><label>Moneda</label>
+        <select id="ab-moneda" onchange="filtrarBancosPorMoneda('ab')">
+          <option value="RD$" ${(v.moneda||'RD$')==='RD$'?'selected':''}>RD$ — Pesos</option>
+          <option value="USD" ${v.moneda==='USD'?'selected':''}>USD — Dólares</option>
+        </select>
+      </div>
+      <div class="form-field"><label>Banco</label>
+        <select id="ab-banco" onchange="filtrarCuentasPorBanco('ab')">${(()=>{const m=v.moneda||'RD$';const bcs=DB.config.bancoCuentas||[];const disp=bcs.filter(b=>(b.cuentas||[]).some(c=>m==='USD'?c.tipo.includes('USD'):!c.tipo.includes('USD')));return disp.map(b=>`<option value="${escHtml(b.banco)}">${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos</option>';})()}</select>
+      </div>
       <div class="form-field"><label>Cuenta</label>
-        <select id="ab-cuenta">${getCuentasFlat()}</select>
+        <select id="ab-cuenta">${(()=>{const m=v.moneda||'RD$';const bcs=DB.config.bancoCuentas||[];const b=bcs.find(x=>(x.cuentas||[]).some(c=>m==='USD'?c.tipo.includes('USD'):!c.tipo.includes('USD')));return(b?b.cuentas:[]).filter(c=>m==='USD'?c.tipo.includes('USD'):!c.tipo.includes('USD')).map(c=>{const val=c.tipo+' — '+c.numero;return`<option value="${escHtml(val)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('')||'<option value="">Sin cuentas</option>';})()}</select>
       </div>
     </div>
-    <div class="form-row c2">
-      <div class="form-field"><label>Fecha</label><input type="date" id="ab-fecha" value="${today()}"></div>
-      <div class="form-field"><label>Nota</label><input type="text" id="ab-nota" placeholder="Descripción del cobro"></div>
-    </div>`,
+    <div class="form-field"><label>Nota</label><input type="text" id="ab-nota" placeholder="Descripción del cobro"></div>`,
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
      <button class="btn btn-green" onclick="confirmarAbVenta('${vid}')">✅ Confirmar Cobro</button>`);
 }
@@ -6033,6 +6141,9 @@ function abonarVenta(vid){
 function confirmarAbVenta(vid){
   const monto=parseFloat((document.getElementById('ab-monto').value||'0').replace(/,/g,''));
   if(!monto||monto<=0){toast('Ingresa un monto válido','error');return;}
+  const _ab_banco=document.getElementById('ab-banco')?.value||'';
+  const _ab_cuenta=document.getElementById('ab-cuenta')?.value||'';
+  if(!_ab_banco||!_ab_cuenta){toast('Selecciona banco y cuenta para continuar','error');return;}
   const i=DB.ventas.findIndex(x=>x.id===vid);if(i<0)return;
   if(monto>DB.ventas[i].pendiente){toast('El monto no puede superar el pendiente','error');return;}
   DB.ventas[i].inicial=(DB.ventas[i].inicial||0)+monto;
@@ -6055,7 +6166,8 @@ function confirmarAbVenta(vid){
     DB.cxc[ci].pagos.push({fecha:document.getElementById('ab-fecha').value,monto,cuenta:document.getElementById('ab-cuenta')?.value||'',nota:document.getElementById('ab-nota')?.value||''});
     sDB('cxc');
   }
-  DB.caja.push({id:uid(),fecha:document.getElementById('ab-fecha').value,tipo:'ENTRADA',categoria:'Cobro de Venta',descripcion:`Cobro ${DB.ventas[i].factura}: ${DB.ventas[i].cliente}`,monto,referencia:document.getElementById('ab-cuenta')?.value||'',responsable:currentUser.nombre});
+  const _abBanco=document.getElementById('ab-banco')?.value||'';const _abCuenta=document.getElementById('ab-cuenta')?.value||'';const _abMoneda=document.getElementById('ab-moneda')?.value||'RD$';
+  DB.caja.push({id:uid(),fecha:document.getElementById('ab-fecha').value,tipo:'ENTRADA',categoria:'Cobro de Venta',descripcion:`Cobro ${DB.ventas[i].factura}: ${DB.ventas[i].cliente}`,monto,moneda:_abMoneda,banco:_abBanco,cuenta:_abCuenta,referencia:_abBanco&&_abCuenta?_abBanco+' / '+_abCuenta:_abCuenta,responsable:currentUser.nombre});
   sDB('ventas');sDB('caja');
   closeModal();
   logBit('ventas','Registró cobro','');toast('Cobro registrado ✓','success');
@@ -7409,6 +7521,9 @@ function guardarCXPManual(){
   const desc=document.getElementById('cxpm-desc')?.value.trim();
   const monto=parseFloat((document.getElementById('cxpm-monto')?.value||'0').replace(/,/g,''));
   if(!desc||!monto){toast('Descripción y monto son requeridos','error');return;}
+  const _cxpm_banco=document.getElementById('cxpm-banco')?.value||'';
+  const _cxpm_cuenta=document.getElementById('cxpm-cuenta')?.value||'';
+  if(!_cxpm_banco||!_cxpm_cuenta){toast('Selecciona banco y cuenta para continuar','error');return;}
   const abono=parseFloat((document.getElementById('cxpm-abono')?.value||'0').replace(/,/g,''));
   const pendiente=Math.max(0,monto-abono);
   const banco=document.getElementById('cxpm-banco')?.value||'';
@@ -7475,6 +7590,9 @@ function actualizarCuentasPagoManual(){
 function confirmarPagoCXPManual(i){
   const monto=parseFloat((document.getElementById('cxpm-pay-monto')?.value||'0').replace(/,/g,''));
   if(!monto||monto<=0){toast('Ingresa un monto v\u00e1lido','error');return;}
+  const _cxpm_pay_banco=document.getElementById('cxpm-pay-banco')?.value||'';
+  const _cxpm_pay_cuenta=document.getElementById('cxpm-pay-cuenta')?.value||'';
+  if(!_cxpm_pay_banco||!_cxpm_pay_cuenta){toast('Selecciona banco y cuenta para continuar','error');return;}
   const g=DB.cxp[i];
   if(monto>parseFloat(g.montoPendiente||0)){toast('El monto no puede superar el pendiente','error');return;}
   const fecha=document.getElementById('cxpm-pay-fecha')?.value||today();
@@ -7564,6 +7682,9 @@ function abonarDesdeCXP(gid){
 function confirmarPagoCXP(i){
   const monto=parseFloat((document.getElementById('cxpp-monto').value||'0').replace(/,/g,''));
   if(!monto||monto<=0){toast('Ingresa un monto válido','error');return;}
+  const _cxpp_banco=document.getElementById('cxpp-banco')?.value||'';
+  const _cxpp_cuenta=document.getElementById('cxpp-cuenta')?.value||'';
+  if(!_cxpp_banco||!_cxpp_cuenta){toast('Selecciona banco y cuenta para continuar','error');return;}
   const g=DB.gastosVehiculos[i];
   if(monto>parseFloat(g.montoPendiente||0)){toast('El monto no puede superar el pendiente','error');return;}
   const esUSD=g.moneda==='USD';
@@ -8016,6 +8137,9 @@ function guardarCXCManual(){
   const concepto=document.getElementById('ncxc-concepto').value.trim();
   const total=parseFloat((document.getElementById('ncxc-total').value||'0').replace(/,/g,''));
   if(!cliId){toast('Selecciona un cliente','error');return;}
+  const _ncxc_banco=document.getElementById('ncxc-banco')?.value||'';
+  const _ncxc_cuenta=document.getElementById('ncxc-cuenta')?.value||'';
+  if(!_ncxc_banco||!_ncxc_cuenta){toast('Selecciona banco y cuenta para continuar','error');return;}
   if(!concepto){toast('Ingresa el concepto','error');return;}
   if(!total){toast('Ingresa el monto total','error');return;}
   const cli=DB.clientes.find(x=>x.id===cliId);
@@ -8231,6 +8355,9 @@ function actualizarCuentasCXCA(){
 function confirmarAbonarCXC(id){
   const monto=parseFloat((document.getElementById('cxca-monto').value||'0').replace(/,/g,''));
   if(!monto||monto<=0){toast('Ingresa un monto válido','error');return;}
+  const _cxca_banco=document.getElementById('cxca-banco')?.value||'';
+  const _cxca_cuenta=document.getElementById('cxca-cuenta')?.value||'';
+  if(!_cxca_banco||!_cxca_cuenta){toast('Selecciona banco y cuenta para continuar','error');return;}
   const i=DB.cxc.findIndex(x=>x.id===id);if(i<0)return;
   if(monto>parseFloat(DB.cxc[i].saldo||0)){toast('El monto no puede superar el saldo pendiente','error');return;}
   const fechaCobro=document.getElementById('cxca-fecha').value;
@@ -9607,8 +9734,17 @@ function _formSeguro(s){
     <div class="form-row c3">
       <div class="form-field"><label>Vigencia Desde</label><input type="date" id="sg-desde" value="${s?.desde||today()}"></div>
       <div class="form-field"><label>Vigencia Hasta</label><input type="date" id="sg-hasta" value="${s?.hasta||''}"></div>
+      <div class="form-field"><label>Moneda</label>
+        <select id="sg-moneda" onchange="filtrarBancosPorMoneda('sg')">
+          <option value="RD$" ${(!s?.moneda||s?.moneda==='RD$')?'selected':''}>RD$ — Pesos</option>
+          <option value="USD" ${s?.moneda==='USD'?'selected':''}>USD — Dólares</option>
+        </select>
+      </div>
+      <div class="form-field"><label>Banco</label>
+        <select id="sg-banco" onchange="filtrarCuentasPorBanco('sg')">${(()=>{const m=s?.moneda||'RD$';const bcs=DB.config.bancoCuentas||[];const disp=bcs.filter(b=>(b.cuentas||[]).some(c=>m==='USD'?c.tipo.includes('USD'):!c.tipo.includes('USD')));return disp.map(b=>`<option value="${escHtml(b.banco)}" ${b.banco===s?.banco?'selected':''}>${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos</option>';})()}</select>
+      </div>
       <div class="form-field"><label>Cuenta de Pago</label>
-        <select id="sg-cuenta">${getCuentasFlat(s?.cuenta)}</select>
+        <select id="sg-cuenta">${(()=>{const m=s?.moneda||'RD$';const bcs=DB.config.bancoCuentas||[];const b=bcs.find(x=>x.banco===s?.banco)||bcs.find(x=>(x.cuentas||[]).some(c=>m==='USD'?c.tipo.includes('USD'):!c.tipo.includes('USD')));const cts=(b?b.cuentas:[]).filter(c=>m==='USD'?c.tipo.includes('USD'):!c.tipo.includes('USD'));return cts.map(c=>{const v=c.tipo+' — '+c.numero;return`<option value="${escHtml(v)}" ${v===s?.cuenta?'selected':''}>${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('')||'<option value="">Sin cuentas</option>';})()}</select>
       </div>
     </div>
     <div class="form-field"><label>Observaciones</label>
@@ -9633,6 +9769,9 @@ function guardarSeguro(id){
   const prima=parseFloat((document.getElementById('sg-prima').value||'0').replace(/,/g,''));
   const abonado=parseFloat((document.getElementById('sg-abonado').value||'0').replace(/,/g,''));
   if(!vid){toast('Selecciona un vehículo','error');return;}
+  const _sg_banco=document.getElementById('sg-banco')?.value||'';
+  const _sg_cuenta=document.getElementById('sg-cuenta')?.value||'';
+  if(!_sg_banco||!_sg_cuenta){toast('Selecciona banco y cuenta para continuar','error');return;}
   if(!cliente){toast('Ingresa el nombre del asegurado','error');return;}
   if(!prima){toast('Ingresa la prima del seguro','error');return;}
   const pendiente=Math.max(0,prima-abonado);
@@ -9648,6 +9787,8 @@ function guardarSeguro(id){
     status:pendiente<=0?'PAGADO':abonado>0?'ABONADO':'PENDIENTE',
     desde:document.getElementById('sg-desde').value,
     hasta:document.getElementById('sg-hasta').value,
+    banco:document.getElementById('sg-banco')?.value||'',
+    moneda:document.getElementById('sg-moneda')?.value||'RD$',
     cuenta:document.getElementById('sg-cuenta').value,
     obs:document.getElementById('sg-obs').value,
     fecha:prev?.fecha||today(),
@@ -9687,8 +9828,19 @@ function abonarSeguro(id){
       <div class="form-field"><label class="required">Monto a Pagar</label>
         <input type="text" id="sgp-monto" value="${fmtMoneyDisplay(pendiente)}" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)" placeholder="0.00">
       </div>
+      <div class="form-field"><label>Moneda</label>
+        <select id="sgp-moneda" onchange="filtrarBancosPorMoneda('sgp')">
+          <option value="RD$">RD$ — Pesos</option>
+          <option value="USD">USD — Dólares</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row c2">
+      <div class="form-field"><label>Banco</label>
+        <select id="sgp-banco" onchange="filtrarCuentasPorBanco('sgp')">${(()=>{const bcs=DB.config.bancoCuentas||[];const disp=bcs.filter(b=>(b.cuentas||[]).some(c=>!c.tipo.includes('USD')));return disp.map(b=>`<option value="${escHtml(b.banco)}" ${b.banco===s.banco?'selected':''}>${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos</option>';})()}</select>
+      </div>
       <div class="form-field"><label>Cuenta de Pago</label>
-        <select id="sgp-cuenta">${getCuentasFlat(s.cuenta)}</select>
+        <select id="sgp-cuenta">${(()=>{const bcs=DB.config.bancoCuentas||[];const b=bcs.find(x=>x.banco===s.banco)||bcs.find(x=>(x.cuentas||[]).some(c=>!c.tipo.includes('USD')));const cts=(b?b.cuentas:[]).filter(c=>!c.tipo.includes('USD'));return cts.map(c=>{const v=c.tipo+' — '+c.numero;return`<option value="${escHtml(v)}" ${v===s.cuenta?'selected':''}>${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('')||'<option value="">Sin cuentas</option>';})()}</select>
       </div>
     </div>
     <div class="form-field"><label>Fecha de Pago</label><input type="date" id="sgp-fecha" value="${today()}"></div>`,
@@ -9701,7 +9853,12 @@ function confirmarAbonoSeguro(id){
   const i=DB.seguros.findIndex(x=>x.id===id);if(i<0)return;
   const monto=parseFloat((document.getElementById('sgp-monto').value||'0').replace(/,/g,''));
   if(!monto||monto<=0){toast('Ingresa un monto válido','error');return;}
+  const _sgp_banco=document.getElementById('sgp-banco')?.value||'';
+  const _sgp_cuenta=document.getElementById('sgp-cuenta')?.value||'';
+  if(!_sgp_banco||!_sgp_cuenta){toast('Selecciona banco y cuenta para continuar','error');return;}
   const cuenta=document.getElementById('sgp-cuenta').value;
+  const banco=document.getElementById('sgp-banco')?.value||'';
+  const moneda=document.getElementById('sgp-moneda')?.value||'RD$';
   const fecha=document.getElementById('sgp-fecha').value;
   const pendienteActual=parseFloat(DB.seguros[i].pendiente||0);
   if(monto>pendienteActual){toast('El monto no puede superar el pendiente ('+fmt(pendienteActual)+')','error');return;}
@@ -9713,7 +9870,7 @@ function confirmarAbonoSeguro(id){
   DB.seguros[i].pagos.push({fecha,monto,cuenta,responsable:currentUser.nombre});
   DB.caja.push({id:uid(),fecha,tipo:'SALIDA',categoria:'Seguro Vehículo',
     descripcion:'Pago seguro: '+DB.seguros[i].compania+' — '+escHtml(DB.seguros[i].cliente||'')+(DB.seguros[i].poliza?' — Póliza: '+DB.seguros[i].poliza:''),
-    monto,referencia:cuenta,responsable:currentUser.nombre});
+    monto,moneda,banco,cuenta,referencia:banco&&cuenta?banco+' / '+cuenta:cuenta,responsable:currentUser.nombre});
   sDB('seguros');sDB('caja');
   closeModal();
   toast(DB.seguros[i].pendiente<=0?'✅ Seguro pagado completamente':'💵 Abono registrado ✓','success');
@@ -10320,6 +10477,24 @@ window.addEventListener('load', ()=>{
         DB.config.bancos=DB.config.bancoCuentas.map(b=>b.banco);
         if(typeof fbGuardar==='function')fbGuardar('config').catch(()=>{});
       }
+      // Auto-corregir movimientos de caja sin banco/cuenta asignados
+      (()=>{
+        const defaultBanco='Banreservas';
+        const defaultCuentaRD='Corriente RD$ — 9601135173 - Personal';
+        const defaultCuentaUSD='Ahorro USD — 801633066 - Personal';
+        const defaultBancoUSD='Banco Popular';
+        let cajaFixed=false;
+        (DB.caja||[]).forEach(c=>{
+          if(!c.cuenta||c.cuenta===''){
+            const esUSD=(c.moneda||'RD$')==='USD';
+            c.banco=esUSD?defaultBancoUSD:defaultBanco;
+            c.cuenta=esUSD?defaultCuentaUSD:defaultCuentaRD;
+            if(!c.referencia||c.referencia==='')c.referencia=c.banco+' / '+c.cuenta;
+            cajaFixed=true;
+          }
+        });
+        if(cajaFixed&&typeof fbGuardar==='function')fbGuardar('caja').catch(()=>{});
+      })();
       if(typeof fbActivarListeners==='function') fbActivarListeners();
       if(btn){btn.textContent='Ingresar al sistema →';btn.disabled=false;}
       // Actualizar indicador Firebase
@@ -10807,6 +10982,24 @@ window.fbIniciar = async function(){
         DB.config.bancos=DB.config.bancoCuentas.map(b=>b.banco);
         if(typeof fbGuardar==='function')fbGuardar('config').catch(()=>{});
       }
+      // Auto-corregir movimientos de caja sin banco/cuenta asignados
+      (()=>{
+        const defaultBanco='Banreservas';
+        const defaultCuentaRD='Corriente RD$ — 9601135173 - Personal';
+        const defaultCuentaUSD='Ahorro USD — 801633066 - Personal';
+        const defaultBancoUSD='Banco Popular';
+        let cajaFixed=false;
+        (DB.caja||[]).forEach(c=>{
+          if(!c.cuenta||c.cuenta===''){
+            const esUSD=(c.moneda||'RD$')==='USD';
+            c.banco=esUSD?defaultBancoUSD:defaultBanco;
+            c.cuenta=esUSD?defaultCuentaUSD:defaultCuentaRD;
+            if(!c.referencia||c.referencia==='')c.referencia=c.banco+' / '+c.cuenta;
+            cajaFixed=true;
+          }
+        });
+        if(cajaFixed&&typeof fbGuardar==='function')fbGuardar('caja').catch(()=>{});
+      })();
       // Activar listeners de tiempo real
       if(typeof fbActivarListeners==='function') fbActivarListeners();
       // Iniciar verificador de versión automática
@@ -10856,6 +11049,24 @@ window.fbIniciar = async function(){
         DB.config.bancos=DB.config.bancoCuentas.map(b=>b.banco);
         if(typeof fbGuardar==='function')fbGuardar('config').catch(()=>{});
       }
+      // Auto-corregir movimientos de caja sin banco/cuenta asignados
+      (()=>{
+        const defaultBanco='Banreservas';
+        const defaultCuentaRD='Corriente RD$ — 9601135173 - Personal';
+        const defaultCuentaUSD='Ahorro USD — 801633066 - Personal';
+        const defaultBancoUSD='Banco Popular';
+        let cajaFixed=false;
+        (DB.caja||[]).forEach(c=>{
+          if(!c.cuenta||c.cuenta===''){
+            const esUSD=(c.moneda||'RD$')==='USD';
+            c.banco=esUSD?defaultBancoUSD:defaultBanco;
+            c.cuenta=esUSD?defaultCuentaUSD:defaultCuentaRD;
+            if(!c.referencia||c.referencia==='')c.referencia=c.banco+' / '+c.cuenta;
+            cajaFixed=true;
+          }
+        });
+        if(cajaFixed&&typeof fbGuardar==='function')fbGuardar('caja').catch(()=>{});
+      })();
       setStatus('#22c55e','✓ Firebase');
     }
   } catch(e) {
