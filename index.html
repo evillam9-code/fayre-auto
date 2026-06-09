@@ -1188,7 +1188,7 @@ function checkAlerts(){
   const esAdmin=currentUser?.role==='admin';
   const alertasPermitidas=currentUser?.alertasPermitidas!==undefined
     ?currentUser.alertasPermitidas
-    :(esAdmin?null:['SIN_VIN','SIN_COSTO','CXP','CXC_VENCIDA','CXC','SIN_VENDER_6M','SIN_VENDER_1A','DOCS']);
+    :(esAdmin?null:['SIN_VIN','SIN_COSTO','CXP','CXC_VENCIDA','CXC','CUOTA_VENC_PRESTAMO','SIN_VENDER_6M','SIN_VENDER_1A','DOCS']);
   const puedeVer=tipo=>!alertasPermitidas||alertasPermitidas.includes(tipo);
 
   if(puedeVer('SIN_VIN')){
@@ -1205,6 +1205,13 @@ function checkAlerts(){
   }
   if(puedeVer('CXC_VENCIDA')){
     (DB.cxc||[]).filter(x=>(x.status==='PENDIENTE'||x.status==='PARCIAL')&&x.fechaVence&&x.fechaVence<=hoy).forEach(x=>{showNotif('⚠️ CxC VENCIDA: '+x.cliente,'Vence: '+fmtDate(x.fechaVence)+' — '+fmt(x.saldo),'danger');});
+  }
+  if(puedeVer('CUOTA_VENC_PRESTAMO')){
+    const hoyStr=hoy;
+    (DB.prestamosOtorgados||[]).filter(p=>p.saldoPendiente>0).forEach(po=>{
+      const vencidas=(po.tablaAmortizacion||[]).filter(r=>!r.pagado&&r.fecha&&r.fecha<=hoyStr);
+      if(vencidas.length>0)showNotif('🤝 Cuota(s) vencida(s): '+po.cliente,vencidas.length+' cuota(s) sin pagar — Saldo: '+fmtP(po.saldoPendiente,po.moneda||'RD$'),'danger');
+    });
   }
   if(puedeVer('DOCS')){
     const docsPend=DB.ventas.filter(v=>v.docsPendientes&&v.fechaLimDocs);
@@ -3558,7 +3565,7 @@ function renderPrestamos(){
         <tbody>
           ${DB.prestamos.map(p=>{
             const m=p.moneda||'RD$';
-            const tipoLabel={FRANCESA:'Francesa',CAPITAL_FIJO:'Capital Fijo',LINEA:'Línea Crédito'};
+            const tipoLabel={FRANCESA:'Francesa',CAPITAL_FIJO:'Capital Fijo',SOLO_INT_AMORT:'Solo Interés Amort.',SOLO_INT_FIJO:'Solo Interés Fijo',LINEA:'Línea Crédito'};
             const monedaBadge=m==='USD'
               ?'<span style="background:#dbeafe;color:#1d4ed8;padding:1px 7px;border-radius:10px;font-size:11px;font-weight:800">💵 USD</span>'
               :'<span style="background:#dcfce7;color:#15803d;padding:1px 7px;border-radius:10px;font-size:11px;font-weight:800">🟢 RD$</span>';
@@ -3607,6 +3614,8 @@ function nuevoPrestamo(){
         <select id="np2-tipo" onchange="togglePrestamoCampos()">
           <option value="FRANCESA">Francesa (cuota fija)</option>
           <option value="CAPITAL_FIJO">Capital Fijo</option>
+          <option value="SOLO_INT_AMORT">Solo Interés Amortizable</option>
+          <option value="SOLO_INT_FIJO">Solo Interés Fijo</option>
           <option value="LINEA">Línea de Crédito</option>
         </select>
       </div>
@@ -3659,15 +3668,19 @@ function calcCuotaPrestamo(){
   let cuota=0;
   if(tipo==='FRANCESA'&&tasa>0){cuota=monto*(tasa*Math.pow(1+tasa,plazo))/(Math.pow(1+tasa,plazo)-1);}
   else if(tipo==='CAPITAL_FIJO'){cuota=monto/plazo+(monto*tasa);}
-  el.value=cuota>0?fmtMoneyDisplay(cuota):'—';
+  else if(tipo==='SOLO_INT_AMORT'||tipo==='SOLO_INT_FIJO'){cuota=monto*tasa;}
+  el.value=cuota>0?fmtMoneyDisplay(cuota)+' + capital al final':'—';
 }
 function calcTablaAmortizacion(monto,tasaAnual,plazo,tipo,fecha){
   const rows=[];let saldo=monto;const tasaMensual=tasaAnual/100/12;let cuotaFija=0;
   if(tipo==='FRANCESA'&&tasaMensual>0){cuotaFija=monto*(tasaMensual*Math.pow(1+tasaMensual,plazo))/(Math.pow(1+tasaMensual,plazo)-1);}
   for(let i=1;i<=plazo;i++){
-    const interes=saldo*tasaMensual;let capital,cuota;
-    if(tipo==='FRANCESA'){cuota=cuotaFija;capital=Math.min(cuota-interes,saldo);}
-    else{capital=monto/plazo;cuota=capital+interes;}
+    let interes,capital,cuota;
+    if(tipo==='FRANCESA'){interes=saldo*tasaMensual;cuota=cuotaFija;capital=Math.min(cuota-interes,saldo);}
+    else if(tipo==='CAPITAL_FIJO'){capital=monto/plazo;interes=saldo*tasaMensual;cuota=capital+interes;}
+    else if(tipo==='SOLO_INT_AMORT'){interes=saldo*tasaMensual;capital=i<plazo?0:saldo;cuota=interes+(i<plazo?0:saldo);}
+    else if(tipo==='SOLO_INT_FIJO'){interes=monto*tasaMensual;capital=i<plazo?0:saldo;cuota=interes+(i<plazo?0:saldo);}
+    else{capital=monto/plazo;interes=saldo*tasaMensual;cuota=capital+interes;}
     saldo=Math.max(0,saldo-capital);
     const d=new Date(fecha+'T12:00:00');d.setMonth(d.getMonth()+i);
     rows.push({n:i,fecha:d.toISOString().split('T')[0],cuota,capital,interes,saldo,pagado:false});
@@ -3679,12 +3692,17 @@ function recalcTablaDesde(tabla,desdeCuota,nuevoSaldo,tasaAnual,tipo){
   const tasaMensual=tasaAnual/100/12;const plazoRestante=tabla.length-desdeCuota;
   if(plazoRestante<=0)return tabla;
   let saldo=nuevoSaldo;let cuotaFija=0;
+  const montoOriginal=nuevoSaldo;
   if(tipo==='FRANCESA'&&tasaMensual>0&&plazoRestante>0){cuotaFija=saldo*(tasaMensual*Math.pow(1+tasaMensual,plazoRestante))/(Math.pow(1+tasaMensual,plazoRestante)-1);}
   for(let i=desdeCuota;i<tabla.length;i++){
     if(saldo<=0){tabla[i].capital=0;tabla[i].interes=0;tabla[i].cuota=0;tabla[i].saldo=0;continue;}
-    const interes=saldo*tasaMensual;let capital,cuota;
-    if(tipo==='FRANCESA'){cuota=cuotaFija;capital=Math.min(cuota-interes,saldo);}
-    else{capital=tabla[i].capital;cuota=capital+interes;}
+    const posRelativa=i-desdeCuota;const totalRestantes=tabla.length-desdeCuota;
+    let interes,capital,cuota;
+    if(tipo==='FRANCESA'){interes=saldo*tasaMensual;cuota=cuotaFija;capital=Math.min(cuota-interes,saldo);}
+    else if(tipo==='CAPITAL_FIJO'){capital=tabla[i].capital;interes=saldo*tasaMensual;cuota=capital+interes;}
+    else if(tipo==='SOLO_INT_AMORT'){interes=saldo*tasaMensual;capital=posRelativa<totalRestantes-1?0:saldo;cuota=interes+capital;}
+    else if(tipo==='SOLO_INT_FIJO'){interes=montoOriginal*tasaMensual;capital=posRelativa<totalRestantes-1?0:saldo;cuota=interes+capital;}
+    else{capital=tabla[i].capital;interes=saldo*tasaMensual;cuota=capital+interes;}
     saldo=Math.max(0,saldo-capital);
     tabla[i].capital=capital;tabla[i].interes=interes;tabla[i].cuota=cuota;tabla[i].saldo=saldo;
   }
@@ -3871,6 +3889,7 @@ function guardarAbonoExtraordinario(pid,idxCuota){
     const tm=(p.tasaAnual||0)/100/12;
     if(p.tipo==='FRANCESA'&&tm>0)p.cuotaMensual=nuevoSaldo*(tm*Math.pow(1+tm,plazoRestante))/(Math.pow(1+tm,plazoRestante)-1);
     else if(p.tipo==='CAPITAL_FIJO')p.cuotaMensual=nuevoSaldo/plazoRestante+(nuevoSaldo*tm);
+    else if(p.tipo==='SOLO_INT_AMORT'||p.tipo==='SOLO_INT_FIJO')p.cuotaMensual=nuevoSaldo*tm;
   }
   if(!p.pagos)p.pagos=[];
   p.pagos.push({id:uid(),fecha,monto,capital:capitalAbono,interes:interesACobrar,banco,cuenta,moneda:monedaPago,referencia:ref,tipo:'EXTRAORDINARIO'});
@@ -3981,6 +4000,8 @@ function editarPrestamo(pid){
         <select id="ep-tipo" ${tienePagos?'disabled':''}>
           <option value="FRANCESA" ${p.tipo==='FRANCESA'?'selected':''}>Francesa</option>
           <option value="CAPITAL_FIJO" ${p.tipo==='CAPITAL_FIJO'?'selected':''}>Capital Fijo</option>
+          <option value="SOLO_INT_AMORT" ${p.tipo==='SOLO_INT_AMORT'?'selected':''}>Solo Interés Amortizable</option>
+          <option value="SOLO_INT_FIJO" ${p.tipo==='SOLO_INT_FIJO'?'selected':''}>Solo Interés Fijo</option>
           <option value="LINEA" ${p.tipo==='LINEA'?'selected':''}>Línea de Crédito</option>
         </select>
         ${tienePagos?`<div style="font-size:10px;color:var(--gray);margin-top:2px">No editable con pagos registrados</div>`:''}
@@ -4058,6 +4079,7 @@ function guardarEditarPrestamo(pid){
       const tm=nuevaTasa/100/12;
       if(nuevoTipo==='FRANCESA'&&tm>0)p.cuotaMensual=saldoBase*(tm*Math.pow(1+tm,plazoRestante))/(Math.pow(1+tm,plazoRestante)-1);
       else if(nuevoTipo==='CAPITAL_FIJO')p.cuotaMensual=saldoBase/plazoRestante+(saldoBase*tm);
+      else if(nuevoTipo==='SOLO_INT_AMORT'||nuevoTipo==='SOLO_INT_FIJO')p.cuotaMensual=saldoBase*tm;
     }
   }
   sDB('prestamos');closeModal();
@@ -4513,6 +4535,11 @@ function renderAlertas(){
   (DB.cxc||[]).filter(x=>(x.status==='PENDIENTE'||x.status==='PARCIAL')&&x.fechaVence&&x.fechaVence<=hoy).forEach(x=>{
     alertas.push({tipo:'CXC_VENCIDA',nivel:'danger',titulo:'CxC Vencida',msg:`${x.cliente} — ${fmt(x.saldo)} — Venció: ${fmtDate(x.fechaVence)}`,modulo:'cxc',id:'cxcv_'+x.id});
   });
+  // 4b. Cuotas de Préstamos Otorgados vencidas
+  (DB.prestamosOtorgados||[]).filter(p=>p.saldoPendiente>0).forEach(po=>{
+    const vencidas=(po.tablaAmortizacion||[]).filter(r=>!r.pagado&&r.fecha&&r.fecha<=hoy);
+    if(vencidas.length>0)alertas.push({tipo:'CUOTA_VENC_PRESTAMO',nivel:'danger',titulo:'Cuota(s) vencida(s) — Préstamo Otorgado',msg:`${po.cliente} — ${vencidas.length} cuota(s) sin pagar — Saldo: ${fmtP(po.saldoPendiente,po.moneda||'RD$')}`,modulo:'cxc',id:'pvenc_'+po.id});
+  });
   // 5. CXC pendientes
   (DB.cxc||[]).filter(x=>(x.status==='PENDIENTE'||x.status==='PARCIAL')&&(!x.fechaVence||x.fechaVence>hoy)).forEach(x=>{
     alertas.push({tipo:'CXC',nivel:'warning',titulo:'Cuenta por cobrar pendiente',msg:`${x.cliente} — ${fmt(x.saldo)}`,modulo:'cxc',id:'cxc_'+x.id});
@@ -4583,7 +4610,7 @@ function guardarPermisosUsuarioConfig(i){
   const u=DB.users[i];
   if(!u)return;
   const MODS_IDS=['dashboard','informes','suplidores','inventario','gastosVeh','cxp','clientes','ventas','cxc','lavado','gastos','nomina','caja','cotizaciones','autorizaciones','seguros','facturaExterna','alertas','verSaldoCaja','chat','prestamos','cuentas','cumpleanos'];
-  const ALERT_IDS=['SIN_VIN','SIN_COSTO','CXP','CXC_VENCIDA','CXC','SIN_VENDER_6M','SIN_VENDER_1A','DOCS'];
+  const ALERT_IDS=['SIN_VIN','SIN_COSTO','CXP','CXC_VENCIDA','CXC','CUOTA_VENC_PRESTAMO','SIN_VENDER_6M','SIN_VENDER_1A','DOCS'];
   if(u.role!=='admin'){
     const mods=MODS_IDS.filter(id=>document.getElementById(`cfg-mod-${i}-${id}`)?.checked);
     const alertas=ALERT_IDS.filter(id=>document.getElementById(`cfg-alerta-${i}-${id}`)?.checked);
@@ -4657,6 +4684,7 @@ function renderConfig(){
     {id:'CXP',label:'Gastos por pagar (CxP)'},
     {id:'CXC_VENCIDA',label:'CxC vencidas'},
     {id:'CXC',label:'CxC pendientes'},
+    {id:'CUOTA_VENC_PRESTAMO',label:'Cuotas vencidas — Préstamos Otorgados'},
     {id:'SIN_VENDER_6M',label:'6 meses sin venderse'},
     {id:'SIN_VENDER_1A',label:'1 año sin venderse'},
     {id:'DOCS',label:'Documentos de entrega pendientes'}
@@ -4982,7 +5010,7 @@ function renderConfig(){
       <div style="display:flex;flex-direction:column;gap:12px">
         ${DB.users.map((u,ui)=>{
           const MODS_LIST=[{id:'dashboard',label:'Inicio'},{id:'informes',label:'Informe'},{id:'suplidores',label:'Suplidores'},{id:'inventario',label:'Reg. Vehículo'},{id:'gastosVeh',label:'Gastos Veh.'},{id:'cxp',label:'CxP'},{id:'clientes',label:'Clientes'},{id:'ventas',label:'Ventas'},{id:'cxc',label:'CxC'},{id:'lavado',label:'🛡️ Lavado'},{id:'gastos',label:'Gastos Emp.'},{id:'nomina',label:'Nómina'},{id:'caja',label:'Caja'},{id:'cotizaciones',label:'Cotizaciones'},{id:'autorizaciones',label:'Autorización Compra'},{id:'seguros',label:'Seguros'},{id:'facturaExterna',label:'Facturas Externas'},{id:'alertas',label:'Alertas'},{id:'verSaldoCaja',label:'💰 Ver Saldo Caja'},{id:'chat',label:'💬 Chat'},{id:'cuentas',label:'🏦 Cuentas'},{id:'cumpleanos',label:'🎂 Cumpleaños'}];
-          const ALERT_TYPES=[{id:'SIN_VIN',label:'Sin VIN'},{id:'SIN_COSTO',label:'Sin costos'},{id:'CXP',label:'CxP pendientes'},{id:'CXC_VENCIDA',label:'CxC vencidas'},{id:'CXC',label:'CxC pendientes'},{id:'SIN_VENDER_6M',label:'6m sin vender'},{id:'SIN_VENDER_1A',label:'1 año sin vender'},{id:'DOCS',label:'Docs pendientes'}];
+          const ALERT_TYPES=[{id:'SIN_VIN',label:'Sin VIN'},{id:'SIN_COSTO',label:'Sin costos'},{id:'CXP',label:'CxP pendientes'},{id:'CXC_VENCIDA',label:'CxC vencidas'},{id:'CXC',label:'CxC pendientes'},{id:'CUOTA_VENC_PRESTAMO',label:'Cuotas préstamos'},{id:'SIN_VENDER_6M',label:'6m sin vender'},{id:'SIN_VENDER_1A',label:'1 año sin vender'},{id:'DOCS',label:'Docs pendientes'}];
           const mods=u.modulos||[];
           const alertas=u.alertasPermitidas||ALERT_TYPES.map(a=>a.id);
           return '<div style="background:var(--gray2);border-radius:10px;padding:14px;border:1px solid var(--gray3);margin-bottom:8px">'
@@ -5012,7 +5040,7 @@ function renderConfig(){
     </div>`;
 }
 function guardarMisNotificaciones(){
-  const ALERT_IDS=['SIN_VIN','SIN_COSTO','CXP','CXC_VENCIDA','CXC','SIN_VENDER_6M','SIN_VENDER_1A','DOCS'];
+  const ALERT_IDS=['SIN_VIN','SIN_COSTO','CXP','CXC_VENCIDA','CXC','CUOTA_VENC_PRESTAMO','SIN_VENDER_6M','SIN_VENDER_1A','DOCS'];
   const seleccionadas=ALERT_IDS.filter(id=>{const el=document.getElementById('mn-'+id);return el&&el.checked;});
   const idx=DB.users.findIndex(u=>u.id===currentUser.id);
   if(idx!==-1){
@@ -9168,6 +9196,8 @@ function nuevaPrestamoOtorgado(){
         <select id="po2-tipo" onchange="calcCuotaPO()">
           <option value="FRANCESA">Francesa (cuota fija)</option>
           <option value="CAPITAL_FIJO">Capital Fijo</option>
+          <option value="SOLO_INT_AMORT">Solo Interés Amortizable</option>
+          <option value="SOLO_INT_FIJO">Solo Interés Fijo</option>
           <option value="LINEA">Línea de Crédito</option>
         </select>
       </div>
@@ -9194,7 +9224,8 @@ function calcCuotaPO(){
   let cuota=0;
   if(tipo==='FRANCESA'&&tasa>0)cuota=monto*(tasa*Math.pow(1+tasa,plazo))/(Math.pow(1+tasa,plazo)-1);
   else if(tipo==='CAPITAL_FIJO')cuota=monto/plazo+(monto*tasa);
-  el.value=cuota>0?fmtMoneyDisplay(cuota):'—';
+  else if(tipo==='SOLO_INT_AMORT'||tipo==='SOLO_INT_FIJO')cuota=monto*tasa;
+  el.value=cuota>0?fmtMoneyDisplay(cuota)+(tipo==='SOLO_INT_AMORT'||tipo==='SOLO_INT_FIJO'?' + capital al final':''):'—';
 }
 function guardarPrestamoOtorgado(){
   if(currentUser?.role!=='admin'&&!currentUser?.permisos?.prestamosOtorgados){toast('Sin permiso','error');return;}
@@ -9229,6 +9260,130 @@ function guardarPrestamoOtorgado(){
     monto,moneda,banco:'',cuenta:'',referencia:'',responsable:currentUser?.nombre||''});
   sDB('caja');sDB('prestamosOtorgados');
   closeModal();toast('Préstamo otorgado. CxC creada ✓','success');renderCXC();
+}
+function modalAbonoExtraPO(cxcId){
+  const x=DB.cxc.find(c=>c.id===cxcId);if(!x||!x.esPrestamo)return;
+  if(!DB.prestamosOtorgados)DB.prestamosOtorgados=[];
+  const po=DB.prestamosOtorgados.find(p=>p.id===x.prestamoId);
+  if(!po){toast('Préstamo no encontrado','error');return;}
+  const m=po.moneda||'RD$';
+  const prox=proximaCuotaPO(po);
+  const interesActual=po.tipo==='LINEA'?(po.saldoPendiente||0)*(po.tasaAnual||0)/100/12:prox.interes||0;
+  openModal(`⚡ Abono Extraordinario — ${escHtml(po.cliente)}`,`
+    <div style="background:var(--amber2);border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#92400e">
+      <strong>Abono extraordinario:</strong> se cobra el interés ya corrido (${fmtP(interesActual,m)}), el resto va directo a capital. Los intereses de cuotas futuras adelantadas quedan en <strong>$0.00</strong>.
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;font-size:12px">
+      <div style="background:var(--gray2);border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:10px;color:var(--gray);font-weight:700">SALDO ACTUAL</div>
+        <div style="font-weight:800;color:var(--red);font-size:15px">${fmtP(po.saldoPendiente,m)}</div>
+      </div>
+      <div style="background:var(--amber2);border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:10px;color:var(--amber);font-weight:700">INTERÉS CORRIDO</div>
+        <div style="font-weight:800;color:var(--amber);font-size:15px">${fmtP(interesActual,m)}</div>
+      </div>
+    </div>
+    <div class="form-row c2">
+      <div class="form-field"><label class="required">Fecha</label><input type="date" id="aepo-fecha" value="${today()}"></div>
+      <div class="form-field"><label class="required">Monto Total del Abono</label>
+        <input type="text" id="aepo-monto" placeholder="0.00"
+          oninput="fmtMoneyInput(this);calcPreviewAbonoExtraPO('${po.id}')" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
+      </div>
+    </div>
+    <div class="form-row c2">
+      <div class="form-field"><label>Interés Cobrado</label>
+        <input type="text" id="aepo-interes" value="${fmtMoneyDisplay(interesActual)}" readonly style="background:#fef3c7;font-weight:700;color:var(--amber)">
+      </div>
+      <div class="form-field"><label>Capital Abonado</label>
+        <input type="text" id="aepo-capital" value="0.00" readonly style="background:#eff6ff;font-weight:700;color:var(--blue)">
+      </div>
+    </div>
+    <div id="aepo-preview" style="display:none;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px;font-size:12px;margin-bottom:10px">
+      <div style="font-weight:700;color:var(--green);margin-bottom:4px">📊 Preview</div>
+      <div id="aepo-preview-text"></div>
+    </div>
+    ${htmlMonedaBancoCuenta('aepo',m)}
+    <div class="form-field"><label>Referencia</label><input type="text" id="aepo-ref" placeholder="N° transacción..."></div>`,
+    `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+     <button class="btn btn-green" onclick="guardarAbonoExtraPO('${cxcId}','${po.id}',${prox.idx||0})">⚡ Confirmar Abono</button>`);
+}
+function calcPreviewAbonoExtraPO(poId){
+  if(!DB.prestamosOtorgados)return;
+  const po=DB.prestamosOtorgados.find(p=>p.id===poId);if(!po)return;
+  const m=po.moneda||'RD$';
+  const prox=proximaCuotaPO(po);
+  const interesActual=po.tipo==='LINEA'?(po.saldoPendiente||0)*(po.tasaAnual||0)/100/12:prox.interes||0;
+  const monto=parseFloat((document.getElementById('aepo-monto')?.value||'0').replace(/,/g,''))||0;
+  const interesACobrar=Math.min(interesActual,monto);
+  const capitalAbono=Math.max(0,monto-interesACobrar);
+  const nuevoSaldo=Math.max(0,(po.saldoPendiente||0)-capitalAbono);
+  const elI=document.getElementById('aepo-interes');const elC=document.getElementById('aepo-capital');
+  if(elI)elI.value=fmtMoneyDisplay(interesACobrar);if(elC)elC.value=fmtMoneyDisplay(capitalAbono);
+  const prev=document.getElementById('aepo-preview');const prevTxt=document.getElementById('aepo-preview-text');
+  if(!prev||!prevTxt)return;
+  if(monto>0){
+    prev.style.display='block';
+    // Calcular cuotas que cubre y ahorro de intereses
+    let saldoSim=nuevoSaldo;let cuotasCubiertas=0;let interesesAhorrados=0;
+    const tabla=po.tablaAmortizacion||[];
+    const idxProx=prox.idx||0;
+    for(let i=idxProx+1;i<tabla.length;i++){
+      if(saldoSim<=0){cuotasCubiertas++;interesesAhorrados+=tabla[i].interes||0;}
+    }
+    prevTxt.innerHTML=`Nuevo saldo: <strong style="color:var(--green)">${fmtP(nuevoSaldo,m)}</strong> · Capital aplicado: <strong>${fmtP(capitalAbono,m)}</strong>`+(cuotasCubiertas>0?` · Cuotas adelantadas: <strong style="color:var(--blue)">${cuotasCubiertas}</strong> · Interés ahorrado: <strong style="color:var(--green)">${fmtP(interesesAhorrados,m)}</strong>`:'');
+  } else {
+    prev.style.display='none';
+  }
+}
+function guardarAbonoExtraPO(cxcId,poId,idxCuota){
+  const ci=DB.cxc.findIndex(c=>c.id===cxcId);if(ci<0)return;
+  if(!DB.prestamosOtorgados)DB.prestamosOtorgados=[];
+  const poi=DB.prestamosOtorgados.findIndex(p=>p.id===poId);if(poi<0){toast('Préstamo no encontrado','error');return;}
+  const po=DB.prestamosOtorgados[poi];const m=po.moneda||'RD$';
+  const monto=parseFloat((document.getElementById('aepo-monto')?.value||'0').replace(/,/g,''))||0;
+  if(!monto){toast('El monto es requerido','error');return;}
+  const prox=proximaCuotaPO(po);
+  const interesActual=po.tipo==='LINEA'?(po.saldoPendiente||0)*(po.tasaAnual||0)/100/12:prox.interes||0;
+  const interesACobrar=Math.min(interesActual,monto);
+  const capitalAbono=Math.max(0,monto-interesACobrar);
+  const nuevoSaldo=Math.max(0,(po.saldoPendiente||0)-capitalAbono);
+  const banco=document.getElementById('aepo-banco')?.value||'';const cuenta=document.getElementById('aepo-cuenta')?.value||'';
+  const monedaCobro=document.getElementById('aepo-moneda')?.value||m;const ref=document.getElementById('aepo-ref')?.value||'';
+  const fecha=document.getElementById('aepo-fecha')?.value||today();
+  // Calcular intereses ahorrados antes de recalcular
+  let interesesAhorrados=0;
+  if(po.tablaAmortizacion&&po.tablaAmortizacion.length>idxCuota+1){
+    let saldoSim=nuevoSaldo;
+    for(let i=idxCuota+1;i<po.tablaAmortizacion.length;i++){
+      if(saldoSim<=0){interesesAhorrados+=po.tablaAmortizacion[i].interes||0;}
+    }
+    po.tablaAmortizacion=recalcTablaDesde(po.tablaAmortizacion,idxCuota+1,nuevoSaldo,po.tasaAnual||0,po.tipo);
+  }
+  const plazoRestante=(po.tablaAmortizacion||[]).filter(r=>!r.pagado&&r.cuota>0).length;
+  if(plazoRestante>0&&nuevoSaldo>0){
+    const tm=(po.tasaAnual||0)/100/12;
+    if(po.tipo==='FRANCESA'&&tm>0)po.cuotaMensual=nuevoSaldo*(tm*Math.pow(1+tm,plazoRestante))/(Math.pow(1+tm,plazoRestante)-1);
+    else if(po.tipo==='CAPITAL_FIJO')po.cuotaMensual=nuevoSaldo/plazoRestante+(nuevoSaldo*tm);
+    else if(po.tipo==='SOLO_INT_AMORT'||po.tipo==='SOLO_INT_FIJO')po.cuotaMensual=nuevoSaldo*tm;
+  }
+  po.saldoPendiente=nuevoSaldo;po.cuotaActual=(po.cuotaActual||0)+1;
+  if(!po.pagos)po.pagos=[];
+  po.pagos.push({id:uid(),fecha,monto,capital:capitalAbono,interes:interesACobrar,interesesAhorrados,banco,cuenta,moneda:monedaCobro,referencia:ref,tipo:'EXTRAORDINARIO'});
+  DB.cxc[ci].abonado=(DB.cxc[ci].abonado||0)+capitalAbono;
+  DB.cxc[ci].saldo=nuevoSaldo;
+  DB.cxc[ci].status=nuevoSaldo<=0?'SALDADO':capitalAbono>0?'PARCIAL':'PENDIENTE';
+  if(!DB.cxc[ci].pagos)DB.cxc[ci].pagos=[];
+  DB.cxc[ci].pagos.push({id:uid(),fecha,monto,banco,cuenta,moneda:monedaCobro,referencia:ref});
+  if(capitalAbono>0)DB.caja.push({id:uid(),fecha,tipo:'ENTRADA',categoria:'Abono Extra Capital Préstamo',descripcion:`Abono extra capital — préstamo ${escHtml(po.cliente)}`,monto:capitalAbono,moneda:monedaCobro,banco,cuenta,referencia:ref,responsable:currentUser?.nombre||''});
+  if(interesACobrar>0)DB.caja.push({id:uid(),fecha,tipo:'ENTRADA',categoria:'Interés Cobrado Préstamo',descripcion:`Interés abono extra — préstamo ${escHtml(po.cliente)}`,monto:interesACobrar,moneda:monedaCobro,banco,cuenta,referencia:ref,responsable:currentUser?.nombre||''});
+  sDB('cxc');sDB('caja');sDB('prestamosOtorgados');
+  const pagoId=po.pagos[po.pagos.length-1].id;
+  const msg=`Abono extra registrado. Capital: ${fmtP(capitalAbono,m)} — Interés: ${fmtP(interesACobrar,m)} — Nuevo saldo: ${fmtP(nuevoSaldo,m)}${interesesAhorrados>0?' — Interés ahorrado: '+fmtP(interesesAhorrados,m):''}`;
+  closeModal();
+  if(confirm(`✅ ${msg}\n\n¿Desea imprimir el recibo?`)){
+    imprimirReciboPago('prestamo_otorgado',cxcId,poId,pagoId);
+  }
+  renderCXC();
 }
 function proximaCuotaPO(po){
   const tabla=po.tablaAmortizacion||[];const idx=tabla.findIndex(r=>!r.pagado);
@@ -9310,6 +9465,7 @@ function guardarCobroCuotaPO(cxcId,poId,idxCuota){
       const tm=(po.tasaAnual||0)/100/12;
       if(po.tipo==='FRANCESA'&&tm>0)po.cuotaMensual=nuevoSaldo*(tm*Math.pow(1+tm,plazoRestante))/(Math.pow(1+tm,plazoRestante)-1);
       else if(po.tipo==='CAPITAL_FIJO')po.cuotaMensual=nuevoSaldo/plazoRestante+(nuevoSaldo*tm);
+      else if(po.tipo==='SOLO_INT_AMORT'||po.tipo==='SOLO_INT_FIJO')po.cuotaMensual=nuevoSaldo*tm;
     }
   }
   po.saldoPendiente=nuevoSaldo;po.cuotaActual=(po.cuotaActual||0)+1;
@@ -9386,6 +9542,7 @@ function renderCXC(){
         </select>
         <div style="width:1px;height:28px;background:var(--gray3);margin:0 2px"></div>
         <button id="cxc-btn-cobrar" disabled class="btn btn-sm" style="${ds}" onclick="cxcAccion('cobrar')">💵 Registrar Cobro</button>
+        <button id="cxc-btn-abono-extra" disabled class="btn btn-sm" style="${ds}" onclick="cxcAccion('abono_extra')">⚡ Abono Extra</button>
         <button id="cxc-btn-historial" disabled class="btn btn-sm" style="${ds}" onclick="cxcAccion('historial')">👁 Historial</button>
         ${(currentUser?.role==='admin'||canDo('editar')||(currentUser?.permisos?.editarCobros))?`<button id="cxc-btn-editar" disabled class="btn btn-sm" style="${ds}" onclick="cxcAccion('editar')">✏️ Editar</button>`:''}
         ${(currentUser?.role==='admin'||canDo('eliminar'))?`<button id="cxc-btn-eliminar" disabled class="btn btn-sm" style="${ds}" onclick="cxcAccion('eliminar')">🗑 Eliminar</button>`:''}
@@ -9431,16 +9588,31 @@ function renderCXC(){
         </tr></thead>
         <tbody>${items.length?items.slice().reverse().map(x=>{
           const tipoBadge=x.esPrestamo?'<span style="background:#dcfce7;color:#16a34a;padding:1px 5px;border-radius:4px;font-size:10px;font-weight:700">🤝 PRÉSTAMO</span>':x.esTraspaso?'<span style="background:#fef3c7;color:#d97706;padding:1px 5px;border-radius:4px;font-size:10px;font-weight:700">🔄 TRASPASO</span>':x.esEndoso?'<span style="background:#ede9fe;color:#7c3aed;padding:1px 5px;border-radius:4px;font-size:10px;font-weight:700">📋 ENDOSO</span>':'<span style="background:#dbeafe;color:#2563eb;padding:1px 5px;border-radius:4px;font-size:10px;font-weight:700">💰 VENTA</span>';
+          let vencidaBadge='';let proxInfo='';let fechaVencDisplay=x.fechaVence;
+          if(x.esPrestamo&&x.prestamoId&&x.status!=='SALDADO'){
+            const poRow=(DB.prestamosOtorgados||[]).find(p=>p.id===x.prestamoId);
+            if(poRow){
+              const tabla=poRow.tablaAmortizacion||[];
+              const hoyStr=today();
+              const vencidas=tabla.filter(r=>!r.pagado&&r.fecha&&r.fecha<=hoyStr);
+              if(vencidas.length>0)vencidaBadge=`<span style="background:var(--red2);color:var(--red);padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;display:inline-block;margin-top:2px">⚠️ ${vencidas.length} vencida(s)</span>`;
+              const proxCuota=tabla.find(r=>!r.pagado);
+              if(proxCuota){
+                fechaVencDisplay=proxCuota.fecha;
+                proxInfo=`<div style="font-size:10px;color:var(--gray);margin-top:2px">Cuota #${proxCuota.n} · Cap: ${fV(proxCuota.capital)} · Int: <span style="color:var(--amber)">${fV(proxCuota.interes)}</span></div>`;
+              }
+            }
+          }
           return`<tr onclick="selCXC('${x.id}',this)" style="cursor:pointer">
           <td style="text-align:center"><input type="radio" name="cxc-sel" onclick="event.stopPropagation();selCXC('${x.id}',this.closest('tr'))" style="width:15px;height:15px;cursor:pointer;accent-color:var(--blue)"></td>
           <td><div style="font-family:monospace;font-size:11px;font-weight:700;color:var(--blue)">${escHtml(x.factura||'—')}</div></td>
           <td><div style="font-weight:700">${escHtml(x.cliente||'—')}</div></td>
           <td style="min-width:120px">${(()=>{const vCxC=DB.vehiculos.find(vv=>vv.id===x.vehiculoId);const nm=vCxC?(vCxC.marca+' '+vCxC.modelo+(vCxC.anio?' '+vCxC.anio:'')):(x.vehiculo||'');const vi=vCxC?vCxC.vin||'':'';return nm?`<div style="font-weight:700;font-size:12px">${escHtml(nm)}</div><div style="font-family:monospace;font-size:10px;color:var(--blue);margin-top:2px">${escHtml(vi||'Sin VIN')}</div>`:'<span style="color:var(--gray)">—</span>';})()}</td>
-          <td>${tipoBadge}<div style="font-size:11px;color:var(--gray);margin-top:2px">${escHtml(x.concepto||'—')}</div></td>
+          <td>${tipoBadge}${vencidaBadge}<div style="font-size:11px;color:var(--gray);margin-top:2px">${escHtml(x.concepto||'—')}</div>${proxInfo}</td>
           <td style="font-weight:600">${fV(x.total)}</td>
           <td style="color:var(--green);font-weight:600">${fV(x.abonado||0)}</td>
           <td style="font-weight:800;color:${parseFloat(x.saldo||0)>0?'var(--red)':'var(--green)'}">${fV(x.saldo||0)}</td>
-          <td style="font-size:12px;color:${x.fechaVence&&x.fechaVence<=today()?'var(--red)':'var(--gray)'}">${fmtDate(x.fechaVence)||'—'}</td>
+          <td style="font-size:12px;color:${fechaVencDisplay&&fechaVencDisplay<=today()?'var(--red)':'var(--gray)'}">${fmtDate(fechaVencDisplay)||'—'}</td>
           <td><span class="badge ${x.status==='SALDADO'?'badge-green':x.status==='PARCIAL'?'badge-amber':'badge-red'}">${x.status||'—'}</span></td>
         </tr>`;}).join(''):`<tr><td colspan="10" style="text-align:center;padding:24px;color:var(--gray)">Sin cuentas por cobrar en ${filtroMoneda}</td></tr>`}
         </tbody>
@@ -9456,7 +9628,10 @@ function selCXC(id,tr){
   if(tr)tr.style.background='#e8f0fe';
   const x=DB.cxc.find(c=>c.id===id);
   const actB=(bid,bg,c)=>{const b=document.getElementById(bid);if(b){b.disabled=false;b.style.cssText='background:'+bg+';color:'+c+';cursor:pointer;border:none;';}};
+  const disB=(bid)=>{const b=document.getElementById(bid);if(b){b.disabled=true;b.style.cssText='background:#f1f5f9;color:#94a3b8;cursor:not-allowed;border:none;';}};
   if(x?.status!=='SALDADO')actB('cxc-btn-cobrar','#16a34a','#fff');
+  if(x?.status!=='SALDADO'&&x?.esPrestamo)actB('cxc-btn-abono-extra','#d97706','#fff');
+  else disB('cxc-btn-abono-extra');
   actB('cxc-btn-historial','#475569','#fff');
   if(currentUser?.role==='admin'||canDo('editar')||(currentUser?.permisos?.editarCobros))actB('cxc-btn-editar','#2563eb','#fff');
   if(currentUser?.role==='admin'||canDo('eliminar'))actB('cxc-btn-eliminar','#dc2626','#fff');
@@ -9593,6 +9768,12 @@ function guardarCXCManual(){
 function cxcAccion(accion){
   if(!cxcSelectedId)return;
   if(accion==='cobrar'){if(!canDo('editar')){toast('No tienes permiso para registrar cobros','error');return;}abonarCXC(cxcSelectedId);}
+  else if(accion==='abono_extra'){
+    if(!canDo('editar')){toast('No tienes permiso','error');return;}
+    const xae=DB.cxc.find(c=>c.id===cxcSelectedId);
+    if(!xae?.esPrestamo){toast('Solo disponible para préstamos otorgados','warning');return;}
+    modalAbonoExtraPO(cxcSelectedId);
+  }
   else if(accion==='historial')verAbonosCXC(cxcSelectedId);
   else if(accion==='editar'){
     if(currentUser?.role!=='admin'&&!canDo('editar')&&!currentUser?.permisos?.editarCobros){toast('No tienes permiso para editar CxC','error');return;}
@@ -9654,6 +9835,8 @@ function editarPrestamoOtorgado(cxcId){
         <select id="epo-tipo" ${tienePagos?'disabled':''}>
           <option value="FRANCESA" ${po.tipo==='FRANCESA'?'selected':''}>Francesa</option>
           <option value="CAPITAL_FIJO" ${po.tipo==='CAPITAL_FIJO'?'selected':''}>Capital Fijo</option>
+          <option value="SOLO_INT_AMORT" ${po.tipo==='SOLO_INT_AMORT'?'selected':''}>Solo Interés Amortizable</option>
+          <option value="SOLO_INT_FIJO" ${po.tipo==='SOLO_INT_FIJO'?'selected':''}>Solo Interés Fijo</option>
           <option value="LINEA" ${po.tipo==='LINEA'?'selected':''}>Línea de Crédito</option>
         </select>
       </div>
@@ -9721,6 +9904,7 @@ function guardarEditarPrestamoOtorgado(cxcId,poId){
       const tm=nuevaTasa/100/12;
       if(nuevoTipo==='FRANCESA'&&tm>0)po.cuotaMensual=saldoBase*(tm*Math.pow(1+tm,plazoRestante))/(Math.pow(1+tm,plazoRestante)-1);
       else if(nuevoTipo==='CAPITAL_FIJO')po.cuotaMensual=saldoBase/plazoRestante+(saldoBase*tm);
+      else if(nuevoTipo==='SOLO_INT_AMORT'||nuevoTipo==='SOLO_INT_FIJO')po.cuotaMensual=saldoBase*tm;
     }
   }
   // Actualizar CxC
