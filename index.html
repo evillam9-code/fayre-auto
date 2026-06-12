@@ -358,6 +358,7 @@ async function publicarNuevaVersion(silencioso){
     <div class="main">
       <div class="page active" id="page-dashboard"></div>
       <div class="page" id="page-inventario"></div>
+      <div class="page" id="page-consultas"></div>
       <div class="page" id="page-ventas"></div>
       <div class="page" id="page-cotizaciones"></div>
       <div class="page" id="page-clientes"></div>
@@ -405,6 +406,7 @@ const ss=(k,v)=>{try{localStorage.setItem('fayre_'+k,JSON.stringify(v))}catch{}}
 const MENU_DEFS=[
   {id:'dashboard',   label:'Inicio',               ico:'🏠', seccionDef:'PRINCIPAL'},
   {id:'informes',    label:'Informe Mensual',       ico:'📊', seccionDef:'PRINCIPAL'},
+  {id:'consultas',   label:'Consultas',             ico:'🔍', seccionDef:'PRINCIPAL'},
   {id:'suplidores',  label:'Suplidores',            ico:'🏭', seccionDef:'VEHÍCULOS'},
   {id:'inventario',  label:'Registro de Vehículo',  ico:'🚗', seccionDef:'VEHÍCULOS'},
   {id:'gastosVeh',   label:'Gastos de Vehículo',    ico:'💸', seccionDef:'VEHÍCULOS'},
@@ -963,7 +965,7 @@ function aplicarPermisosNav(){
   // Regenerar el sidebar con el orden/secciones configurados
   renderSidebarNav();
   // Ocultar nav-items de módulos sin acceso
-  const MODS_NAV=['dashboard','informes','suplidores','inventario','gastosVeh','cxp',
+  const MODS_NAV=['dashboard','informes','consultas','suplidores','inventario','gastosVeh','cxp',
     'clientes','ventas','cxc','lavado','gastos','nomina','caja','prestamos','cotizaciones','autorizaciones','seguros','facturaExterna','alertas','verSaldoCaja','chat','usuarios','config','cumpleanos','cuentas'];
   MODS_NAV.forEach(id=>{
     const nav=document.getElementById('nav-'+id);
@@ -1157,7 +1159,7 @@ function showPage(id){
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   const sb=document.getElementById('sidebar');const ov=document.getElementById('sidebar-overlay');
   if(sb&&window.innerWidth<=768){sb.classList.remove('open');if(ov)ov.classList.remove('open');}
-  const r={dashboard:renderDashboard,inventario:renderInventario,ventas:renderVentas,cotizaciones:renderCotizaciones,clientes:renderClientes,suplidores:renderSuplidores,caja:renderCaja,gastos:renderGastos,nomina:renderNomina,informes:renderInformes,usuarios:renderUsuarios,config:renderConfig,gastosVeh:renderGastosVeh,cxp:renderCXP,cxc:renderCXC,lavado:renderLavado,autorizaciones:renderAutorizaciones,seguros:renderSeguros,facturaExterna:renderFacturaExterna,alertas:renderAlertas,chat:renderChat,cumpleanos:renderCumpleanos,cuentas:renderCuentas,backup:renderBackup,bitacora:renderBitacora,prestamos:renderPrestamos};
+  const r={dashboard:renderDashboard,inventario:renderInventario,consultas:renderConsultas,ventas:renderVentas,cotizaciones:renderCotizaciones,clientes:renderClientes,suplidores:renderSuplidores,caja:renderCaja,gastos:renderGastos,nomina:renderNomina,informes:renderInformes,usuarios:renderUsuarios,config:renderConfig,gastosVeh:renderGastosVeh,cxp:renderCXP,cxc:renderCXC,lavado:renderLavado,autorizaciones:renderAutorizaciones,seguros:renderSeguros,facturaExterna:renderFacturaExterna,alertas:renderAlertas,chat:renderChat,cumpleanos:renderCumpleanos,cuentas:renderCuentas,backup:renderBackup,bitacora:renderBitacora,prestamos:renderPrestamos};
   // Refresh Firebase si han pasado más de 60 segundos
   const ahora=Date.now();
   if(window._fbActivo&&window._fbCargado&&(!window._lastFbRefresh||ahora-window._lastFbRefresh>60000)){
@@ -1545,6 +1547,371 @@ function invAccion(accion){
   if(accion==='editar'&&!canDo('editar')){toast('No tienes permiso para editar','error');return;}else if(accion==='editar')editarVehiculo(invSelectedId);
   else if(accion==='eliminar'&&!canDo('eliminar')){toast('No tienes permiso para eliminar','error');return;}else if(accion==='eliminar')eliminarVehiculo(invSelectedId);
 }
+// ══ MÓDULO DE CONSULTAS (portado desde Jeyco) ══
+let _consultasFiltro={search:'',cliente:'',propietario:'',suplidor:'',estado:''};
+function renderConsultas(){
+  const pg=document.getElementById('page-consultas');
+  if(!pg){setTimeout(renderConsultas,300);return;}
+  const f=_consultasFiltro;
+  // Listas dinámicas para los selects
+  const clientesSet=new Set();
+  DB.ventas.forEach(v=>{if(v.cliente)clientesSet.add(v.cliente);});
+  const propietariosSet=new Set();
+  DB.vehiculos.forEach(v=>{if(v.propietario)propietariosSet.add(v.propietario);});
+  (DB.config.propietarios||[]).forEach(p=>propietariosSet.add(p));
+  const suplidoresSet=new Set();
+  DB.vehiculos.forEach(v=>{if(v.suplidor)suplidoresSet.add(v.suplidor);});
+  (DB.gastosVehiculos||[]).forEach(g=>{if(g.suplidor)suplidoresSet.add(g.suplidor);});
+
+  pg.innerHTML=`
+    <div class="page-header">
+      <div><h1>🔍 Consultas</h1><p>Busca un vehículo y consulta su ficha completa: costos, ventas, cuentas por cobrar/pagar, seguro y beneficio</p></div>
+    </div>
+    <div class="card" style="margin-bottom:14px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+        <div class="form-field" style="margin:0;flex:1;min-width:160px">
+          <label style="font-size:11px">🔍 Buscar (código, chasis, marca, modelo, placa)</label>
+          <input class="search-input" style="margin:0;padding:7px 10px" value="${escHtml(f.search)}" oninput="_consultasFiltro.search=this.value;_renderConsultasTabla()">
+        </div>
+        <div class="form-field" style="margin:0;min-width:160px">
+          <label style="font-size:11px">👤 Cliente</label>
+          <select style="padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px;width:100%" onchange="_consultasFiltro.cliente=this.value;_renderConsultasTabla()">
+            <option value="">Todos</option>
+            ${[...clientesSet].sort().map(c=>`<option value="${escHtml(c)}" ${f.cliente===c?'selected':''}>${escHtml(c)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-field" style="margin:0;min-width:160px">
+          <label style="font-size:11px">🏷️ Propietario</label>
+          <select style="padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px;width:100%" onchange="_consultasFiltro.propietario=this.value;_renderConsultasTabla()">
+            <option value="">Todos</option>
+            ${[...propietariosSet].sort().map(c=>`<option value="${escHtml(c)}" ${f.propietario===c?'selected':''}>${escHtml(c)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-field" style="margin:0;min-width:160px">
+          <label style="font-size:11px">🏭 Suplidor</label>
+          <select style="padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px;width:100%" onchange="_consultasFiltro.suplidor=this.value;_renderConsultasTabla()">
+            <option value="">Todos</option>
+            ${[...suplidoresSet].sort().map(c=>`<option value="${escHtml(c)}" ${f.suplidor===c?'selected':''}>${escHtml(c)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-field" style="margin:0;min-width:150px">
+          <label style="font-size:11px">📌 Estado</label>
+          <select style="padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px;width:100%" onchange="_consultasFiltro.estado=this.value;_renderConsultasTabla()">
+            <option value="">Todos</option>
+            <option value="EN EEUU" ${f.estado==='EN EEUU'?'selected':''}>En EEUU</option>
+            <option value="ADUANA" ${f.estado==='ADUANA'?'selected':''}>En Aduana</option>
+            <option value="ACTIVO" ${f.estado==='ACTIVO'?'selected':''}>Activo (inventario)</option>
+            <option value="TRÁNSITO" ${f.estado==='TRÁNSITO'?'selected':''}>En Tránsito (vendido)</option>
+            <option value="VENDIDO" ${f.estado==='VENDIDO'?'selected':''}>Vendido</option>
+            <option value="TRASPASO_PEND" ${f.estado==='TRASPASO_PEND'?'selected':''}>Con Traspaso Pendiente</option>
+            <option value="CXC_PEND" ${f.estado==='CXC_PEND'?'selected':''}>Con CxC Pendiente</option>
+          </select>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="_consultasFiltro={search:'',cliente:'',propietario:'',suplidor:'',estado:''};renderConsultas()" title="Limpiar filtros">🔄</button>
+        <button class="btn btn-secondary btn-sm" onclick="exportarConsultasPDF()">📄 Exportar Lista PDF</button>
+      </div>
+    </div>
+    <div id="consultas-resumen"></div>
+    <div class="card" id="consultas-resultado-card" style="display:none">
+      <div class="table-wrap"><table id="consultas-tbl">
+        <thead><tr>
+          <th>Código</th><th>Vehículo</th><th>Propietario</th><th>Suplidor</th>
+          <th>Estado</th><th>Cliente</th><th>CxC Pend.</th><th>Traspaso Pend.</th><th>Beneficio</th><th></th>
+        </tr></thead>
+        <tbody id="consultas-tbody"></tbody>
+      </table></div>
+    </div>`;
+  _renderConsultasTabla();
+}
+function _consultasDatos(){
+  return DB.vehiculos.map(v=>{
+    const venta=DB.ventas.find(x=>x.vehiculoId===v.id);
+    const cxcVenta=venta?(DB.cxc||[]).find(c=>c.ventaId===venta.id&&!c.esTraspaso):null;
+    const cxcTrasp=venta?(DB.cxc||[]).find(c=>c.ventaId===venta.id&&c.esTraspaso):null;
+    const gastosVeh=(DB.gastosVehiculos||[]).filter(g=>g.vehiculoId===v.id);
+    const totalCostos=gastosVeh.reduce((a,g)=>a+parseFloat(g.montoFactura||g.monto||0),0);
+    const seguro=(DB.seguros||[]).find(s=>s.vehiculoId===v.id);
+    const beneficio=venta?parseFloat(venta.precioVenta||0)-totalCostos:null;
+    let estadoDinamico=v.status||'—';
+    if(venta){
+      const pendVenta=cxcVenta?parseFloat(cxcVenta.saldo||0):0;
+      const pendTrasp=cxcTrasp?parseFloat(cxcTrasp.saldo||0):0;
+      estadoDinamico=(pendVenta>0||pendTrasp>0)?'TRÁNSITO':'VENDIDO';
+    }
+    return{v,venta,cxcVenta,cxcTrasp,gastosVeh,totalCostos,seguro,beneficio,estadoDinamico};
+  });
+}
+function _renderConsultasTabla(){
+  const tbody=document.getElementById('consultas-tbody');if(!tbody)return;
+  const f=_consultasFiltro;
+  const hayFiltro=!!(f.search||f.cliente||f.propietario||f.suplidor||f.estado);
+  const card=document.getElementById('consultas-resultado-card');
+  const resumen=document.getElementById('consultas-resumen');
+  if(!hayFiltro){
+    if(card)card.style.display='none';
+    if(resumen)resumen.innerHTML=`
+      <div class="card">
+        <div style="text-align:center;padding:48px 10px;color:var(--gray)">
+          <div style="font-size:40px;margin-bottom:10px">🔍</div>
+          <div style="font-size:15px;font-weight:600">Escribe un código, cliente, propietario o vehículo</div>
+          <div style="font-size:13px;margin-top:4px">para ver su ficha completa</div>
+        </div>
+      </div>`;
+    return;
+  }
+  if(resumen)resumen.innerHTML='';
+  if(card)card.style.display='';
+  let datos=_consultasDatos();
+  if(f.search){
+    const q=f.search.toLowerCase();
+    datos=datos.filter(d=>(d.v.codigo||'').toLowerCase().includes(q)||(d.v.vin||'').toLowerCase().includes(q)||(d.v.marca||'').toLowerCase().includes(q)||(d.v.modelo||'').toLowerCase().includes(q)||(d.v.placa||'').toLowerCase().includes(q));
+  }
+  if(f.cliente)datos=datos.filter(d=>d.venta?.cliente===f.cliente);
+  if(f.propietario)datos=datos.filter(d=>d.v.propietario===f.propietario);
+  if(f.suplidor)datos=datos.filter(d=>d.v.suplidor===f.suplidor||d.gastosVeh.some(g=>g.suplidor===f.suplidor));
+  if(f.estado){
+    if(f.estado==='TRASPASO_PEND')datos=datos.filter(d=>d.cxcTrasp&&parseFloat(d.cxcTrasp.saldo||0)>0);
+    else if(f.estado==='CXC_PEND')datos=datos.filter(d=>d.cxcVenta&&parseFloat(d.cxcVenta.saldo||0)>0);
+    else datos=datos.filter(d=>d.estadoDinamico===f.estado||d.v.status===f.estado);
+  }
+  datos.sort((a,b)=>{
+    const na=parseInt((a.v.codigo||'').replace(/\D/g,''))||0;
+    const nb=parseInt((b.v.codigo||'').replace(/\D/g,''))||0;
+    return nb-na;
+  });
+  const sc={ACTIVO:'badge-green',VENDIDO:'badge-blue',ADUANA:'badge-amber','TRÁNSITO':'badge-purple','EN EEUU':'badge-gray'};
+  tbody.innerHTML=datos.length?datos.map(d=>{
+    const{v,venta,cxcVenta,cxcTrasp,beneficio,estadoDinamico}=d;
+    return`<tr style="cursor:pointer" onclick="abrirFichaVehiculo('${v.id}')">
+      <td style="font-family:monospace;font-weight:700">${escHtml(v.codigo||'—')}</td>
+      <td><div style="font-weight:700">${escHtml((v.marca||'')+' '+(v.modelo||''))}</div><div style="font-size:11px;color:var(--gray)">${v.anio||''}${v.color?' · '+escHtml(v.color):''}</div></td>
+      <td style="font-size:12px">${escHtml(v.propietario||'—')}</td>
+      <td style="font-size:12px">${escHtml(v.suplidor||'—')}</td>
+      <td><span class="badge ${sc[estadoDinamico]||'badge-gray'}">${estadoDinamico==='TRÁNSITO'?'EN TRÁNSITO':estadoDinamico}</span></td>
+      <td style="font-size:12px">${escHtml(venta?.cliente||'—')}</td>
+      <td style="font-weight:700;color:${cxcVenta&&parseFloat(cxcVenta.saldo||0)>0?'var(--red)':'var(--green)'}">${cxcVenta?fmt(cxcVenta.saldo||0):'—'}</td>
+      <td style="font-weight:700;color:${cxcTrasp&&parseFloat(cxcTrasp.saldo||0)>0?'#c2410c':'var(--green)'}">${cxcTrasp?fmt(cxcTrasp.saldo||0):'—'}</td>
+      <td style="font-weight:800;color:${beneficio===null?'var(--gray)':beneficio>=0?'var(--green)':'var(--red)'}">${beneficio===null?'—':fmt(beneficio)}</td>
+      <td><button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();abrirFichaVehiculo('${v.id}')">📄 Ficha</button></td>
+    </tr>`;
+  }).join(''):`<tr><td colspan="10" style="text-align:center;padding:24px;color:var(--gray)">Sin resultados con estos filtros</td></tr>`;
+  const cont=tbody.closest('.card');
+  if(cont){
+    let counter=cont.querySelector('.consultas-counter');
+    if(!counter){counter=document.createElement('div');counter.className='consultas-counter';counter.style.cssText='font-size:12px;color:var(--gray);margin-bottom:8px';cont.insertBefore(counter,cont.firstChild);}
+    counter.textContent=`${datos.length} vehículo(s) encontrado(s)`;
+  }
+}
+
+// ══ FICHA COMPLETA DE VEHÍCULO (imprimible/exportable) ══
+function abrirFichaVehiculo(vehiculoId){
+  const v=DB.vehiculos.find(x=>x.id===vehiculoId);if(!v)return;
+  const venta=DB.ventas.find(x=>x.vehiculoId===v.id);
+  const cxcVenta=venta?(DB.cxc||[]).find(c=>c.ventaId===venta.id&&!c.esTraspaso):null;
+  const cxcTrasp=venta?(DB.cxc||[]).find(c=>c.ventaId===venta.id&&c.esTraspaso):null;
+  const gastosVeh=(DB.gastosVehiculos||[]).filter(g=>g.vehiculoId===v.id);
+  const cxpRel=(DB.cxp||[]).filter(g=>g.vehiculoId===v.id);
+  const seguro=(DB.seguros||[]).find(s=>s.vehiculoId===v.id);
+  const totalCostos=gastosVeh.reduce((a,g)=>a+parseFloat(g.montoFactura||g.monto||0),0)+cxpRel.reduce((a,g)=>a+parseFloat(g.montoFactura||0),0);
+  const totalCostosPagado=gastosVeh.reduce((a,g)=>a+parseFloat(g.montoPagado||0),0)+cxpRel.reduce((a,g)=>a+parseFloat(g.montoPagado||0),0);
+  const totalCostosPend=totalCostos-totalCostosPagado;
+  const beneficio=venta?parseFloat(venta.precioVenta||0)-totalCostos:null;
+  const empresa=DB.config.empresa||'FAYRE';
+  const logo=DB.config.logoData||DB.config.logo||'';
+  const sc={ACTIVO:'#16a34a',VENDIDO:'#2563eb',ADUANA:'#d97706','TRÁNSITO':'#7c3aed','EN EEUU':'#64748b'};
+  // Estado dinámico: si tiene venta, se basa en si queda algo pendiente (CxC venta o traspaso)
+  let estadoFicha=v.status||'—';
+  if(venta){
+    const pendVenta=cxcVenta?parseFloat(cxcVenta.saldo||0):0;
+    const pendTrasp=cxcTrasp?parseFloat(cxcTrasp.saldo||0):0;
+    estadoFicha=(pendVenta>0||pendTrasp>0)?'TRÁNSITO':'VENDIDO';
+  }
+  const tabPagos=(cxc,titulo,color)=>{
+    if(!cxc)return'';
+    const pagos=cxc.pagos||[];
+    return`<div class="sec">
+      <div class="sec-titulo" style="background:${color}">${titulo}</div>
+      <div class="resumen">
+        <div class="resumen-row"><span>Total</span><span style="font-weight:700">${fmt(cxc.total||0)}</span></div>
+        <div class="resumen-row"><span>Cobrado</span><span style="color:#16a34a;font-weight:700">${fmt(cxc.abonado||0)}</span></div>
+        <div class="resumen-row"><span>${parseFloat(cxc.saldo||0)>0?'⏳ Pendiente':'✅ Saldado'}</span><span style="font-weight:800;color:${parseFloat(cxc.saldo||0)>0?'#dc2626':'#16a34a'}">${fmt(cxc.saldo||0)}</span></div>
+      </div>
+      ${pagos.length?`<table style="margin-top:6px"><thead><tr><th>Fecha</th><th>Monto</th><th>Cuenta</th><th>Nota</th></tr></thead><tbody>
+        ${pagos.map(p=>`<tr><td>${fmtDate(p.fecha)}</td><td style="font-weight:700;color:#16a34a">${fmt(p.monto)}</td><td>${escHtml(p.cuenta||'—')}</td><td>${escHtml(p.nota||'—')}</td></tr>`).join('')}
+      </tbody></table>`:'<div style="font-size:11px;color:#94a3b8;padding:6px">Sin pagos registrados</div>'}
+    </div>`;
+  };
+  const tabCostos=()=>{
+    const items=[...gastosVeh.map(g=>({...g,_col:'gastosVehiculos'})),...cxpRel.map(g=>({...g,_col:'cxp'}))];
+    return`<div class="sec">
+      <div class="sec-titulo" style="background:#0f172a">🧾 Costos / Gastos del Vehículo</div>
+      <div class="resumen">
+        <div class="resumen-row"><span>Total Costos</span><span style="font-weight:700">${fmt(totalCostos)}</span></div>
+        <div class="resumen-row"><span>Pagado</span><span style="color:#16a34a;font-weight:700">${fmt(totalCostosPagado)}</span></div>
+        <div class="resumen-row"><span>${totalCostosPend>0?'⏳ Gastos Pendientes por Pagar':'✅ Gastos Saldados'}</span><span style="font-weight:800;color:${totalCostosPend>0?'#dc2626':'#16a34a'}">${fmt(totalCostosPend)}</span></div>
+      </div>
+      ${items.length?`<table style="margin-top:6px"><thead><tr><th>Tipo/Descripción</th><th>Suplidor</th><th>Factura</th><th>Pagado</th><th>Pendiente</th><th>Estado</th></tr></thead><tbody>
+        ${items.map(g=>`<tr><td>${escHtml(g.tipo||g.descripcion||'—')}</td><td>${escHtml(g.suplidor||'—')}</td><td style="font-weight:700">${fmt(g.montoFactura||g.monto||0)}</td><td style="color:#16a34a">${fmt(g.montoPagado||0)}</td><td style="color:${parseFloat(g.montoPendiente||0)>0?'#dc2626':'#16a34a'}">${fmt(g.montoPendiente||0)}</td><td>${g.statusGasto||'—'}</td></tr>`).join('')}
+      </tbody></table>`:'<div style="font-size:11px;color:#94a3b8;padding:6px">Sin costos registrados para este vehículo</div>'}
+    </div>`;
+  };
+  const tabSeguro=()=>{
+    if(!seguro)return'';
+    return`<div class="sec">
+      <div class="sec-titulo" style="background:#0e7490">🛡️ Seguro</div>
+      <div class="resumen">
+        <div class="resumen-row"><span>Compañía</span><span style="font-weight:700">${escHtml(seguro.compania||'—')}</span></div>
+        <div class="resumen-row"><span>Póliza</span><span>${escHtml(seguro.poliza||'—')}</span></div>
+        <div class="resumen-row"><span>Vigencia</span><span>${fmtDate(seguro.desde)||'—'} a ${fmtDate(seguro.hasta)||'—'}</span></div>
+        <div class="resumen-row"><span>Prima</span><span style="font-weight:700">${fmt(seguro.prima||0)}</span></div>
+        <div class="resumen-row"><span>${parseFloat(seguro.pendiente||0)>0?'⏳ Pendiente':'✅ Pagado'}</span><span style="font-weight:800;color:${parseFloat(seguro.pendiente||0)>0?'#dc2626':'#16a34a'}">${fmt(seguro.pendiente||0)}</span></div>
+      </div>
+    </div>`;
+  };
+  const win=window.open('','_blank','width=1000,height=800');
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Ficha — ${escHtml(v.codigo)}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Segoe UI',Arial,sans-serif;font-size:11px;color:#0f172a}
+    .page{max-width:980px;margin:0 auto;padding:22px}
+    .hdr{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:12px;border-bottom:4px solid #2563eb;margin-bottom:14px}
+    .emp-nombre{font-size:16px;font-weight:900}
+    .veh-titulo{font-size:18px;font-weight:900}
+    .veh-sub{font-size:11px;color:#6b7280;margin-top:2px}
+    .badge-estado{display:inline-block;padding:3px 10px;border-radius:5px;color:#fff;font-weight:800;font-size:11px}
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+    .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px}
+    .sec{margin-bottom:12px}
+    .sec-titulo{font-size:10px;font-weight:800;text-transform:uppercase;color:#fff;padding:4px 10px;border-radius:4px;margin-bottom:6px;display:inline-block}
+    .resumen{background:#f8fafc;border-radius:6px;padding:8px 12px;border:1px solid #e2e8f0}
+    .resumen-row{display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #e2e8f0;font-size:11px}
+    .resumen-row:last-child{border-bottom:none}
+    table{width:100%;border-collapse:collapse;font-size:10px}
+    th{background:#0f172a;color:#fff;padding:4px 6px;text-align:left}
+    td{padding:4px 6px;border-bottom:1px solid #e2e8f0}
+    .stat{text-align:center;padding:10px;border-radius:8px}
+    .pie{text-align:center;font-size:9px;color:#94a3b8;margin-top:14px;padding-top:8px;border-top:1px solid #e2e8f0}
+    @page{size:letter;margin:8mm}@media print{.noprint{display:none}body{padding:0;font-size:10px}.page{padding:10px}}
+  </style></head><body><div class="page">
+  <div class="hdr">
+    <div>
+      <div class="emp-nombre">${logo?`<img src="${logo}" style="height:34px;vertical-align:middle;margin-right:8px">`:''}${escHtml(empresa)}</div>
+      <div class="veh-titulo" style="margin-top:6px">${escHtml(v.codigo||'')} — ${escHtml((v.marca||'')+' '+(v.modelo||''))}${(v.anio||v.color)?` (${v.anio||''}${v.anio&&v.color?' — ':''}${v.color?escHtml(v.color):''})`:''}</div>
+      <div class="veh-sub">${v.tipo?escHtml(v.tipo):''}${v.vin?' · VIN: '+escHtml(v.vin):''}${v.placa?' · Placa: '+escHtml(v.placa):''}</div>
+    </div>
+    <div style="text-align:right">
+      <span class="badge-estado" style="background:${sc[estadoFicha]||'#64748b'}">${estadoFicha==='TRÁNSITO'?'EN TRÁNSITO':estadoFicha}</span>
+      <div class="veh-sub" style="margin-top:4px">Generado: ${fmtDate(today())}</div>
+    </div>
+  </div>
+
+  <div class="grid3">
+    <div class="stat" style="background:#f1f5f9"><div style="font-size:9px;color:#64748b;font-weight:700">PROPIETARIO</div><div style="font-weight:800;font-size:13px">${escHtml(v.propietario||'—')}</div></div>
+    ${venta?`<div class="stat" style="background:#eff6ff"><div style="font-size:9px;color:#1d4ed8;font-weight:700">CLIENTE</div><div style="font-weight:800;font-size:13px">${escHtml(venta.cliente||'—')}</div></div>`:`<div class="stat" style="background:#f1f5f9"><div style="font-size:9px;color:#64748b;font-weight:700">CLIENTE</div><div style="font-weight:800;font-size:13px;color:#94a3b8">— (no vendido)</div></div>`}
+    <div class="stat" style="background:#f1f5f9"><div style="font-size:9px;color:#64748b;font-weight:700">FECHA REGISTRO</div><div style="font-weight:800;font-size:13px">${fmtDate(v.fecha)||'—'}</div></div>
+  </div>
+
+  ${venta?`
+  <div class="grid3">
+    <div class="stat" style="background:#fef3c7"><div style="font-size:9px;color:#92400e;font-weight:700">TOTAL GASTOS</div><div style="font-weight:800;font-size:13px;color:#92400e">${fmt(totalCostos)}</div></div>
+    <div class="stat" style="background:#eff6ff"><div style="font-size:9px;color:#1d4ed8;font-weight:700">PRECIO VENTA</div><div style="font-weight:800;font-size:13px">${fmt(venta.precioVenta||0)}</div></div>
+    <div class="stat" style="background:${beneficio>=0?'#f0fdf4':'#fef2f2'}"><div style="font-size:9px;color:${beneficio>=0?'#16a34a':'#dc2626'};font-weight:700">BENEFICIO (Venta - Costos)</div><div style="font-weight:900;font-size:15px;color:${beneficio>=0?'#16a34a':'#dc2626'}">${fmt(beneficio)}</div></div>
+  </div>
+  <div class="veh-sub" style="margin-bottom:10px">Factura: <strong style="font-family:monospace">${escHtml(venta.factura||'—')}</strong> · Fecha de venta: <strong>${fmtDate(venta.fecha)}</strong></div>
+  `:`
+  <div class="grid3">
+    <div class="stat" style="background:#fef3c7"><div style="font-size:9px;color:#92400e;font-weight:700">TOTAL GASTOS</div><div style="font-weight:800;font-size:13px;color:#92400e">${fmt(totalCostos)}</div></div>
+    <div class="stat" style="background:#f1f5f9"><div style="font-size:9px;color:#64748b;font-weight:700">PRECIO VENTA</div><div style="font-weight:800;font-size:13px;color:#94a3b8">— (no vendido)</div></div>
+    <div class="stat" style="background:#f1f5f9"><div style="font-size:9px;color:#64748b;font-weight:700">BENEFICIO</div><div style="font-weight:800;font-size:13px;color:#94a3b8">—</div></div>
+  </div>
+  <div class="resumen" style="margin-bottom:10px;text-align:center;color:#94a3b8">🚗 Este vehículo aún no ha sido vendido</div>`}
+
+  <div class="grid2">
+    <div>
+      ${tabCostos()}
+      ${tabSeguro()}
+    </div>
+    <div>
+      ${tabPagos(cxcVenta,'💰 Cuenta por Cobrar — Venta','#1d4ed8')}
+      ${tabPagos(cxcTrasp,'🔄 Cuenta por Cobrar — Traspaso/Matrícula','#c2410c')}
+    </div>
+  </div>
+
+  <div class="pie">Ficha generada el ${fmtDate(today())} &nbsp;|&nbsp; ${escHtml(empresa)} &nbsp;|&nbsp; Código: ${escHtml(v.codigo||'')}</div>
+  <div class="noprint" style="margin-top:16px;text-align:center">
+    <button onclick="window.print()" style="padding:9px 24px;background:#2563eb;color:#fff;border:none;border-radius:6px;font-size:13px;cursor:pointer;font-weight:700">🖨️ Imprimir / Guardar PDF</button>
+  </div>
+  </div></body></html>`);
+  win.document.close();
+}
+
+function exportarConsultasPDF(){
+  const datos=_consultasDatos();
+  const f=_consultasFiltro;
+  // Aplicar los mismos filtros que la tabla
+  let lista=datos;
+  if(f.search){
+    const q=f.search.toLowerCase();
+    lista=lista.filter(d=>(d.v.codigo||'').toLowerCase().includes(q)||(d.v.vin||'').toLowerCase().includes(q)||(d.v.marca||'').toLowerCase().includes(q)||(d.v.modelo||'').toLowerCase().includes(q)||(d.v.placa||'').toLowerCase().includes(q));
+  }
+  if(f.cliente)lista=lista.filter(d=>d.venta?.cliente===f.cliente);
+  if(f.propietario)lista=lista.filter(d=>d.v.propietario===f.propietario);
+  if(f.suplidor)lista=lista.filter(d=>d.v.suplidor===f.suplidor||d.gastosVeh.some(g=>g.suplidor===f.suplidor));
+  if(f.estado){
+    if(f.estado==='TRASPASO_PEND')lista=lista.filter(d=>d.cxcTrasp&&parseFloat(d.cxcTrasp.saldo||0)>0);
+    else if(f.estado==='CXC_PEND')lista=lista.filter(d=>d.cxcVenta&&parseFloat(d.cxcVenta.saldo||0)>0);
+    else lista=lista.filter(d=>d.v.status===f.estado);
+  }
+  lista.sort((a,b)=>{
+    const na=parseInt((a.v.codigo||'').replace(/\D/g,''))||0;
+    const nb=parseInt((b.v.codigo||'').replace(/\D/g,''))||0;
+    return nb-na;
+  });
+  const empresa=DB.config.empresa||'FAYRE';
+  const logo=DB.config.logoData||DB.config.logo||'';
+  const win=window.open('','_blank','width=1100,height=750');
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Consultas — Listado</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:Arial,sans-serif;padding:20px;font-size:10px;color:#0f172a}
+    .hdr{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #2563eb;padding-bottom:10px;margin-bottom:14px}
+    .hdr h1{font-size:17px}
+    .hdr-sub{font-size:11px;color:#6b7280;margin-top:4px}
+    table{width:100%;border-collapse:collapse;font-size:10px}
+    th{background:#0f172a;color:#fff;padding:6px 8px;text-align:left}
+    td{padding:5px 8px;border-bottom:1px solid #e2e8f0}
+    tr:nth-child(even){background:#f8fafc}
+    @page{size:letter landscape;margin:8mm}@media print{button{display:none}}
+  </style></head><body>
+  <div class="hdr">
+    <div>
+      <h1>${logo?`<img src="${logo}" style="height:30px;vertical-align:middle;margin-right:8px">`:''}🔍 Consultas — ${escHtml(empresa)}</h1>
+      <div class="hdr-sub">${lista.length} vehículo(s)${f.cliente?' · Cliente: '+escHtml(f.cliente):''}${f.propietario?' · Propietario: '+escHtml(f.propietario):''}${f.suplidor?' · Suplidor: '+escHtml(f.suplidor):''}${f.estado?' · Estado: '+escHtml(f.estado):''} — Generado: ${fmtDate(today())}</div>
+    </div>
+  </div>
+  <table><thead><tr>
+    <th>Código</th><th>Vehículo</th><th>Propietario</th><th>Suplidor</th><th>Estado</th><th>Cliente</th><th>Costos Total</th><th>CxC Pend.</th><th>Traspaso Pend.</th><th>Beneficio</th>
+  </tr></thead><tbody>
+  ${lista.map(d=>`<tr>
+    <td style="font-family:monospace;font-weight:700">${escHtml(d.v.codigo||'—')}</td>
+    <td>${escHtml((d.v.marca||'')+' '+(d.v.modelo||''))}${d.v.anio?' '+d.v.anio:''}${d.v.color?' · '+escHtml(d.v.color):''}</td>
+    <td>${escHtml(d.v.propietario||'—')}</td>
+    <td>${escHtml(d.v.suplidor||'—')}</td>
+    <td>${d.estadoDinamico==='TRÁNSITO'?'EN TRÁNSITO':(d.estadoDinamico||'—')}</td>
+    <td>${escHtml(d.venta?.cliente||'—')}</td>
+    <td>${fmt(d.totalCostos)}</td>
+    <td>${d.cxcVenta?fmt(d.cxcVenta.saldo||0):'—'}</td>
+    <td>${d.cxcTrasp?fmt(d.cxcTrasp.saldo||0):'—'}</td>
+    <td style="font-weight:700">${d.beneficio===null?'—':fmt(d.beneficio)}</td>
+  </tr>`).join('')}
+  </tbody></table>
+  <div style="margin-top:20px;text-align:center">
+    <button onclick="window.print()" style="padding:9px 24px;background:#2563eb;color:#fff;border:none;border-radius:6px;font-size:13px;cursor:pointer;font-weight:700">🖨️ Imprimir / Guardar PDF</button>
+  </div>
+  </body></html>`);
+  win.document.close();
+}
+
 function renderInventario(){
   const pg=document.getElementById('page-inventario');
   invSelectedId=null;
@@ -2952,7 +3319,7 @@ function renderUsuarios(){
 function _renderUsuariosHTML(){
   const roles=DB.config.roles||[{id:'dueno',nombre:'Dueño'},{id:'secretaria',nombre:'Secretaria'},{id:'asistente',nombre:'Asistente'},{id:'tecnico',nombre:'Técnico'}];
   const MODS=[
-    {id:'dashboard',label:'Dashboard'},{id:'informes',label:'Informe Mensual'},
+    {id:'dashboard',label:'Dashboard'},{id:'informes',label:'Informe Mensual'},{id:'consultas',label:'🔍 Consultas'},
     {id:'inventario',label:'Registro Vehículo'},{id:'gastosVeh',label:'Gastos Vehículo'},
     {id:'cxp',label:'Cuentas por Pagar'},{id:'clientes',label:'Clientes'},
     {id:'ventas',label:'Ventas'},{id:'cxc',label:'Cuentas por Cobrar'},{id:'lavado',label:'🛡️ Lavado Activos'},
@@ -3084,7 +3451,7 @@ function crearUsuarioNuevo(){
   const role=document.getElementById('nu-role')?.value;
   if(!nombre||!user||!pass){toast('Complete nombre, usuario y contraseña','error');return;}
   if(DB.users.find(u=>u.username===user)){toast('El usuario ya existe','error');return;}
-  const MODS_IDS=['dashboard','informes','inventario','gastosVeh','cxp','clientes','ventas','cxc','lavado','suplidores','gastos','nomina','caja','cotizaciones','autorizaciones','seguros','facturaExterna','alertas','verSaldoCaja','chat','prestamos','usuarios','config','cuentas','cumpleanos'];
+  const MODS_IDS=['dashboard','informes','consultas','inventario','gastosVeh','cxp','clientes','ventas','cxc','lavado','suplidores','gastos','nomina','caja','cotizaciones','autorizaciones','seguros','facturaExterna','alertas','verSaldoCaja','chat','prestamos','usuarios','config','cuentas','cumpleanos'];
   const DEL_IDS=['ventas','clientes','suplidores','gastos','nomina','gastosVeh','cxc','inventario','cotizaciones','cxp','autorizaciones','seguros'];
   const modulos=role==='admin'?MODS_IDS:MODS_IDS.filter(id=>document.getElementById('nu-mod-'+id)?.checked);
   const puedeEliminar=role==='admin'||DEL_IDS.some(id=>document.getElementById('nu-del-'+id)?.checked);
@@ -3169,7 +3536,7 @@ function editarUsuario(i){
   const u=DB.users[i];
   const roles=DB.config.roles||[{id:'usuario',nombre:'Usuario'}];
   const MODS=[
-    {id:'dashboard',label:'🏠 Inicio'},{id:'informes',label:'📊 Informe Mensual'},
+    {id:'dashboard',label:'🏠 Inicio'},{id:'informes',label:'📊 Informe Mensual'},{id:'consultas',label:'🔍 Consultas'},
     {id:'suplidores',label:'🏭 Suplidores'},{id:'inventario',label:'🚗 Registro Vehículo'},
     {id:'gastosVeh',label:'💸 Gastos Vehículo'},{id:'cxp',label:'📑 Cuentas por Pagar'},
     {id:'clientes',label:'👤 Clientes'},{id:'ventas',label:'💰 Ventas'},
@@ -3267,7 +3634,7 @@ function guardarUsuario(idx){
   const pass=document.getElementById('u-pass').value;
   if(!nombre||!user||(!pass&&idx===undefined)){toast('Complete todos los campos','error');return;}
   if(idx===undefined&&DB.users.find(u=>u.username===user)){toast('El usuario ya existe','error');return;}
-  const MODS_IDS=['dashboard','informes','suplidores','inventario','gastosVeh','cxp','clientes','ventas','cxc','lavado','gastos','nomina','caja','cotizaciones','autorizaciones','seguros','facturaExterna','alertas','verSaldoCaja','chat','prestamos','cuentas','cumpleanos'];
+  const MODS_IDS=['dashboard','informes','consultas','suplidores','inventario','gastosVeh','cxp','clientes','ventas','cxc','lavado','gastos','nomina','caja','cotizaciones','autorizaciones','seguros','facturaExterna','alertas','verSaldoCaja','chat','prestamos','cuentas','cumpleanos'];
   const nuevosMods=MODS_IDS.filter(m=>{const el=document.getElementById('u-mod-'+m);return el&&el.checked;});
   const permKeys=['editar','eliminar','imprimir','pdf','editarVentas','editarClientes','editarSuplidores','editarGastos','editarNomina','editarGastosVeh','editarCobros','editarCxp','editarVehiculos','editarCaja','editarCotizaciones','editarAutorizaciones','editarSeguros','editarFacturas','editarCuentas','editarCumpleanos','prestamosOtorgados','borrarVentas','borrarClientes','borrarSuplidores','borrarGastos','borrarNomina','borrarGastosVeh','borrarCobros','borrarCxp','borrarVehiculos','borrarCaja','borrarCotizaciones','borrarAutorizaciones','borrarSeguros','borrarFacturas','borrarCuentas','borrarCumpleanos'];
   const nuevosPerms={};permKeys.forEach(k=>{const el=document.getElementById('u-perm-'+k);if(el)nuevosPerms[k]=el.checked;});
@@ -4609,7 +4976,7 @@ function guardarPermisosUsuarioConfig(i){
   if(currentUser?.role!=='admin'){toast('Solo el administrador puede editar usuarios','error');return;}
   const u=DB.users[i];
   if(!u)return;
-  const MODS_IDS=['dashboard','informes','suplidores','inventario','gastosVeh','cxp','clientes','ventas','cxc','lavado','gastos','nomina','caja','cotizaciones','autorizaciones','seguros','facturaExterna','alertas','verSaldoCaja','chat','prestamos','cuentas','cumpleanos'];
+  const MODS_IDS=['dashboard','informes','consultas','suplidores','inventario','gastosVeh','cxp','clientes','ventas','cxc','lavado','gastos','nomina','caja','cotizaciones','autorizaciones','seguros','facturaExterna','alertas','verSaldoCaja','chat','prestamos','cuentas','cumpleanos'];
   const ALERT_IDS=['SIN_VIN','SIN_COSTO','CXP','CXC_VENCIDA','CXC','CUOTA_VENC_PRESTAMO','SIN_VENDER_6M','SIN_VENDER_1A','DOCS'];
   if(u.role!=='admin'){
     const mods=MODS_IDS.filter(id=>document.getElementById(`cfg-mod-${i}-${id}`)?.checked);
@@ -5009,7 +5376,7 @@ function renderConfig(){
       <p style="font-size:13px;color:var(--gray);margin-bottom:12px">El administrador puede editar módulos, permisos y alertas de cada usuario. Los cambios se guardan de inmediato.</p>
       <div style="display:flex;flex-direction:column;gap:12px">
         ${DB.users.map((u,ui)=>{
-          const MODS_LIST=[{id:'dashboard',label:'Inicio'},{id:'informes',label:'Informe'},{id:'suplidores',label:'Suplidores'},{id:'inventario',label:'Reg. Vehículo'},{id:'gastosVeh',label:'Gastos Veh.'},{id:'cxp',label:'CxP'},{id:'clientes',label:'Clientes'},{id:'ventas',label:'Ventas'},{id:'cxc',label:'CxC'},{id:'lavado',label:'🛡️ Lavado'},{id:'gastos',label:'Gastos Emp.'},{id:'nomina',label:'Nómina'},{id:'caja',label:'Caja'},{id:'cotizaciones',label:'Cotizaciones'},{id:'autorizaciones',label:'Autorización Compra'},{id:'seguros',label:'Seguros'},{id:'facturaExterna',label:'Facturas Externas'},{id:'alertas',label:'Alertas'},{id:'verSaldoCaja',label:'💰 Ver Saldo Caja'},{id:'chat',label:'💬 Chat'},{id:'cuentas',label:'🏦 Cuentas'},{id:'cumpleanos',label:'🎂 Cumpleaños'}];
+          const MODS_LIST=[{id:'dashboard',label:'Inicio'},{id:'informes',label:'Informe'},{id:'consultas',label:'🔍 Consultas'},{id:'suplidores',label:'Suplidores'},{id:'inventario',label:'Reg. Vehículo'},{id:'gastosVeh',label:'Gastos Veh.'},{id:'cxp',label:'CxP'},{id:'clientes',label:'Clientes'},{id:'ventas',label:'Ventas'},{id:'cxc',label:'CxC'},{id:'lavado',label:'🛡️ Lavado'},{id:'gastos',label:'Gastos Emp.'},{id:'nomina',label:'Nómina'},{id:'caja',label:'Caja'},{id:'cotizaciones',label:'Cotizaciones'},{id:'autorizaciones',label:'Autorización Compra'},{id:'seguros',label:'Seguros'},{id:'facturaExterna',label:'Facturas Externas'},{id:'alertas',label:'Alertas'},{id:'verSaldoCaja',label:'💰 Ver Saldo Caja'},{id:'chat',label:'💬 Chat'},{id:'cuentas',label:'🏦 Cuentas'},{id:'cumpleanos',label:'🎂 Cumpleaños'}];
           const ALERT_TYPES=[{id:'SIN_VIN',label:'Sin VIN'},{id:'SIN_COSTO',label:'Sin costos'},{id:'CXP',label:'CxP pendientes'},{id:'CXC_VENCIDA',label:'CxC vencidas'},{id:'CXC',label:'CxC pendientes'},{id:'CUOTA_VENC_PRESTAMO',label:'Cuotas préstamos'},{id:'SIN_VENDER_6M',label:'6m sin vender'},{id:'SIN_VENDER_1A',label:'1 año sin vender'},{id:'DOCS',label:'Docs pendientes'}];
           const mods=u.modulos||[];
           const alertas=u.alertasPermitidas||ALERT_TYPES.map(a=>a.id);
