@@ -1912,9 +1912,32 @@ function exportarConsultasPDF(){
   win.document.close();
 }
 
+function sincronizarStatusVehiculos(){
+  // Corrige el status de cualquier vehículo que tenga una venta vinculada
+  // pero cuyo status siga como EN EEUU / ADUANA / ACTIVO.
+  let _changed=false;
+  (DB.ventas||[]).forEach(venta=>{
+    if(!venta.vehiculoId)return;
+    const vi=DB.vehiculos.findIndex(x=>x.id===venta.vehiculoId);
+    if(vi<0)return;
+    const statusActual=DB.vehiculos[vi].status;
+    if(statusActual==='EN EEUU'||statusActual==='ADUANA'||statusActual==='ACTIVO'){
+      const ventaStatus=venta.estadoVenta;
+      const nuevoStatus=ventaStatus==='VENDIDO'?'VENDIDO':(ventaStatus==='TRÁNSITO'?'TRÁNSITO':(venta.fechaEntrega?'VENDIDO':'TRÁNSITO'));
+      DB.vehiculos[vi].status=nuevoStatus;
+      _changed=true;
+    }
+  });
+  if(_changed){
+    sDB('vehiculos');
+    console.log('✅ Status vehículos sincronizado con ventas');
+  }
+  return _changed;
+}
 function renderInventario(){
   const pg=document.getElementById('page-inventario');
   invSelectedId=null;
+  sincronizarStatusVehiculos();
   // Filtro por defecto: mostrar EN EEUU + ADUANA + ACTIVO (ocultar VENDIDO y TRÁNSITO)
   const ESTADOS_INVENTARIO=['EN EEUU','ADUANA','ACTIVO'];
   const filtroEstadoEl=document.getElementById('inv-estado-filter');
@@ -1924,11 +1947,11 @@ function renderInventario(){
   if(filtroEstado==='INVENTARIO')veh=veh.filter(v=>ESTADOS_INVENTARIO.includes(v.status));
   else if(filtroEstado!=='ALL')veh=veh.filter(v=>v.status===filtroEstado);
   if(filtroTipo!=='ALL')veh=veh.filter(v=>v.tipoCompra===filtroTipo);
-  // Orden fijo: EN EEUU primero, luego ADUANA, luego ACTIVO, resto al final
-  const ordenEstado={'EN EEUU':0,'ADUANA':1,'ACTIVO':2};
+  // Orden: código de mayor a menor
   veh=veh.slice().sort((a,b)=>{
-    const oa=ordenEstado[a.status]??9; const ob=ordenEstado[b.status]??9;
-    return oa-ob;
+    const na=parseInt((a.codigo||'').replace(/\D/g,''))||0;
+    const nb=parseInt((b.codigo||'').replace(/\D/g,''))||0;
+    return nb-na;
   });
   // Contador
   const totalInv=DB.vehiculos.filter(v=>ESTADOS_INVENTARIO.includes(v.status)).length;
@@ -2040,7 +2063,12 @@ function formVehiculo(v){
       <div class="form-field"><label>Millaje</label><input type="number" id="v-millas" value="${v?.millas||0}"></div>
     </div>
     <div class="form-row c3">
-      <div class="form-field"><label>Estado</label><select id="v-status">${['EN EEUU','ADUANA','ACTIVO'].map(s=>`<option ${s===v?.status?'selected':''}>${s}</option>`).join('')}</select></div>
+      <div class="form-field"><label>Estado</label>${
+        (v&&(v.status==='TRÁNSITO'||v.status==='VENDIDO'))
+          ? `<input type="text" id="v-status" value="${v.status}" disabled style="background:#f1f5f9;color:#64748b;font-weight:700">
+             <div style="font-size:11px;color:var(--gray);margin-top:3px">Este estado lo controla el módulo de Ventas y no se puede editar aquí.</div>`
+          : `<select id="v-status">${['EN EEUU','ADUANA','ACTIVO'].map(s=>`<option ${s===v?.status?'selected':''}>${s}</option>`).join('')}</select>`
+      }</div>
       <div class="form-field"><label>Tipo de Compra</label><select id="v-tipo-compra">${[['IMPORTACION','Importación'],['LOCAL','Compra Local'],['RECIBIDO','Recibido']].map(([val,lbl])=>`<option value="${val}" ${val===v?.tipoCompra?'selected':''}>${lbl}</option>`).join('')}</select></div>
       <div class="form-field"><label>Fecha de Compra</label><input type="date" id="v-fecha" value="${v?.fecha||today()}"></div>
     </div>
@@ -5932,6 +5960,7 @@ function agregarSeguroConfig(){
 
 // ══ EXPORTAR INVENTARIO PDF ══
 function exportarInventarioPDF(){
+  sincronizarStatusVehiculos();
   const veh=DB.vehiculos;
   const win=window.open('','_blank','width=1000,height=700');
   win.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Inventario</title><style>body{font-family:Arial,sans-serif;padding:20px;font-size:12px}h2{font-size:18px;margin-bottom:4px}table{width:100%;border-collapse:collapse;margin-top:16px}th{background:#0f172a;color:#fff;padding:8px;text-align:left;font-size:11px}td{padding:8px;border-bottom:1px solid #e2e8f0}tr:nth-child(even){background:#f8fafc}.bg{display:inline-block;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700}.green{background:#dcfce7;color:#16a34a}.blue{background:#dbeafe;color:#2563eb}.amber{background:#fef3c7;color:#d97706}.purple{background:#ede9fe;color:#7c3aed}.gray{background:#f1f5f9;color:#6b7280}@media print{.noprint{display:none}}</style></head><body>'+
