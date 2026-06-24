@@ -8310,7 +8310,10 @@ function imprimirCotizacion(i){
   const cliente=escHtml(c.cliente||'—');
   const tipoDoc=escHtml(c.tipoDoc||'Cédula');
   const documento=escHtml(c.documento||c.cedula||'—');
-  const banco=escHtml(c.banco||'—');
+  // Limpiar banco: si tiene formato antiguo 'Tipo — Numero (Banco)', extraer solo nombre limpio
+  const _bancoRaw=c.banco||'—';
+  const _bancoMatch=_bancoRaw.match(/\(([^)]+)\)$/);
+  const banco=escHtml(_bancoMatch?_bancoMatch[1]:_bancoRaw);
   const telefCli=c.telefono?`, Tel: <strong>${escHtml(c.telefono)}</strong>`:'';
   const fechaStr=fmtDate(c.fecha);
   const vence=c.fechaVence?` | Válida hasta: ${fmtDate(c.fechaVence)}`:'';
