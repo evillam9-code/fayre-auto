@@ -8235,26 +8235,31 @@ function guardarCotizacion(idx){
   const cli=document.getElementById('cot-cli').value.trim();
   const doc=document.getElementById('cot-doc').value.trim();
   const banco=document.getElementById('cot-banco').value;
-  const precio=parseFloat((document.getElementById('cot-precio').value||'0').replace(/,/g,''));
+  const precioRaw=(document.getElementById('cot-precio').value||'0').replace(/,/g,'');
+  const precio=parseFloat(precioRaw)||0;
   if(!cli){toast('El nombre es requerido','error');return;}
   if(!doc){toast('El documento es requerido','error');return;}
   if(!banco){toast('Selecciona la entidad bancaria','error');return;}
-  if(!precio){toast('El monto es requerido','error');return;}
-  const vidSel=document.getElementById('cot-veh').value;
+  if(!precio||precio<=0){toast('El monto es requerido','error');return;}
+  const vidSel=(document.getElementById('cot-veh')?.value)||'';
   const vObj=vidSel?DB.vehiculos.find(v=>v.id===vidSel):null;
-  const cot={id:idx!==undefined?DB.cotizaciones[idx].id:uid(),
+  const cotExist=idx!==undefined?DB.cotizaciones[idx]:{};
+  const cot={id:idx!==undefined?cotExist.id:uid(),
     fecha:document.getElementById('cot-fecha').value,
     cliente:cli,tipoDoc:document.getElementById('cot-tipodoc').value,
     documento:doc,cedula:doc,telefono:document.getElementById('cot-tel').value,
-    banco,vehiculoId:vidSel,
-    vehiculo:vObj?`${vObj.codigo} ${vObj.marca} ${vObj.modelo} ${vObj.anio}`:'',
-    vin:vObj?.vin||'',color:vObj?.color||'',placa:vObj?.placa||'EN TRÁMITE',
-    anio:vObj?.anio||'',marca:vObj?.marca||'',modelo:vObj?.modelo||'',
+    banco,vehiculoId:vObj?vidSel:(cotExist.vehiculoId||''),
+    vehiculo:vObj?`${vObj.codigo} ${vObj.marca} ${vObj.modelo} ${vObj.anio}`:(cotExist.vehiculo||''),
+    vin:vObj?.vin||(cotExist.vin||''),color:vObj?.color||(cotExist.color||''),placa:vObj?.placa||(cotExist.placa||'EN TRÁMITE'),
+    anio:vObj?.anio||(cotExist.anio||''),marca:vObj?.marca||(cotExist.marca||''),modelo:vObj?.modelo||(cotExist.modelo||''),
     precio,moneda:document.getElementById('cot-moneda').value,
     fechaVence:document.getElementById('cot-vence2')?.value||'',
-    notas:document.getElementById('cot-notas').value,status:'PENDIENTE'};
+    notas:document.getElementById('cot-notas').value,
+    status:cotExist.status||'PENDIENTE'};
   if(idx!==undefined)DB.cotizaciones[idx]=cot;else DB.cotizaciones.push(cot);
-  sDB('cotizaciones');closeModal();toast('Cotización guardada ✓','success');renderCotizaciones();
+  sDB('cotizaciones');
+  if(typeof fbGuardar==='function'&&window._fbActivo)fbGuardar('cotizaciones').catch(()=>{});
+  closeModal();toast('Cotización guardada ✓','success');renderCotizaciones();
 }
 function editarCotizacion(i){
   if(!canDo('editar')&&currentUser?.role!=='admin'){toast('No tienes permiso para editar','error');return;}
@@ -8278,7 +8283,7 @@ function editarCotizacion(i){
       <div class="form-field"><label>Fecha</label><input type="date" id="cot-fecha" value="${c.fecha||today()}"></div>
     </div>
     <div class="form-row c3">
-      <div class="form-field"><label>Monto</label><input type="text" id="cot-precio" value="${c.precio||''}" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)"></div>
+      <div class="form-field"><label>Monto</label><input type="text" id="cot-precio" value="${fmtMoneyDisplay(c.precio||0)}" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)"></div>
       <div class="form-field"><label>Moneda</label><select id="cot-moneda"><option value="RD$" ${(c.moneda||'RD$')==='RD$'?'selected':''}>RD$</option><option value="USD" ${c.moneda==='USD'?'selected':''}>USD</option></select></div>
       <div class="form-field"><label>Válida Hasta</label><input type="date" id="cot-vence2" value="${c.fechaVence||''}"></div>
     </div>
