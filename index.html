@@ -1182,76 +1182,8 @@ function showNotif(title,msg,type='danger'){
   c.appendChild(d);
 }
 function checkAlerts(){
+  // Las alertas solo se muestran dentro del módulo de Alertas, no como popups automáticos
   const c=document.getElementById('alert-container');if(c)c.innerHTML='';
-  // Respetar permisos: si no tiene acceso al módulo alertas, no mostrar popups
-  if(!canAccess('alertas'))return;
-  const hoy=today();
-  // alertasPermitidas aplica a TODOS incluyendo admin
-  const esAdmin=currentUser?.role==='admin';
-  const alertasPermitidas=currentUser?.alertasPermitidas!==undefined
-    ?currentUser.alertasPermitidas
-    :(esAdmin?null:['SIN_VIN','SIN_COSTO','CXP','CXC_VENCIDA','CXC','CUOTA_VENC_PRESTAMO','SIN_VENDER_6M','SIN_VENDER_1A','DOCS']);
-  const puedeVer=tipo=>!alertasPermitidas||alertasPermitidas.includes(tipo);
-
-  if(puedeVer('SIN_VIN')){
-    const sinVin=DB.vehiculos.filter(v=>v.status!=='VENDIDO'&&!v.vin);
-    if(sinVin.length>0)showNotif(sinVin.length+' vehículo(s) sin Chasis/VIN','Verifique el inventario.','warning');
-  }
-  if(puedeVer('CXP')){
-    const cxpPend=(DB.gastosVehiculos||[]).filter(g=>parseFloat(g.montoPendiente||0)>0);
-    if(cxpPend.length>0){const t=cxpPend.reduce((a,g)=>a+parseFloat(g.montoPendiente||0),0);showNotif(cxpPend.length+' gasto(s) de vehículo por pagar','Pendiente: '+fmt(t),'danger');}
-  }
-  if(puedeVer('CXC')){
-    const cxcPend=(DB.cxc||[]).filter(x=>x.status==='PENDIENTE'||x.status==='PARCIAL');
-    if(cxcPend.length>0){const t=cxcPend.reduce((a,x)=>a+parseFloat(x.saldo||0),0);showNotif(cxcPend.length+' cuenta(s) por cobrar pendientes','Total: '+fmt(t),'warning');}
-  }
-  if(puedeVer('CXC_VENCIDA')){
-    (DB.cxc||[]).filter(x=>(x.status==='PENDIENTE'||x.status==='PARCIAL')&&x.fechaVence&&x.fechaVence<=hoy).forEach(x=>{showNotif('⚠️ CxC VENCIDA: '+x.cliente,'Vence: '+fmtDate(x.fechaVence)+' — '+fmt(x.saldo),'danger');});
-  }
-  if(puedeVer('CUOTA_VENC_PRESTAMO')){
-    const hoyStr=hoy;
-    (DB.prestamosOtorgados||[]).filter(p=>p.saldoPendiente>0).forEach(po=>{
-      const vencidas=(po.tablaAmortizacion||[]).filter(r=>!r.pagado&&r.fecha&&r.fecha<=hoyStr);
-      if(vencidas.length>0)showNotif('🤝 Cuota(s) vencida(s): '+po.cliente,vencidas.length+' cuota(s) sin pagar — Saldo: '+fmtP(po.saldoPendiente,po.moneda||'RD$'),'danger');
-    });
-  }
-  if(puedeVer('DOCS')){
-    const docsPend=DB.ventas.filter(v=>v.docsPendientes&&v.fechaLimDocs);
-    docsPend.forEach(v=>{const vencida=v.fechaLimDocs<=hoy;showNotif('Entrega docs '+(vencida?'VENCIDA':'pendiente')+': '+(v.vehiculo||''),'Límite: '+fmtDate(v.fechaLimDocs),vencida?'danger':'warning');});
-  }
-  if(puedeVer('SIN_COSTO')){
-    const sinCostos=DB.vehiculos.filter(v=>v.status!=='VENDIDO'&&!(DB.gastosVehiculos||[]).some(g=>g.vehiculoId===v.id));
-    if(sinCostos.length>0)showNotif(sinCostos.length+' vehículo(s) sin costos registrados','Registre los gastos en Gastos de Vehículo.','warning');
-  }
-  const hoyDate=new Date();
-  DB.vehiculos.filter(v=>v.status!=='VENDIDO'&&v.fecha).forEach(v=>{
-    const diasSinVender=Math.floor((hoyDate-new Date(v.fecha+'T12:00:00'))/(1000*60*60*24));
-    if(diasSinVender>=365&&puedeVer('SIN_VENDER_1A')){
-      const dep=Math.round(parseFloat(v.costo||0)*0.15*100)/100;
-      showNotif('⏰ 1 AÑO SIN VENDER: '+(v.codigo+' '+v.marca+' '+v.modelo),'Ingresó: '+fmtDate(v.fecha)+' ('+diasSinVender+' días). Depreciación est.: '+fmt(dep),'danger');
-    } else if(diasSinVender>=180&&puedeVer('SIN_VENDER_6M')){
-      showNotif('⚠️ 6 MESES SIN VENDER: '+(v.codigo+' '+v.marca+' '+v.modelo),'Ingresó: '+fmtDate(v.fecha)+' ('+diasSinVender+' días). Revisar precio.','warning');
-    }
-  });
-  // ── Alerta Placa +60 días (endorsos sin placa original) ──
-  DB.ventas.filter(v=>v.tipoTransferencia==='endoso'&&!v.placaOriginalRecibida).forEach(v=>{
-    if(!v.fecha)return;
-    const dias=Math.floor((hoyDate-new Date(v.fecha+'T12:00:00'))/(1000*60*60*24));
-    if(dias>=60){
-      showNotif('🚨 PLACA +60 DÍAS: '+escHtml(v.cliente),'Venta '+escHtml(v.factura)+' — '+dias+' días sin placa original. Vehículo: '+escHtml(v.vehiculo||''),'warning');
-    }
-  });
-  // ── Alerta Placa Exhibición Vencida o Próxima a Vencer ──
-  DB.ventas.filter(v=>v.placaExhibicion&&v.placaExhibicion.fecha&&!v.placaOriginalRecibida).forEach(v=>{
-    const venc=v.placaExhibicion.vencimiento||addDays(v.placaExhibicion.fecha,90);
-    if(!venc)return;
-    const diasRestantes=Math.floor((new Date(venc+'T12:00:00')-hoyDate)/(1000*60*60*24));
-    if(diasRestantes<0){
-      showNotif('🔴 PLACA EXHIBICIÓN VENCIDA: '+escHtml(v.cliente),'Factura '+escHtml(v.factura)+' — Venció '+fmtDate(venc)+'. Gestionar placa original urgente.','danger');
-    } else if(diasRestantes<=15){
-      showNotif('🟡 PLACA EXHIBICIÓN VENCE EN '+diasRestantes+' DÍAS: '+escHtml(v.cliente),'Factura '+escHtml(v.factura)+' — Vence '+fmtDate(venc)+'. Vehículo: '+escHtml(v.vehiculo||''),'danger');
-    }
-  });
 }
 
 // ══ DASHBOARD ══
@@ -2354,18 +2286,33 @@ function renderCaja(){
   const mes=document.getElementById('caja-mes')?.value||today().slice(0,7);
   const tab=document.getElementById('caja-tab')?.value||'TODO';
   const vista=document.getElementById('caja-vista')?.value||'MES';
+  const modoFecha=document.getElementById('caja-modo-fecha')?.value||'MES';
+  const fechaDesde=document.getElementById('caja-desde')?.value||'';
+  const fechaHasta=document.getElementById('caja-hasta')?.value||'';
   const tasa=parseFloat(DB.config.tasaCambio||60);
   const fmtUSD=n=>'USD '+parseFloat(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
 
-  // Movimientos del mes (para entradas/salidas)
-  const cajaFilt=DB.caja.filter(c=>c.fecha?.startsWith(mes));
+  // Determinar filtro de período para movimientos y resumen de cuentas
+  let cajaFilt;
+  let periodoLabel;
+  if(modoFecha==='RANGO'&&fechaDesde&&fechaHasta){
+    cajaFilt=DB.caja.filter(c=>c.fecha&&c.fecha>=fechaDesde&&c.fecha<=fechaHasta);
+    periodoLabel=`${fmtDate(fechaDesde)} al ${fmtDate(fechaHasta)}`;
+  } else {
+    cajaFilt=DB.caja.filter(c=>c.fecha?.startsWith(mes));
+    const [anioM,numM]=mes.split('-');
+    const nombreMes=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][parseInt(numM)-1];
+    periodoLabel=`${nombreMes} ${anioM}`;
+  }
+
+  // Totales del período filtrado
   const entradasRD=cajaFilt.filter(c=>c.tipo==='ENTRADA'&&(c.moneda||'RD$')==='RD$').reduce((a,c)=>a+parseFloat(c.monto||0),0);
   const entradasUSD=cajaFilt.filter(c=>c.tipo==='ENTRADA'&&c.moneda==='USD').reduce((a,c)=>a+parseFloat(c.monto||0),0);
   const salidasRD=cajaFilt.filter(c=>c.tipo==='SALIDA'&&(c.moneda||'RD$')==='RD$').reduce((a,c)=>a+parseFloat(c.monto||0),0);
   const salidasUSD=cajaFilt.filter(c=>c.tipo==='SALIDA'&&c.moneda==='USD').reduce((a,c)=>a+parseFloat(c.monto||0),0);
   const balRD=entradasRD-salidasRD;
   const balUSD=entradasUSD-salidasUSD;
-  const ventasMes=DB.ventas.filter(v=>v.fecha?.startsWith(mes)).reduce((a,v)=>a+parseFloat(v.precioVenta||0),0);
+  const totalGeneralPeriodo=balRD+(balUSD*tasa);
 
   // Saldo ACUMULADO por cuenta (todos los movimientos históricos)
   const cuentasAcum={};
@@ -2379,30 +2326,35 @@ function renderCaja(){
     else cuentasAcum[key].salidas+=parseFloat(c.monto||0);
   });
 
-  // Saldo del MES por cuenta
-  const cuentasMes={};
+  // Saldo del PERÍODO por cuenta (coincide con filtro activo)
+  const cuentasPeriodo={};
   cajaFilt.forEach(c=>{
     const banco=c.banco||'Sin banco';
     const cuenta=c.cuenta||'Sin cuenta';
     const moneda=c.moneda||'RD$';
     const key=`${banco}||${cuenta}||${moneda}`;
-    if(!cuentasMes[key])cuentasMes[key]={banco,cuenta,moneda,entradas:0,salidas:0};
-    if(c.tipo==='ENTRADA')cuentasMes[key].entradas+=parseFloat(c.monto||0);
-    else cuentasMes[key].salidas+=parseFloat(c.monto||0);
+    if(!cuentasPeriodo[key])cuentasPeriodo[key]={banco,cuenta,moneda,entradas:0,salidas:0};
+    if(c.tipo==='ENTRADA')cuentasPeriodo[key].entradas+=parseFloat(c.monto||0);
+    else cuentasPeriodo[key].salidas+=parseFloat(c.monto||0);
   });
 
-  const cuentasData=vista==='ACUMULADO'?cuentasAcum:cuentasMes;
+  const cuentasData=vista==='ACUMULADO'?cuentasAcum:cuentasPeriodo;
 
-  // Agrupar por banco para la tarjetas
+  // Agrupar por banco para las tarjetas
   const bancoGroups={};
   Object.values(cuentasData).forEach(c=>{
     if(!bancoGroups[c.banco])bancoGroups[c.banco]=[];
     bancoGroups[c.banco].push(c);
   });
 
-  // Total acumulado RD$ y USD para el header
+  // Totales acumulados para header de saldo total
   const totalAcumRD=Object.values(cuentasAcum).filter(c=>c.moneda==='RD$').reduce((a,c)=>a+(c.entradas-c.salidas),0);
   const totalAcumUSD=Object.values(cuentasAcum).filter(c=>c.moneda==='USD').reduce((a,c)=>a+(c.entradas-c.salidas),0);
+  const acumEntRD=Object.values(cuentasAcum).filter(c=>c.moneda==='RD$').reduce((a,c)=>a+c.entradas,0);
+  const acumSalRD=Object.values(cuentasAcum).filter(c=>c.moneda==='RD$').reduce((a,c)=>a+c.salidas,0);
+  const acumEntUSD=Object.values(cuentasAcum).filter(c=>c.moneda==='USD').reduce((a,c)=>a+c.entradas,0);
+  const acumSalUSD=Object.values(cuentasAcum).filter(c=>c.moneda==='USD').reduce((a,c)=>a+c.salidas,0);
+  const totalGeneralRD=totalAcumRD+(totalAcumUSD*tasa);
 
   let filtrados=tab==='ENTRADAS'?cajaFilt.filter(c=>c.tipo==='ENTRADA'):tab==='SALIDAS'?cajaFilt.filter(c=>c.tipo==='SALIDA'):cajaFilt;
 
@@ -2418,7 +2370,7 @@ function renderCaja(){
         </div>
         <div style="text-align:right">
           <div style="font-size:18px;font-weight:900;color:${saldo>=0?'var(--green)':'var(--red)'}">${isUSD?fmtUSD(saldo):fmt(saldo)}</div>
-          <div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--gray)">Saldo ${vista==='ACUMULADO'?'acumulado':'del mes'}</div>
+          <div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--gray)">Saldo ${vista==='ACUMULADO'?'acumulado':periodoLabel}</div>
         </div>
       </div>`;
     }).join('');
@@ -2436,64 +2388,79 @@ function renderCaja(){
     </div>`;
   }).join('');
 
-  // Totales acumulados precalculados
-  const acumEntRD  = Object.values(cuentasAcum).filter(c=>c.moneda==='RD$').reduce((a,c)=>a+c.entradas,0);
-  const acumSalRD  = Object.values(cuentasAcum).filter(c=>c.moneda==='RD$').reduce((a,c)=>a+c.salidas,0);
-  const acumEntUSD = Object.values(cuentasAcum).filter(c=>c.moneda==='USD').reduce((a,c)=>a+c.entradas,0);
-  const acumSalUSD = Object.values(cuentasAcum).filter(c=>c.moneda==='USD').reduce((a,c)=>a+c.salidas,0);
-  const totalGeneralRD = totalAcumRD + (totalAcumUSD * tasa);
-
   document.getElementById('page-caja').innerHTML=`
     <div class="page-header">
-      <div><h1>💳 Caja</h1><p>Saldo acumulado de todas las cuentas</p></div>
+      <div><h1>💳 Caja</h1><p>Gestión de movimientos y saldo de cuentas</p></div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <input type="month" id="caja-mes" value="${mes}" onchange="renderCaja()" style="padding:7px 12px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
         <button class="btn btn-secondary btn-sm" onclick="exportarCajaPDF()">📄 PDF / Imprimir</button>
         <button class="btn btn-green btn-sm" onclick="nuevoCajaMov('ENTRADA')">📥 Nueva Entrada</button>
         <button class="btn btn-red btn-sm" onclick="nuevoCajaMov('SALIDA')">📤 Nueva Salida</button>
       </div>
     </div>
 
-    <!-- BARRA ACUMULADA TOTAL -->
-    ${(currentUser?.role==='admin'||(currentUser?.modulos||[]).includes('verSaldoCaja'))?`
-    <div style="background:var(--navy);border-radius:14px;padding:20px 24px;margin-bottom:14px">
-      <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#94a3b8;letter-spacing:.8px;margin-bottom:14px">
-        💰 SALDO ACUMULADO — TODAS LAS CUENTAS
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:10px;text-align:center;margin-bottom:16px">
-
-        <div style="background:rgba(74,222,128,.12);border-radius:10px;padding:14px 8px">
-          <div style="font-size:9px;font-weight:700;text-transform:uppercase;color:#4ade80;letter-spacing:.5px;margin-bottom:6px">Saldo RD$</div>
-          <div style="font-size:19px;font-weight:900;color:${totalAcumRD>=0?'#4ade80':'#f87171'}">${fmt(totalAcumRD)}</div>
-          <div style="font-size:10px;color:#64748b;margin-top:4px">Ent: ${fmt(acumEntRD)}</div>
-          <div style="font-size:10px;color:#64748b">Sal: ${fmt(acumSalRD)}</div>
+    <!-- FILTRO DE PERÍODO -->
+    <div class="card" style="margin-bottom:14px;padding:14px 16px">
+      <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gray);margin-bottom:10px">📅 Período</div>
+      <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+        <div>
+          <div style="font-size:11px;font-weight:600;color:var(--gray);margin-bottom:4px">Filtrar por</div>
+          <select id="caja-modo-fecha" onchange="renderCaja()" style="padding:7px 12px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
+            <option value="MES" ${modoFecha==='MES'?'selected':''}>Por Mes</option>
+            <option value="RANGO" ${modoFecha==='RANGO'?'selected':''}>Por Rango de Fechas</option>
+          </select>
         </div>
-
-        <div style="background:rgba(96,165,250,.12);border-radius:10px;padding:14px 8px">
-          <div style="font-size:9px;font-weight:700;text-transform:uppercase;color:#60a5fa;letter-spacing:.5px;margin-bottom:6px">Saldo USD</div>
-          <div style="font-size:19px;font-weight:900;color:${totalAcumUSD>=0?'#60a5fa':'#f87171'}">${fmtUSD(totalAcumUSD)}</div>
-          <div style="font-size:10px;color:#64748b;margin-top:4px">Ent: ${fmtUSD(acumEntUSD)}</div>
-          <div style="font-size:10px;color:#64748b">Sal: ${fmtUSD(acumSalUSD)}</div>
+        ${modoFecha==='RANGO'?`
+        <div>
+          <div style="font-size:11px;font-weight:600;color:var(--gray);margin-bottom:4px">Desde</div>
+          <input type="date" id="caja-desde" value="${fechaDesde}" onchange="renderCaja()" style="padding:7px 12px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
         </div>
-
-        <div style="background:rgba(96,165,250,.08);border-radius:10px;padding:14px 8px">
-          <div style="font-size:9px;font-weight:700;text-transform:uppercase;color:#94a3b8;letter-spacing:.5px;margin-bottom:6px">USD en RD$</div>
-          <div style="font-size:16px;font-weight:800;color:#94a3b8">${fmt(totalAcumUSD*tasa)}</div>
-          <div style="font-size:10px;color:#64748b;margin-top:6px">× ${tasa.toLocaleString('es-DO',{minimumFractionDigits:2})}</div>
-        </div>
-
-        <div style="background:rgba(${totalGeneralRD>=0?'74,222,128':'248,113,113'},.18);border-radius:10px;padding:14px 8px;border:2px solid rgba(${totalGeneralRD>=0?'74,222,128':'248,113,113'},.4);grid-column:span 2">
-          <div style="font-size:9px;font-weight:700;text-transform:uppercase;color:${totalGeneralRD>=0?'#4ade80':'#f87171'};letter-spacing:.5px;margin-bottom:6px">
-            🏦 TOTAL GENERAL EN PESOS
-          </div>
-          <div style="font-size:26px;font-weight:900;color:${totalGeneralRD>=0?'#4ade80':'#f87171'}">${fmt(totalGeneralRD)}</div>
-          <div style="font-size:10px;color:#94a3b8;margin-top:4px">RD$ + (USD × ${tasa.toLocaleString('es-DO',{minimumFractionDigits:2})})</div>
-        </div>
-
+        <div>
+          <div style="font-size:11px;font-weight:600;color:var(--gray);margin-bottom:4px">Hasta</div>
+          <input type="date" id="caja-hasta" value="${fechaHasta}" onchange="renderCaja()" style="padding:7px 12px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
+        </div>`:`
+        <div>
+          <div style="font-size:11px;font-weight:600;color:var(--gray);margin-bottom:4px">Mes</div>
+          <input type="month" id="caja-mes" value="${mes}" onchange="renderCaja()" style="padding:7px 12px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
+        </div>`}
       </div>
     </div>
 
-    <!-- Tasa editable + vista -->
+    <!-- RESUMEN DEL PERÍODO (siempre visible arriba, coincide con filtro) -->
+    ${(currentUser?.role==='admin'||(currentUser?.modulos||[]).includes('verSaldoCaja'))?`
+    <div style="background:var(--navy);border-radius:14px;padding:20px 24px;margin-bottom:14px">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#94a3b8;letter-spacing:.8px;margin-bottom:6px">
+        📅 RESUMEN DEL PERÍODO — ${periodoLabel.toUpperCase()}
+      </div>
+      <div style="font-size:10px;color:#64748b;margin-bottom:14px">${cajaFilt.length} movimiento(s) en este período</div>
+
+      <!-- TOTAL GENERAL DEL PERÍODO destacado -->
+      <div style="background:rgba(${totalGeneralPeriodo>=0?'74,222,128':'248,113,113'},.18);border-radius:12px;padding:16px 20px;margin-bottom:14px;border:2px solid rgba(${totalGeneralPeriodo>=0?'74,222,128':'248,113,113'},.4);text-align:center">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:${totalGeneralPeriodo>=0?'#4ade80':'#f87171'};letter-spacing:.8px;margin-bottom:6px">💰 BALANCE TOTAL DEL PERÍODO (RD$ + USD al cambio)</div>
+        <div style="font-size:32px;font-weight:900;color:${totalGeneralPeriodo>=0?'#4ade80':'#f87171'}">${fmt(totalGeneralPeriodo)}</div>
+        <div style="font-size:10px;color:#94a3b8;margin-top:4px">RD$ ${fmt(balRD)} + USD ${fmtUSD(balUSD)} × ${tasa.toLocaleString('es-DO',{minimumFractionDigits:2})}</div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;text-align:center">
+        <div style="background:rgba(74,222,128,.12);border-radius:10px;padding:12px 8px">
+          <div style="font-size:9px;font-weight:700;text-transform:uppercase;color:#4ade80;letter-spacing:.5px;margin-bottom:6px">Entradas RD$</div>
+          <div style="font-size:18px;font-weight:900;color:#4ade80">${fmt(entradasRD)}</div>
+        </div>
+        <div style="background:rgba(248,113,113,.12);border-radius:10px;padding:12px 8px">
+          <div style="font-size:9px;font-weight:700;text-transform:uppercase;color:#f87171;letter-spacing:.5px;margin-bottom:6px">Salidas RD$</div>
+          <div style="font-size:18px;font-weight:900;color:#f87171">${fmt(salidasRD)}</div>
+        </div>
+        <div style="background:rgba(96,165,250,.12);border-radius:10px;padding:12px 8px">
+          <div style="font-size:9px;font-weight:700;text-transform:uppercase;color:#60a5fa;letter-spacing:.5px;margin-bottom:6px">Entradas USD</div>
+          <div style="font-size:18px;font-weight:900;color:#60a5fa">${fmtUSD(entradasUSD)}</div>
+        </div>
+        <div style="background:rgba(248,113,113,.12);border-radius:10px;padding:12px 8px">
+          <div style="font-size:9px;font-weight:700;text-transform:uppercase;color:#f87171;letter-spacing:.5px;margin-bottom:6px">Salidas USD</div>
+          <div style="font-size:18px;font-weight:900;color:#f87171">${fmtUSD(salidasUSD)}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tasa editable -->
     <div style="background:var(--amber2);border:1px solid var(--amber);border-radius:8px;padding:10px 16px;margin-bottom:14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
       <span style="font-size:13px">💱 <strong>Tasa USD:</strong></span>
       <div style="display:flex;align-items:center;gap:6px">
@@ -2505,13 +2472,42 @@ function renderCaja(){
       </div>
     </div>
 
+    <!-- Saldo acumulado total de todas las cuentas -->
+    <div style="background:var(--navy2);border-radius:10px;padding:14px 18px;margin-bottom:14px;border:1px solid #334155">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#64748b;letter-spacing:.8px;margin-bottom:10px">🏦 SALDO ACUMULADO HISTÓRICO — TODAS LAS CUENTAS</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:10px;text-align:center">
+        <div style="background:rgba(74,222,128,.10);border-radius:8px;padding:10px 6px">
+          <div style="font-size:9px;font-weight:700;text-transform:uppercase;color:#4ade80;letter-spacing:.5px;margin-bottom:4px">Saldo RD$</div>
+          <div style="font-size:16px;font-weight:900;color:${totalAcumRD>=0?'#4ade80':'#f87171'}">${fmt(totalAcumRD)}</div>
+          <div style="font-size:10px;color:#64748b;margin-top:2px">Ent: ${fmt(acumEntRD)}</div>
+          <div style="font-size:10px;color:#64748b">Sal: ${fmt(acumSalRD)}</div>
+        </div>
+        <div style="background:rgba(96,165,250,.10);border-radius:8px;padding:10px 6px">
+          <div style="font-size:9px;font-weight:700;text-transform:uppercase;color:#60a5fa;letter-spacing:.5px;margin-bottom:4px">Saldo USD</div>
+          <div style="font-size:16px;font-weight:900;color:${totalAcumUSD>=0?'#60a5fa':'#f87171'}">${fmtUSD(totalAcumUSD)}</div>
+          <div style="font-size:10px;color:#64748b;margin-top:2px">Ent: ${fmtUSD(acumEntUSD)}</div>
+          <div style="font-size:10px;color:#64748b">Sal: ${fmtUSD(acumSalUSD)}</div>
+        </div>
+        <div style="background:rgba(96,165,250,.06);border-radius:8px;padding:10px 6px">
+          <div style="font-size:9px;font-weight:700;text-transform:uppercase;color:#94a3b8;letter-spacing:.5px;margin-bottom:4px">USD en RD$</div>
+          <div style="font-size:14px;font-weight:800;color:#94a3b8">${fmt(totalAcumUSD*tasa)}</div>
+          <div style="font-size:10px;color:#64748b;margin-top:4px">× ${tasa.toLocaleString('es-DO',{minimumFractionDigits:2})}</div>
+        </div>
+        <div style="background:rgba(${totalGeneralRD>=0?'74,222,128':'248,113,113'},.14);border-radius:8px;padding:10px 6px;border:1px solid rgba(${totalGeneralRD>=0?'74,222,128':'248,113,113'},.3);grid-column:span 2">
+          <div style="font-size:9px;font-weight:700;text-transform:uppercase;color:${totalGeneralRD>=0?'#4ade80':'#f87171'};letter-spacing:.5px;margin-bottom:4px">🏦 TOTAL GENERAL EN PESOS</div>
+          <div style="font-size:22px;font-weight:900;color:${totalGeneralRD>=0?'#4ade80':'#f87171'}">${fmt(totalGeneralRD)}</div>
+          <div style="font-size:10px;color:#94a3b8;margin-top:2px">RD$ + (USD × ${tasa.toLocaleString('es-DO',{minimumFractionDigits:2})})</div>
+        </div>
+      </div>
+    </div>
+
     <!-- Selector de vista por cuentas -->
     <div class="card" style="margin-bottom:14px;padding:14px 16px">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
         <div style="font-size:14px;font-weight:700">🏦 Saldo por Cuentas Bancarias</div>
         <div style="display:flex;gap:8px;align-items:center">
           <select id="caja-vista" onchange="renderCaja()" style="padding:6px 12px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
-            <option value="MES" ${vista==='MES'?'selected':''}>Movimientos del mes</option>
+            <option value="MES" ${vista==='MES'?'selected':''}>Movimientos del período</option>
             <option value="ACUMULADO" ${vista==='ACUMULADO'?'selected':''}>Saldo acumulado total</option>
           </select>
         </div>
@@ -2519,23 +2515,13 @@ function renderCaja(){
       <div style="font-size:11px;color:var(--gray);margin-top:6px">
         ${vista==='ACUMULADO'
           ?'Mostrando el saldo acumulado de todos los movimientos históricos por cuenta.'
-          :'Mostrando solo los movimientos del mes seleccionado por cuenta.'}
+          :`Mostrando solo los movimientos de: ${periodoLabel}.`}
       </div>
     </div>
 
     <!-- Tarjetas por banco/cuenta -->
     ${Object.keys(bancoGroups).length>0?bancoCards:'<div class="card" style="text-align:center;padding:24px;color:var(--gray)">Sin movimientos registrados en este período</div>'}
     `:''}<!-- fin verSaldoCaja -->
-    ${(currentUser?.role==='admin'||(currentUser?.modulos||[]).includes('verSaldoCaja'))?`
-    <div class="card" style="background:var(--navy);margin-bottom:16px">
-      <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#94a3b8;margin-bottom:10px;text-align:center">📅 Resumen del mes seleccionado</div>
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;text-align:center">
-        <div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#94a3b8;margin-bottom:4px">Entradas RD$</div><div style="font-size:18px;font-weight:800;color:#4ade80">${fmt(entradasRD)}</div></div>
-        <div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#94a3b8;margin-bottom:4px">Salidas RD$</div><div style="font-size:18px;font-weight:800;color:#f87171">${fmt(salidasRD)}</div></div>
-        <div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#94a3b8;margin-bottom:4px">Balance RD$</div><div style="font-size:18px;font-weight:800;color:${balRD>=0?'#4ade80':'#f87171'}">${fmt(balRD)}</div></div>
-        <div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#94a3b8;margin-bottom:4px">Balance USD</div><div style="font-size:18px;font-weight:800;color:${balUSD>=0?'#4ade80':'#f87171'}">${fmtUSD(balUSD)}</div></div>
-      </div>
-    </div>`:''}
     <div class="card">
       <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
         <select id="caja-tab" onchange="renderCaja()" style="padding:7px 12px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
@@ -2557,9 +2543,10 @@ function renderCaja(){
         </tr>`;}).join('')||'<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--gray)">Sin registros</td></tr>'}
         </tbody></table></div>
     </div>`;
-  document.getElementById('caja-mes').value=mes;
-  document.getElementById('caja-tab').value=tab;
+  if(modoFecha!=='RANGO'){const el=document.getElementById('caja-mes');if(el)el.value=mes;}
+  const elTab=document.getElementById('caja-tab');if(elTab)elTab.value=tab;
 }
+
 function editarCaja(i){
   const c=DB.caja[i];
   if(!c)return;
@@ -2671,9 +2658,9 @@ function exportarCajaPDF(){
 function htmlMonedaBancoCuenta(prefix, monedaVal){
   const m=monedaVal||'RD$';
   const bcs=DB.config.bancoCuentas||[];
-  const bancosDisp=bcs.filter(b=>(b.cuentas||[]).some(c=>m==='USD'?c.tipo.includes('USD'):!c.tipo.includes('USD')));
+  const bancosDisp=bcs.filter(b=>(b.cuentas||[]).some(c=>m==='USD'?(c.tipo.includes('USD')||c.tipo.includes('Dólares')):(!c.tipo.includes('USD')&&!c.tipo.includes('Dólares'))));
   const primerBanco=bancosDisp[0];
-  const cuentas=primerBanco?(primerBanco.cuentas||[]).filter(c=>m==='USD'?c.tipo.includes('USD'):!c.tipo.includes('USD')):[];
+  const cuentas=primerBanco?(primerBanco.cuentas||[]).filter(c=>m==='USD'?(c.tipo.includes('USD')||c.tipo.includes('Dólares')):(!c.tipo.includes('USD')&&!c.tipo.includes('Dólares'))):[];
   const bancoOpts=bancosDisp.map(b=>`<option value="${escHtml(b.banco)}">${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos</option>';
   const cuentaOpts=cuentas.map(c=>`<option value="${escHtml(c.tipo+' — '+c.numero)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`).join('')||'<option value="">Sin cuentas</option>';
   return `<div class="form-row c3">
@@ -2700,12 +2687,12 @@ function actualizarCuentasGenerico(prefix){
   const bcs=DB.config.bancoCuentas||[];
   // Actualizar bancos si cambió la moneda
   if(bancoEl){
-    const bancosDisp=bcs.filter(b=>(b.cuentas||[]).some(c=>m==='USD'?c.tipo.includes('USD'):!c.tipo.includes('USD')));
+    const bancosDisp=bcs.filter(b=>(b.cuentas||[]).some(c=>m==='USD'?(c.tipo.includes('USD')||c.tipo.includes('Dólares')):(!c.tipo.includes('USD')&&!c.tipo.includes('Dólares'))));
     bancoEl.innerHTML=bancosDisp.map(b=>`<option value="${escHtml(b.banco)}">${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos</option>';
   }
   const banco=bancoEl?.value;
   const b=bcs.find(x=>x.banco===banco);
-  const cuentas=(b?b.cuentas:[]).filter(c=>m==='USD'?c.tipo.includes('USD'):!c.tipo.includes('USD'));
+  const cuentas=(b?b.cuentas:[]).filter(c=>m==='USD'?(c.tipo.includes('USD')||c.tipo.includes('Dólares')):(!c.tipo.includes('USD')&&!c.tipo.includes('Dólares')));
   cuentaEl.innerHTML=cuentas.map(c=>`<option value="${escHtml(c.tipo+' — '+c.numero)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`).join('')||'<option value="">Sin cuentas</option>';
 }
 
@@ -3177,10 +3164,10 @@ function registrarPagoNomina(i){
     </div>
     <div class="form-row c2">
       <div class="form-field"><label>Banco</label>
-        <select id="np-banco" onchange="filtrarCuentasPorBanco('np')">${(()=>{const bcs=DB.config.bancoCuentas||[];const disp=bcs.filter(b=>(b.cuentas||[]).some(c=>!c.tipo.includes('USD')));return disp.map(b=>`<option value="${escHtml(b.banco)}">${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos</option>';})()}</select>
+        <select id="np-banco" onchange="filtrarCuentasPorBanco('np')">${(()=>{const bcs=DB.config.bancoCuentas||[];const disp=bcs.filter(b=>(b.cuentas||[]).some(c=>!c.tipo.includes('USD')&&!c.tipo.includes('Dólares')));return disp.map(b=>`<option value="${escHtml(b.banco)}">${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos</option>';})()}</select>
       </div>
       <div class="form-field"><label>Cuenta</label>
-        <select id="np-cuenta">${(()=>{const bcs=DB.config.bancoCuentas||[];const b=bcs.find(x=>(x.cuentas||[]).some(c=>!c.tipo.includes('USD')));return(b?b.cuentas:[]).filter(c=>!c.tipo.includes('USD')).map(c=>{const v=c.tipo+' — '+c.numero;return`<option value="${escHtml(v)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('')||'<option value="">Sin cuentas</option>';})()}</select>
+        <select id="np-cuenta">${(()=>{const bcs=DB.config.bancoCuentas||[];const b=bcs.find(x=>(x.cuentas||[]).some(c=>!c.tipo.includes('USD')&&!c.tipo.includes('Dólares')));return(b?b.cuentas:[]).filter(c=>!c.tipo.includes('USD')&&!c.tipo.includes('Dólares')).map(c=>{const v=c.tipo+' — '+c.numero;return`<option value="${escHtml(v)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('')||'<option value="">Sin cuentas</option>';})()}</select>
       </div>
     </div>
     <div class="form-field"><label>Nota</label><input type="text" id="np-nota" placeholder="Opcional"></div>`,
@@ -4798,9 +4785,9 @@ function renderCuentas(){
               <div style="background:var(--gray2);border-radius:8px;padding:12px;border:1px solid var(--gray3)">
                 <div style="display:flex;justify-content:space-between;align-items:flex-start">
                   <div>
-                    <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--gray);margin-bottom:2px">${escHtml(c.tipo||'Corriente')} — <span style="color:${(c.tipo||'').includes('USD')?'#1d4ed8':'#16a34a'}">${(c.tipo||'').includes('USD')?'USD':'RD$'}</span></div>
+                    <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--gray);margin-bottom:2px">${escHtml(c.tipo||'Corriente')} — <span style="color:${(c.tipo||'').includes('USD')||(c.tipo||'').includes('Dólares')?'#1d4ed8':'#16a34a'}">${(c.tipo||'').includes('USD')||(c.tipo||'').includes('Dólares')?'USD':'RD$'}</span></div>
                     <div style="font-size:15px;font-weight:800;font-family:monospace;letter-spacing:1px">${escHtml(c.numero||'—')}</div>
-                    <div style="font-size:11px;color:var(--gray);margin-top:4px">${(c.tipo||'').includes('Corriente')?'🔄 Cuenta Corriente':'💰 Cuenta de Ahorro'}</div>
+                    <div style="font-size:11px;color:var(--gray);margin-top:4px">${(c.tipo||'').includes('Corriente')?'🔄 Cuenta Corriente':(c.tipo||'').includes('Efectivo')?'💵 Efectivo':'💰 Cuenta de Ahorro'}</div>
                   </div>
                   ${puedeBorrar?`<button class="btn btn-sm" style="background:var(--red2);color:var(--red);padding:4px 8px" onclick="eliminarCuentaBancoCuentas(${bi},${ci})">✕</button>`:''}
                 </div>
@@ -4836,6 +4823,8 @@ function agregarFilaCuentaNuevoBanco(){
         <option value="Corriente USD">Corriente USD</option>
         <option value="Ahorro RD$">Ahorro RD$</option>
         <option value="Ahorro USD">Ahorro USD</option>
+        <option value="Efectivo Pesos">Efectivo Pesos</option>
+        <option value="Efectivo Dólares">Efectivo Dólares</option>
       </select>
     </div>
     <button class="btn btn-red btn-sm" onclick="this.parentElement.remove()">✕</button>`;
@@ -4873,6 +4862,8 @@ function agregarCuentaABanco(bi){
           <option value="Corriente USD">Corriente USD</option>
           <option value="Ahorro RD$">Ahorro RD$</option>
           <option value="Ahorro USD">Ahorro USD</option>
+          <option value="Efectivo Pesos">Efectivo Pesos</option>
+          <option value="Efectivo Dólares">Efectivo Dólares</option>
         </select>
       </div>
     </div>`,
@@ -4902,7 +4893,6 @@ function eliminarCuentaBancoCuentas(bi,ci){
 }
 
 function renderAlertas(){
-  // Verificar si el usuario tiene acceso al módulo de alertas
   const esAdmin=currentUser?.role==='admin';
   const tieneAccesoAlertas=esAdmin||(currentUser?.modulos||[]).includes('alertas');
   if(!tieneAccesoAlertas){
@@ -4911,89 +4901,131 @@ function renderAlertas(){
   }
   const hoy=today();
   const hoyDate=new Date();
-  const alertas=[];
-
-  // 1. Vehículos sin VIN
+  const filtNivel=document.getElementById('alerta-fil-nivel')?.value||'TODOS';
+  const filtModulo=document.getElementById('alerta-fil-modulo')?.value||'TODOS';
+  const filtTipo=document.getElementById('alerta-fil-tipo')?.value||'TODOS';
+  const todasAlertas=[];
   DB.vehiculos.filter(v=>v.status!=='VENDIDO'&&!v.vin).forEach(v=>{
-    alertas.push({tipo:'SIN_VIN',nivel:'warning',titulo:'Vehículo sin Chasis/VIN',msg:`${v.codigo||''} ${v.marca} ${v.modelo} ${v.anio}`,modulo:'inventario',id:'vin_'+v.id});
+    todasAlertas.push({tipo:'SIN_VIN',tipoLabel:'Sin Chasis/VIN',nivel:'warning',titulo:'Vehículo sin Chasis/VIN',msg:`${v.codigo||''} ${v.marca} ${v.modelo} ${v.anio}`,modulo:'inventario',moduloLabel:'Inventario',id:'vin_'+v.id});
   });
-  // 2. Vehículos sin costos
   DB.vehiculos.filter(v=>v.status!=='VENDIDO'&&!(DB.gastosVehiculos||[]).some(g=>g.vehiculoId===v.id)).forEach(v=>{
-    alertas.push({tipo:'SIN_COSTO',nivel:'warning',titulo:'Vehículo sin costos registrados',msg:`${v.codigo||''} ${v.marca} ${v.modelo} ${v.anio}`,modulo:'gastosVeh',id:'costo_'+v.id});
+    todasAlertas.push({tipo:'SIN_COSTO',tipoLabel:'Sin Costos',nivel:'warning',titulo:'Vehículo sin costos registrados',msg:`${v.codigo||''} ${v.marca} ${v.modelo} ${v.anio}`,modulo:'gastosVeh',moduloLabel:'Gastos Vehículo',id:'costo_'+v.id});
   });
-  // 3. CXP pendientes
   (DB.gastosVehiculos||[]).filter(g=>parseFloat(g.montoPendiente||0)>0).forEach(g=>{
     const v=DB.vehiculos.find(x=>x.id===g.vehiculoId);
-    alertas.push({tipo:'CXP',nivel:'danger',titulo:'Gasto pendiente por pagar',msg:`${v?v.codigo+' '+v.marca+' '+v.modelo:'Vehículo'} — ${g.tipo} — ${(g.moneda||'RD$')==='USD'?'$'+parseFloat(g.montoPendiente).toLocaleString('en-US',{minimumFractionDigits:2})+' USD':fmt(g.montoPendiente)}`,modulo:'cxp',id:'cxp_'+g.id});
+    todasAlertas.push({tipo:'CXP',tipoLabel:'CxP Pendiente',nivel:'danger',titulo:'Gasto pendiente por pagar',msg:`${v?v.codigo+' '+v.marca+' '+v.modelo:'Vehículo'} — ${g.tipo} — ${(g.moneda||'RD$')==='USD'?'$'+parseFloat(g.montoPendiente).toLocaleString('en-US',{minimumFractionDigits:2})+' USD':fmt(g.montoPendiente)}`,modulo:'cxp',moduloLabel:'CxP',id:'cxp_'+g.id});
   });
-  // 4. CXC vencidas
   (DB.cxc||[]).filter(x=>(x.status==='PENDIENTE'||x.status==='PARCIAL')&&x.fechaVence&&x.fechaVence<=hoy).forEach(x=>{
-    alertas.push({tipo:'CXC_VENCIDA',nivel:'danger',titulo:'CxC Vencida',msg:`${x.cliente} — ${fmt(x.saldo)} — Venció: ${fmtDate(x.fechaVence)}`,modulo:'cxc',id:'cxcv_'+x.id});
+    todasAlertas.push({tipo:'CXC_VENCIDA',tipoLabel:'CxC Vencida',nivel:'danger',titulo:'CxC Vencida',msg:`${x.cliente} — ${fmt(x.saldo)} — Venció: ${fmtDate(x.fechaVence)}`,modulo:'cxc',moduloLabel:'CxC',id:'cxcv_'+x.id});
   });
-  // 4b. Cuotas de Préstamos Otorgados vencidas
   (DB.prestamosOtorgados||[]).filter(p=>p.saldoPendiente>0).forEach(po=>{
     const vencidas=(po.tablaAmortizacion||[]).filter(r=>!r.pagado&&r.fecha&&r.fecha<=hoy);
-    if(vencidas.length>0)alertas.push({tipo:'CUOTA_VENC_PRESTAMO',nivel:'danger',titulo:'Cuota(s) vencida(s) — Préstamo Otorgado',msg:`${po.cliente} — ${vencidas.length} cuota(s) sin pagar — Saldo: ${fmtP(po.saldoPendiente,po.moneda||'RD$')}`,modulo:'cxc',id:'pvenc_'+po.id});
+    if(vencidas.length>0)todasAlertas.push({tipo:'CUOTA_VENC_PRESTAMO',tipoLabel:'Cuota Préstamo Vencida',nivel:'danger',titulo:'Cuota(s) vencida(s) — Préstamo Otorgado',msg:`${po.cliente} — ${vencidas.length} cuota(s) sin pagar — Saldo: ${fmtP(po.saldoPendiente,po.moneda||'RD$')}`,modulo:'cxc',moduloLabel:'CxC',id:'pvenc_'+po.id});
   });
-  // 5. CXC pendientes
   (DB.cxc||[]).filter(x=>(x.status==='PENDIENTE'||x.status==='PARCIAL')&&(!x.fechaVence||x.fechaVence>hoy)).forEach(x=>{
-    alertas.push({tipo:'CXC',nivel:'warning',titulo:'Cuenta por cobrar pendiente',msg:`${x.cliente} — ${fmt(x.saldo)}`,modulo:'cxc',id:'cxc_'+x.id});
+    todasAlertas.push({tipo:'CXC',tipoLabel:'CxC Pendiente',nivel:'warning',titulo:'Cuenta por cobrar pendiente',msg:`${x.cliente} — ${fmt(x.saldo)}`,modulo:'cxc',moduloLabel:'CxC',id:'cxc_'+x.id});
   });
-  // 6. Vehículos sin vender 6+ meses
   DB.vehiculos.filter(v=>v.status!=='VENDIDO'&&v.fecha).forEach(v=>{
     const dias=Math.floor((hoyDate-new Date(v.fecha+'T12:00:00'))/(1000*60*60*24));
-    if(dias>=365)alertas.push({tipo:'SIN_VENDER_1A',nivel:'danger',titulo:'1 Año sin venderse',msg:`${v.codigo||''} ${v.marca} ${v.modelo} — ${dias} días`,modulo:'inventario',id:'sv1_'+v.id});
-    else if(dias>=180)alertas.push({tipo:'SIN_VENDER_6M',nivel:'warning',titulo:'6 Meses sin venderse',msg:`${v.codigo||''} ${v.marca} ${v.modelo} — ${dias} días`,modulo:'inventario',id:'sv6_'+v.id});
+    if(dias>=365)todasAlertas.push({tipo:'SIN_VENDER_1A',tipoLabel:'1 Año sin Vender',nivel:'danger',titulo:'1 Año sin venderse',msg:`${v.codigo||''} ${v.marca} ${v.modelo} — ${dias} días`,modulo:'inventario',moduloLabel:'Inventario',id:'sv1_'+v.id});
+    else if(dias>=180)todasAlertas.push({tipo:'SIN_VENDER_6M',tipoLabel:'6 Meses sin Vender',nivel:'warning',titulo:'6 Meses sin venderse',msg:`${v.codigo||''} ${v.marca} ${v.modelo} — ${dias} días`,modulo:'inventario',moduloLabel:'Inventario',id:'sv6_'+v.id});
   });
-  // 7. Documentos de venta pendientes
   DB.ventas.filter(v=>v.docsPendientes&&v.fechaLimDocs).forEach(v=>{
     const venc=v.fechaLimDocs<=hoy;
-    alertas.push({tipo:'DOCS',nivel:venc?'danger':'warning',titulo:venc?'Documentos de entrega VENCIDOS':'Documentos de entrega pendientes',msg:`${v.vehiculo||''} — Límite: ${fmtDate(v.fechaLimDocs)}`,modulo:'ventas',id:'doc_'+v.id});
+    todasAlertas.push({tipo:'DOCS',tipoLabel:'Documentos Pendientes',nivel:venc?'danger':'warning',titulo:venc?'Documentos de entrega VENCIDOS':'Documentos de entrega pendientes',msg:`${v.vehiculo||''} — Límite: ${fmtDate(v.fechaLimDocs)}`,modulo:'ventas',moduloLabel:'Ventas',id:'doc_'+v.id});
   });
-
+  DB.ventas.filter(v=>v.tipoTransferencia==='endoso'&&!v.placaOriginalRecibida).forEach(v=>{
+    if(!v.fecha)return;
+    const dias=Math.floor((hoyDate-new Date(v.fecha+'T12:00:00'))/(1000*60*60*24));
+    if(dias>=60)todasAlertas.push({tipo:'PLACA_60',tipoLabel:'Placa +60 Días',nivel:'warning',titulo:'Placa +60 días sin recibir',msg:`${v.cliente} — Factura ${v.factura||''} — ${dias} días. Vehículo: ${v.vehiculo||''}`,modulo:'ventas',moduloLabel:'Ventas',id:'placa60_'+v.id});
+  });
+  DB.ventas.filter(v=>v.placaExhibicion&&v.placaExhibicion.fecha&&!v.placaOriginalRecibida).forEach(v=>{
+    const venc=v.placaExhibicion.vencimiento||addDays(v.placaExhibicion.fecha,90);
+    if(!venc)return;
+    const diasRestantes=Math.floor((new Date(venc+'T12:00:00')-hoyDate)/(1000*60*60*24));
+    if(diasRestantes<0)todasAlertas.push({tipo:'PLACA_EXH_VENC',tipoLabel:'Placa Exhibición Vencida',nivel:'danger',titulo:'Placa Exhibición VENCIDA',msg:`${v.cliente} — Factura ${v.factura||''} — Venció ${fmtDate(venc)}`,modulo:'ventas',moduloLabel:'Ventas',id:'pexhv_'+v.id});
+    else if(diasRestantes<=15)todasAlertas.push({tipo:'PLACA_EXH_PROX',tipoLabel:'Placa Exhibición Próxima',nivel:'danger',titulo:`Placa Exhibición vence en ${diasRestantes} día(s)`,msg:`${v.cliente} — Factura ${v.factura||''} — Vence ${fmtDate(venc)}`,modulo:'ventas',moduloLabel:'Ventas',id:'pexhp_'+v.id});
+  });
+  let alertas=todasAlertas;
+  if(filtNivel!=='TODOS')alertas=alertas.filter(a=>a.nivel===filtNivel);
+  if(filtModulo!=='TODOS')alertas=alertas.filter(a=>a.modulo===filtModulo);
+  if(filtTipo!=='TODOS')alertas=alertas.filter(a=>a.tipo===filtTipo);
   const danger=alertas.filter(a=>a.nivel==='danger');
   const warning=alertas.filter(a=>a.nivel==='warning');
-
+  const totalDangerAll=todasAlertas.filter(a=>a.nivel==='danger').length;
+  const totalWarningAll=todasAlertas.filter(a=>a.nivel==='warning').length;
+  const modulosUnicos=[...new Set(todasAlertas.map(a=>a.modulo))].map(m=>{const a=todasAlertas.find(x=>x.modulo===m);return{id:m,label:a?.moduloLabel||m};});
+  const tiposUnicos=[...new Set(todasAlertas.map(a=>a.tipo))].map(t=>{const a=todasAlertas.find(x=>x.tipo===t);return{id:t,label:a?.tipoLabel||t};});
+  const renderCard=(a,color,bgColor)=>`<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;margin-bottom:6px;background:${bgColor};border-radius:8px;border-left:4px solid ${color}">
+    <input type="checkbox" class="alerta-check" value="${a.id}" ${alertasSeleccionadas.has(a.id)?'checked':''} onchange="if(this.checked)alertasSeleccionadas.add(this.value);else alertasSeleccionadas.delete(this.value)" style="width:16px;height:16px;margin-top:2px;flex-shrink:0">
+    <div style="flex:1"><div style="font-weight:700;font-size:13px;color:${color}">${escHtml(a.titulo)}</div><div style="font-size:12px;color:var(--navy);margin-top:2px">${escHtml(a.msg)}</div><div style="font-size:10px;color:var(--gray);margin-top:3px">📂 ${escHtml(a.moduloLabel)} · 🏷️ ${escHtml(a.tipoLabel)}</div></div>
+    <button class="btn btn-sm" style="background:${color};color:#fff;flex-shrink:0" onclick="showPage('${a.modulo}')">Ver →</button>
+  </div>`;
   document.getElementById('page-alertas').innerHTML=`
     <div class="page-header">
-      <div><h1>🔔 Alertas del Sistema</h1><p>${danger.length} críticas — ${warning.length} advertencias</p></div>
+      <div><h1>🔔 Alertas del Sistema</h1><p>${totalDangerAll} críticas · ${totalWarningAll} advertencias en total</p></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-secondary btn-sm" onclick="alertasSeleccionadas=new Set(document.querySelectorAll('.alerta-check').forEach(c=>{c.checked=true;alertasSeleccionadas.add(c.value);})||alertasSeleccionadas);renderAlertas()">☑️ Seleccionar Todas</button>
-        <button class="btn btn-secondary btn-sm" onclick="exportarAlertasPDF()">📄 Exportar PDF</button>
+        <button class="btn btn-secondary btn-sm" onclick="(()=>{document.querySelectorAll('.alerta-check').forEach(c=>{c.checked=true;alertasSeleccionadas.add(c.value)})})()">☑️ Sel. Todas</button>
+        <button class="btn btn-secondary btn-sm" onclick="exportarAlertasFiltradas()">📄 Exportar / Imprimir</button>
         <button class="btn btn-secondary btn-sm" onclick="renderAlertas()">🔄 Actualizar</button>
       </div>
     </div>
-    ${alertas.length===0?`<div class="card" style="text-align:center;padding:48px"><div style="font-size:48px;margin-bottom:12px">✅</div><div style="font-size:18px;font-weight:700;color:var(--green)">Sin alertas activas</div><p style="color:var(--gray);margin-top:8px">El sistema está en orden</p></div>`:`
-    <div class="card">
-      ${danger.length?`<div style="font-size:13px;font-weight:700;color:var(--red);margin-bottom:10px;padding-bottom:6px;border-bottom:2px solid var(--red2)">🔴 Críticas (${danger.length})</div>
-      ${danger.map(a=>`<div style="display:flex;align-items:flex-start;gap:10px;padding:10px;margin-bottom:6px;background:var(--red2);border-radius:8px;border-left:4px solid var(--red)">
-        <input type="checkbox" class="alerta-check" value="${a.id}" ${alertasSeleccionadas.has(a.id)?'checked':''} onchange="if(this.checked)alertasSeleccionadas.add(this.value);else alertasSeleccionadas.delete(this.value)" style="width:16px;height:16px;margin-top:2px;flex-shrink:0">
-        <div style="flex:1"><div style="font-weight:700;font-size:13px;color:var(--red)">${escHtml(a.titulo)}</div><div style="font-size:12px;color:var(--navy);margin-top:2px">${escHtml(a.msg)}</div></div>
-        <button class="btn btn-sm" style="background:var(--red);color:#fff;flex-shrink:0" onclick="showPage('${a.modulo}')">Ver →</button>
-      </div>`).join('')}`:''}
-      ${warning.length?`<div style="font-size:13px;font-weight:700;color:var(--amber);margin-bottom:10px;padding-bottom:6px;border-bottom:2px solid var(--amber2);margin-top:${danger.length?'16px':'0'}">🟡 Advertencias (${warning.length})</div>
-      ${warning.map(a=>`<div style="display:flex;align-items:flex-start;gap:10px;padding:10px;margin-bottom:6px;background:var(--amber2);border-radius:8px;border-left:4px solid var(--amber)">
-        <input type="checkbox" class="alerta-check" value="${a.id}" ${alertasSeleccionadas.has(a.id)?'checked':''} onchange="if(this.checked)alertasSeleccionadas.add(this.value);else alertasSeleccionadas.delete(this.value)" style="width:16px;height:16px;margin-top:2px;flex-shrink:0">
-        <div style="flex:1"><div style="font-weight:700;font-size:13px;color:var(--amber)">${escHtml(a.titulo)}</div><div style="font-size:12px;color:var(--navy);margin-top:2px">${escHtml(a.msg)}</div></div>
-        <button class="btn btn-sm" style="background:var(--amber);color:#fff;flex-shrink:0" onclick="showPage('${a.modulo}')">Ver →</button>
-      </div>`).join('')}`:''}
+    <div class="card" style="margin-bottom:14px;padding:14px 16px">
+      <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gray);margin-bottom:10px">🔍 Filtros</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+        <div><div style="font-size:11px;font-weight:600;color:var(--gray);margin-bottom:4px">Nivel</div>
+          <select id="alerta-fil-nivel" onchange="renderAlertas()" style="padding:7px 12px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
+            <option value="TODOS" ${filtNivel==='TODOS'?'selected':''}>Todos los niveles</option>
+            <option value="danger" ${filtNivel==='danger'?'selected':''}>🔴 Críticas (${totalDangerAll})</option>
+            <option value="warning" ${filtNivel==='warning'?'selected':''}>🟡 Advertencias (${totalWarningAll})</option>
+          </select></div>
+        <div><div style="font-size:11px;font-weight:600;color:var(--gray);margin-bottom:4px">Módulo</div>
+          <select id="alerta-fil-modulo" onchange="renderAlertas()" style="padding:7px 12px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
+            <option value="TODOS" ${filtModulo==='TODOS'?'selected':''}>Todos los módulos</option>
+            ${modulosUnicos.map(m=>`<option value="${m.id}" ${filtModulo===m.id?'selected':''}>${escHtml(m.label)}</option>`).join('')}
+          </select></div>
+        <div><div style="font-size:11px;font-weight:600;color:var(--gray);margin-bottom:4px">Tipo de Alerta</div>
+          <select id="alerta-fil-tipo" onchange="renderAlertas()" style="padding:7px 12px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
+            <option value="TODOS" ${filtTipo==='TODOS'?'selected':''}>Todos los tipos</option>
+            ${tiposUnicos.map(t=>`<option value="${t.id}" ${filtTipo===t.id?'selected':''}>${escHtml(t.label)}</option>`).join('')}
+          </select></div>
+        ${(filtNivel!=='TODOS'||filtModulo!=='TODOS'||filtTipo!=='TODOS')?`<button class="btn btn-secondary btn-sm" onclick="document.getElementById('alerta-fil-nivel').value='TODOS';document.getElementById('alerta-fil-modulo').value='TODOS';document.getElementById('alerta-fil-tipo').value='TODOS';renderAlertas()">✕ Limpiar</button>`:''}
+      </div>
+      ${(filtNivel!=='TODOS'||filtModulo!=='TODOS'||filtTipo!=='TODOS')?`<div style="font-size:12px;color:var(--blue);margin-top:8px;font-weight:600">Mostrando ${alertas.length} de ${todasAlertas.length} alertas</div>`:''}
+    </div>
+    ${alertas.length===0
+      ?`<div class="card" style="text-align:center;padding:48px"><div style="font-size:48px;margin-bottom:12px">${todasAlertas.length===0?'✅':'🔍'}</div><div style="font-size:18px;font-weight:700;color:var(--green)">${todasAlertas.length===0?'Sin alertas activas':'Sin resultados para los filtros aplicados'}</div><p style="color:var(--gray);margin-top:8px">${todasAlertas.length===0?'El sistema está en orden':'Prueba ajustando los filtros.'}</p></div>`
+      :`<div class="card">
+      ${danger.length?`<div style="font-size:13px;font-weight:700;color:var(--red);margin-bottom:10px;padding-bottom:6px;border-bottom:2px solid var(--red2)">🔴 Críticas (${danger.length})</div>${danger.map(a=>renderCard(a,'var(--red)','var(--red2)')).join('')}`:''}
+      ${warning.length?`<div style="font-size:13px;font-weight:700;color:var(--amber);margin-bottom:10px;padding-bottom:6px;border-bottom:2px solid var(--amber2);margin-top:${danger.length?'16px':'0'}">🟡 Advertencias (${warning.length})</div>${warning.map(a=>renderCard(a,'var(--amber)','var(--amber2)')).join('')}`:''}
     </div>`}`;
 }
-function exportarAlertasPDF(){
+function exportarAlertasFiltradas(){
+  const filtNivel=document.getElementById('alerta-fil-nivel')?.value||'TODOS';
+  const filtModulo=document.getElementById('alerta-fil-modulo')?.value||'TODOS';
+  const filtTipo=document.getElementById('alerta-fil-tipo')?.value||'TODOS';
   const hoy=today();const hoyDate=new Date();
-  const alertas=[];
-  DB.vehiculos.filter(v=>v.status!=='VENDIDO'&&!v.vin).forEach(v=>alertas.push({nivel:'🔴',titulo:'Sin Chasis/VIN',msg:`${v.codigo||''} ${v.marca} ${v.modelo} ${v.anio}`}));
-  DB.vehiculos.filter(v=>v.status!=='VENDIDO'&&!(DB.gastosVehiculos||[]).some(g=>g.vehiculoId===v.id)).forEach(v=>alertas.push({nivel:'🟡',titulo:'Sin costos',msg:`${v.codigo||''} ${v.marca} ${v.modelo}`}));
-  (DB.gastosVehiculos||[]).filter(g=>parseFloat(g.montoPendiente||0)>0).forEach(g=>{const v=DB.vehiculos.find(x=>x.id===g.vehiculoId);alertas.push({nivel:'🔴',titulo:'CxP Pendiente',msg:`${v?v.codigo:'?'} ${g.tipo} ${fmt(g.montoPendiente)}`});});
-  (DB.cxc||[]).filter(x=>(x.status==='PENDIENTE'||x.status==='PARCIAL')&&x.fechaVence&&x.fechaVence<=hoy).forEach(x=>alertas.push({nivel:'🔴',titulo:'CxC Vencida',msg:`${x.cliente} — ${fmt(x.saldo)}`}));
-  DB.vehiculos.filter(v=>v.status!=='VENDIDO'&&v.fecha).forEach(v=>{const d=Math.floor((hoyDate-new Date(v.fecha+'T12:00:00'))/(1000*60*60*24));if(d>=365)alertas.push({nivel:'🔴',titulo:'1 Año sin vender',msg:`${v.codigo} ${v.marca} ${v.modelo} — ${d} días`});else if(d>=180)alertas.push({nivel:'🟡',titulo:'6 Meses sin vender',msg:`${v.codigo} ${v.marca} ${v.modelo} — ${d} días`});});
+  const todasAlertas=[];
+  DB.vehiculos.filter(v=>v.status!=='VENDIDO'&&!v.vin).forEach(v=>todasAlertas.push({nivel:'🔴',nivelKey:'danger',tipo:'SIN_VIN',tipoLabel:'Sin Chasis/VIN',modulo:'inventario',titulo:'Vehículo sin Chasis/VIN',msg:`${v.codigo||''} ${v.marca} ${v.modelo} ${v.anio}`}));
+  DB.vehiculos.filter(v=>v.status!=='VENDIDO'&&!(DB.gastosVehiculos||[]).some(g=>g.vehiculoId===v.id)).forEach(v=>todasAlertas.push({nivel:'🟡',nivelKey:'warning',tipo:'SIN_COSTO',tipoLabel:'Sin Costos',modulo:'gastosVeh',titulo:'Sin costos registrados',msg:`${v.codigo||''} ${v.marca} ${v.modelo}`}));
+  (DB.gastosVehiculos||[]).filter(g=>parseFloat(g.montoPendiente||0)>0).forEach(g=>{const v=DB.vehiculos.find(x=>x.id===g.vehiculoId);todasAlertas.push({nivel:'🔴',nivelKey:'danger',tipo:'CXP',tipoLabel:'CxP Pendiente',modulo:'cxp',titulo:'Gasto pendiente',msg:`${v?v.codigo+' '+v.marca+' '+v.modelo:'?'} — ${g.tipo} — ${fmt(g.montoPendiente)}`});});
+  (DB.cxc||[]).filter(x=>(x.status==='PENDIENTE'||x.status==='PARCIAL')&&x.fechaVence&&x.fechaVence<=hoy).forEach(x=>todasAlertas.push({nivel:'🔴',nivelKey:'danger',tipo:'CXC_VENCIDA',tipoLabel:'CxC Vencida',modulo:'cxc',titulo:'CxC Vencida',msg:`${x.cliente} — ${fmt(x.saldo)} — Venció: ${fmtDate(x.fechaVence)}`}));
+  (DB.prestamosOtorgados||[]).filter(p=>p.saldoPendiente>0).forEach(po=>{const venc=(po.tablaAmortizacion||[]).filter(r=>!r.pagado&&r.fecha&&r.fecha<=hoy);if(venc.length>0)todasAlertas.push({nivel:'🔴',nivelKey:'danger',tipo:'CUOTA_VENC_PRESTAMO',tipoLabel:'Cuota Préstamo Vencida',modulo:'cxc',titulo:'Cuota(s) vencida(s)',msg:`${po.cliente} — ${venc.length} cuota(s) — Saldo: ${fmtP(po.saldoPendiente,po.moneda||'RD$')}`});});
+  (DB.cxc||[]).filter(x=>(x.status==='PENDIENTE'||x.status==='PARCIAL')&&(!x.fechaVence||x.fechaVence>hoy)).forEach(x=>todasAlertas.push({nivel:'🟡',nivelKey:'warning',tipo:'CXC',tipoLabel:'CxC Pendiente',modulo:'cxc',titulo:'CxC Pendiente',msg:`${x.cliente} — ${fmt(x.saldo)}`}));
+  DB.vehiculos.filter(v=>v.status!=='VENDIDO'&&v.fecha).forEach(v=>{const d=Math.floor((hoyDate-new Date(v.fecha+'T12:00:00'))/(1000*60*60*24));if(d>=365)todasAlertas.push({nivel:'🔴',nivelKey:'danger',tipo:'SIN_VENDER_1A',tipoLabel:'1 Año sin Vender',modulo:'inventario',titulo:'1 Año sin venderse',msg:`${v.codigo} ${v.marca} ${v.modelo} — ${d} días`});else if(d>=180)todasAlertas.push({nivel:'🟡',nivelKey:'warning',tipo:'SIN_VENDER_6M',tipoLabel:'6 Meses sin Vender',modulo:'inventario',titulo:'6 Meses sin venderse',msg:`${v.codigo} ${v.marca} ${v.modelo} — ${d} días`});});
+  DB.ventas.filter(v=>v.docsPendientes&&v.fechaLimDocs).forEach(v=>{const venc=v.fechaLimDocs<=hoy;todasAlertas.push({nivel:venc?'🔴':'🟡',nivelKey:venc?'danger':'warning',tipo:'DOCS',tipoLabel:'Documentos Pendientes',modulo:'ventas',titulo:venc?'Docs VENCIDOS':'Docs Pendientes',msg:`${v.vehiculo||''} — Límite: ${fmtDate(v.fechaLimDocs)}`});});
+  let alertas=todasAlertas;
+  if(filtNivel!=='TODOS')alertas=alertas.filter(a=>a.nivelKey===filtNivel);
+  if(filtModulo!=='TODOS')alertas=alertas.filter(a=>a.modulo===filtModulo);
+  if(filtTipo!=='TODOS')alertas=alertas.filter(a=>a.tipo===filtTipo);
+  const filtrosTexto=[filtNivel!=='TODOS'?'Nivel: '+(filtNivel==='danger'?'Críticas':'Advertencias'):'',filtModulo!=='TODOS'?'Módulo: '+filtModulo:'',filtTipo!=='TODOS'?'Tipo: '+filtTipo:''].filter(Boolean).join(' | ')||'Todos';
   const win=window.open('','_blank','width=800,height=600');
-  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Alertas</title><style>body{font-family:Arial,sans-serif;padding:24px;font-size:12px}h2{font-size:18px}table{width:100%;border-collapse:collapse;margin-top:16px}th{background:#0f172a;color:#fff;padding:8px;font-size:11px;text-align:left}td{padding:8px;border-bottom:1px solid #e2e8f0}@media print{button{display:none}}</style></head><body>
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Alertas</title><style>body{font-family:Arial,sans-serif;padding:24px;font-size:12px}h2{font-size:18px}p{color:#6b7280;font-size:11px;margin:4px 0}table{width:100%;border-collapse:collapse;margin-top:16px}th{background:#0f172a;color:#fff;padding:8px;font-size:11px;text-align:left}td{padding:8px;border-bottom:1px solid #e2e8f0}@media print{button{display:none}}</style></head><body>
   ${DB.config.logoData?`<img src="${DB.config.logoData}" style="max-height:50px;margin-bottom:8px;display:block">`:''}
-  <h2>${escHtml(DB.config.empresa||'MAEDIG')} — REPORTE DE ALERTAS</h2>
-  <div style="color:#6b7280;font-size:11px;margin-bottom:16px">Fecha: ${fmtDate(hoy)} | Total: ${alertas.length} alertas</div>
-  <table><thead><tr><th>Nivel</th><th>Tipo</th><th>Detalle</th></tr></thead><tbody>
-  ${alertas.map(a=>`<tr><td>${a.nivel}</td><td style="font-weight:700">${escHtml(a.titulo)}</td><td>${escHtml(a.msg)}</td></tr>`).join('')}
+  <h2>${escHtml(DB.config.empresa||'FAYRE')} — REPORTE DE ALERTAS</h2>
+  <p>Fecha: ${fmtDate(hoy)} | Filtros: ${escHtml(filtrosTexto)} | Mostrando: ${alertas.length} de ${todasAlertas.length}</p>
+  <table><thead><tr><th>Nivel</th><th>Tipo</th><th>Título</th><th>Detalle</th></tr></thead><tbody>
+  ${alertas.map(a=>`<tr><td>${a.nivel}</td><td>${escHtml(a.tipoLabel)}</td><td style="font-weight:700">${escHtml(a.titulo)}</td><td>${escHtml(a.msg)}</td></tr>`).join('')}
   </tbody></table>
   <div style="margin-top:20px;text-align:center"><button onclick="window.print()" style="padding:10px 24px;background:#2563eb;color:#fff;border:none;border-radius:6px;cursor:pointer">🖨️ Imprimir PDF</button></div>
   </body></html>`);
@@ -6344,10 +6376,10 @@ function abonarGastoVeh(gid){
         </select>
       </div>
       <div class="form-field"><label>Banco</label>
-        <select id="abgv-banco" onchange="filtrarCuentasPorBanco('abgv')">${(()=>{const m=g.moneda||'RD$';const bcs=DB.config.bancoCuentas||[];const disp=bcs.filter(b=>(b.cuentas||[]).some(c=>m==='USD'?c.tipo.includes('USD'):!c.tipo.includes('USD')));return disp.map(b=>`<option value="${escHtml(b.banco)}" ${b.banco===g.banco?'selected':''}>${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos</option>';})()}</select>
+        <select id="abgv-banco" onchange="filtrarCuentasPorBanco('abgv')">${(()=>{const m=g.moneda||'RD$';const bcs=DB.config.bancoCuentas||[];const disp=bcs.filter(b=>(b.cuentas||[]).some(c=>m==='USD'?(c.tipo.includes('USD')||c.tipo.includes('Dólares')):(!c.tipo.includes('USD')&&!c.tipo.includes('Dólares'))));return disp.map(b=>`<option value="${escHtml(b.banco)}" ${b.banco===g.banco?'selected':''}>${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos</option>';})()}</select>
       </div>
       <div class="form-field"><label>Cuenta de Salida</label>
-        <select id="abgv-cuenta">${(()=>{const m=g.moneda||'RD$';const bcs=DB.config.bancoCuentas||[];const b=bcs.find(x=>x.banco===g.banco)||bcs.find(x=>(x.cuentas||[]).some(c=>m==='USD'?c.tipo.includes('USD'):!c.tipo.includes('USD')));const cts=(b?b.cuentas:[]).filter(c=>m==='USD'?c.tipo.includes('USD'):!c.tipo.includes('USD'));return cts.map(c=>{const v=c.tipo+' — '+c.numero;return`<option value="${escHtml(v)}" ${v===g.cuenta?'selected':''}>${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('')||'<option value="">Sin cuentas</option>';})()}</select>
+        <select id="abgv-cuenta">${(()=>{const m=g.moneda||'RD$';const bcs=DB.config.bancoCuentas||[];const b=bcs.find(x=>x.banco===g.banco)||bcs.find(x=>(x.cuentas||[]).some(c=>m==='USD'?(c.tipo.includes('USD')||c.tipo.includes('Dólares')):(!c.tipo.includes('USD')&&!c.tipo.includes('Dólares'))));const cts=(b?b.cuentas:[]).filter(c=>m==='USD'?(c.tipo.includes('USD')||c.tipo.includes('Dólares')):(!c.tipo.includes('USD')&&!c.tipo.includes('Dólares')));return cts.map(c=>{const v=c.tipo+' — '+c.numero;return`<option value="${escHtml(v)}" ${v===g.cuenta?'selected':''}>${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('')||'<option value="">Sin cuentas</option>';})()}</select>
       </div>
     </div>`,
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
@@ -6425,10 +6457,10 @@ function editarGastoVeh(gid){
         <input type="number" id="egv-tasa" value="${g.tasaCambio||DB.config.tasaCambio||60}" step="0.01" placeholder="Ej: 60.50">
       </div>
       <div class="form-field"><label>Banco</label>
-        <select id="egv-banco" onchange="filtrarCuentasPorBanco('egv')">${(()=>{const m=g.moneda||'RD$';const bcs=DB.config.bancoCuentas||[];const disp=bcs.filter(b=>(b.cuentas||[]).some(c=>m==='USD'?c.tipo.includes('USD'):!c.tipo.includes('USD')));return disp.map(b=>`<option value="${escHtml(b.banco)}" ${b.banco===g.banco?'selected':''}>${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos</option>';})()}</select>
+        <select id="egv-banco" onchange="filtrarCuentasPorBanco('egv')">${(()=>{const m=g.moneda||'RD$';const bcs=DB.config.bancoCuentas||[];const disp=bcs.filter(b=>(b.cuentas||[]).some(c=>m==='USD'?(c.tipo.includes('USD')||c.tipo.includes('Dólares')):(!c.tipo.includes('USD')&&!c.tipo.includes('Dólares'))));return disp.map(b=>`<option value="${escHtml(b.banco)}" ${b.banco===g.banco?'selected':''}>${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos</option>';})()}</select>
       </div>
       <div class="form-field"><label>Cuenta Salida</label>
-        <select id="egv-cuenta">${(()=>{const m=g.moneda||'RD$';const bcs=DB.config.bancoCuentas||[];const b=bcs.find(x=>x.banco===g.banco)||bcs.find(x=>(x.cuentas||[]).some(c=>m==='USD'?c.tipo.includes('USD'):!c.tipo.includes('USD')));const cts=(b?b.cuentas:[]).filter(c=>m==='USD'?c.tipo.includes('USD'):!c.tipo.includes('USD'));return cts.map(c=>{const v=c.tipo+' — '+c.numero;return`<option value="${escHtml(v)}" ${v===g.cuenta?'selected':''}>${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('')||'<option value="">Sin cuentas</option>';})()}</select>
+        <select id="egv-cuenta">${(()=>{const m=g.moneda||'RD$';const bcs=DB.config.bancoCuentas||[];const b=bcs.find(x=>x.banco===g.banco)||bcs.find(x=>(x.cuentas||[]).some(c=>m==='USD'?(c.tipo.includes('USD')||c.tipo.includes('Dólares')):(!c.tipo.includes('USD')&&!c.tipo.includes('Dólares'))));const cts=(b?b.cuentas:[]).filter(c=>m==='USD'?(c.tipo.includes('USD')||c.tipo.includes('Dólares')):(!c.tipo.includes('USD')&&!c.tipo.includes('Dólares')));return cts.map(c=>{const v=c.tipo+' — '+c.numero;return`<option value="${escHtml(v)}" ${v===g.cuenta?'selected':''}>${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('')||'<option value="">Sin cuentas</option>';})()}</select>
       </div>
     </div>
     <div class="form-row c3">
@@ -7190,12 +7222,12 @@ function nuevaVenta(){
       </div>
       <div class="form-field"><label>Banco</label>
         <select id="sv-banco" onchange="filtrarCuentasPorBanco('sv');actualizarCuentasVenta()">
-          ${(()=>{const bcs=DB.config.bancoCuentas||[];const disp=bcs.filter(b=>(b.cuentas||[]).some(c=>!c.tipo.includes('USD')));return disp.map(b=>`<option value="${escHtml(b.banco)}">${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos</option>';})()}
+          ${(()=>{const bcs=DB.config.bancoCuentas||[];const disp=bcs.filter(b=>(b.cuentas||[]).some(c=>!c.tipo.includes('USD')&&!c.tipo.includes('Dólares')));return disp.map(b=>`<option value="${escHtml(b.banco)}">${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos</option>';})()}
         </select>
       </div>
       <div class="form-field"><label class="required">Cuenta de Cobro</label>
         <select id="sv-cuenta">
-          ${(()=>{const bcs=DB.config.bancoCuentas||[];const b=bcs.find(x=>(x.cuentas||[]).some(c=>!c.tipo.includes('USD')));return(b?b.cuentas:[]).filter(c=>!c.tipo.includes('USD')).map(c=>`<option value="${escHtml(c.tipo+' — '+c.numero)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`).join('')||'<option value="">Sin cuentas</option>';})()}
+          ${(()=>{const bcs=DB.config.bancoCuentas||[];const b=bcs.find(x=>(x.cuentas||[]).some(c=>!c.tipo.includes('USD')&&!c.tipo.includes('Dólares')));return(b?b.cuentas:[]).filter(c=>!c.tipo.includes('USD')&&!c.tipo.includes('Dólares')).map(c=>`<option value="${escHtml(c.tipo+' — '+c.numero)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`).join('')||'<option value="">Sin cuentas</option>';})()}
         </select>
       </div>
     </div>
@@ -7738,10 +7770,10 @@ function abonarVenta(vid){
         </select>
       </div>
       <div class="form-field"><label>Banco</label>
-        <select id="ab-banco" onchange="filtrarCuentasPorBanco('ab')">${(()=>{const m=v.moneda||'RD$';const bcs=DB.config.bancoCuentas||[];const disp=bcs.filter(b=>(b.cuentas||[]).some(c=>m==='USD'?c.tipo.includes('USD'):!c.tipo.includes('USD')));return disp.map(b=>`<option value="${escHtml(b.banco)}">${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos</option>';})()}</select>
+        <select id="ab-banco" onchange="filtrarCuentasPorBanco('ab')">${(()=>{const m=v.moneda||'RD$';const bcs=DB.config.bancoCuentas||[];const disp=bcs.filter(b=>(b.cuentas||[]).some(c=>m==='USD'?(c.tipo.includes('USD')||c.tipo.includes('Dólares')):(!c.tipo.includes('USD')&&!c.tipo.includes('Dólares'))));return disp.map(b=>`<option value="${escHtml(b.banco)}">${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos</option>';})()}</select>
       </div>
       <div class="form-field"><label>Cuenta</label>
-        <select id="ab-cuenta">${(()=>{const m=v.moneda||'RD$';const bcs=DB.config.bancoCuentas||[];const b=bcs.find(x=>(x.cuentas||[]).some(c=>m==='USD'?c.tipo.includes('USD'):!c.tipo.includes('USD')));return(b?b.cuentas:[]).filter(c=>m==='USD'?c.tipo.includes('USD'):!c.tipo.includes('USD')).map(c=>{const val=c.tipo+' — '+c.numero;return`<option value="${escHtml(val)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('')||'<option value="">Sin cuentas</option>';})()}</select>
+        <select id="ab-cuenta">${(()=>{const m=v.moneda||'RD$';const bcs=DB.config.bancoCuentas||[];const b=bcs.find(x=>(x.cuentas||[]).some(c=>m==='USD'?(c.tipo.includes('USD')||c.tipo.includes('Dólares')):(!c.tipo.includes('USD')&&!c.tipo.includes('Dólares'))));return(b?b.cuentas:[]).filter(c=>m==='USD'?(c.tipo.includes('USD')||c.tipo.includes('Dólares')):(!c.tipo.includes('USD')&&!c.tipo.includes('Dólares'))).map(c=>{const val=c.tipo+' — '+c.numero;return`<option value="${escHtml(val)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('')||'<option value="">Sin cuentas</option>';})()}</select>
       </div>
     </div>
     <div class="form-field"><label>Nota</label><input type="text" id="ab-nota" placeholder="Descripción del cobro"></div>`,
@@ -11781,6 +11813,7 @@ function renderSeguros(){
   const totalPagado=segs.reduce((a,s)=>a+parseFloat(s.abonado||0),0);
   const totalPend=segs.reduce((a,s)=>a+parseFloat(s.pendiente||0),0);
   const sc={PAGADO:'badge-green',ABONADO:'badge-amber',PENDIENTE:'badge-red'};
+  const hoy=today();
   document.getElementById('page-seguros').innerHTML=`
     <div class="page-header">
       <div><h1>🛡️ Seguros de Vehículos</h1><p>${segs.length} seguro(s) registrado(s)</p></div>
@@ -11798,167 +11831,390 @@ function renderSeguros(){
       <div class="search-wrap"><input class="search-input" placeholder="Buscar por vehículo, cliente, compañía, póliza..." oninput="filterTable('seg-tbl',this.value)"></div>
       <div class="table-wrap"><table id="seg-tbl">
         <thead><tr>
-          <th>Vehículo</th>
-          <th>Cliente / Asegurado</th>
-          <th>Compañía Aseguradora</th>
-          <th>N° Póliza</th>
-          <th>Prima Total</th>
-          <th>Pagado</th>
-          <th>Pendiente</th>
-          <th>Desde</th>
-          <th>Hasta</th>
-          <th>Estado</th>
-          <th>Acciones</th>
+          <th>Tipo</th><th>Vehículo</th><th>Cliente / Asegurado</th><th>Compañía</th>
+          <th>N° Póliza</th><th>Prima</th><th>Pagado</th><th>Pendiente</th>
+          <th>Vigencia</th><th>Pago</th><th>Estado</th><th>Acciones</th>
         </tr></thead>
         <tbody>${segs.length?segs.slice().reverse().map(s=>{
-          const v=DB.vehiculos.find(x=>x.id===s.vehiculoId);
-          const venc=s.hasta&&s.hasta<today();
+          const v=s.tipoVeh==='interno'?(DB.vehiculos.find(x=>x.id===s.vehiculoId)||null):null;
+          const vehLabel=s.tipoVeh==='interno'?(v?escHtml(v.codigo+' '+v.marca+' '+v.modelo):escHtml(s.vehiculoTexto||'—')):escHtml(s.vehiculoTexto||'—');
+          const venc=s.hasta&&s.hasta<hoy;
           const pend=parseFloat(s.pendiente||0);
+          const cuotasTotal=(s.cuotas||[]).length;
+          const cuotasPag=(s.cuotas||[]).filter(c=>c.pagada).length;
+          const cuotasLabel=cuotasTotal>0?`${cuotasPag}/${cuotasTotal} cuotas`:'Contado';
+          const quienPagaLabel=s.quienPaga==='cliente'?'👤 Cliente':'🏢 Empresa';
           return`<tr>
-            <td style="font-weight:700;font-size:12px">${v?escHtml(v.codigo+' '+v.marca+' '+v.modelo):'—'}</td>
+            <td><span class="badge badge-${s.tipoVeh==='interno'?'blue':'purple'}" style="font-size:10px">${s.tipoVeh==='interno'?'Interno':'Externo'}</span></td>
+            <td style="font-weight:700;font-size:12px">${vehLabel}</td>
             <td style="font-weight:600">${escHtml(s.cliente||'—')}</td>
             <td style="font-weight:600;color:var(--blue)">${escHtml(s.compania||'—')}</td>
             <td style="font-family:monospace;font-size:11px">${escHtml(s.poliza||'—')}</td>
             <td style="font-weight:700">${fmt(s.prima||0)}</td>
             <td style="color:var(--green);font-weight:600">${fmt(s.abonado||0)}</td>
             <td style="font-weight:700;color:${pend>0?'var(--red)':'var(--green)'}">${fmt(pend)}</td>
-            <td style="font-size:11px">${fmtDate(s.desde)||'—'}</td>
-            <td style="font-weight:${venc?'700':'400'};color:${venc?'var(--red)':'inherit'};font-size:11px">${fmtDate(s.hasta)||'—'}${venc?' ⚠️':''}</td>
+            <td style="font-size:11px">
+              <div>${fmtDate(s.desde)||'—'}</div>
+              <div style="color:${venc?'var(--red)':'var(--gray)'};font-weight:${venc?'700':'400'}">${fmtDate(s.hasta)||'—'}${venc?' ⚠️':''}</div>
+            </td>
+            <td style="font-size:11px">
+              <div>${quienPagaLabel}</div>
+              <div style="color:var(--gray)">${cuotasLabel}</div>
+            </td>
             <td><span class="badge ${sc[s.status||'PENDIENTE']||'badge-gray'}">${s.status||'PENDIENTE'}</span></td>
             <td>
               <div style="display:flex;gap:4px;flex-wrap:wrap">
-                ${(s.status||'PENDIENTE')!=='PAGADO'?`<button class="btn btn-green btn-sm" onclick="abonarSeguro('${s.id}')">💵 Abonar</button>`:''}
-                <button class="btn btn-secondary btn-sm" onclick="editarSeguro('${s.id}')">✏️</button>
-                ${(currentUser?.role==='admin'||canDo('eliminar'))?`<button class="btn btn-red btn-sm" onclick="eliminarSeguro('${s.id}')">🗑</button>`:''}
+                ${pend>0?`<button class="btn btn-green btn-sm" onclick="abonarSeguro('${s.id}')">💵 Pagar</button>`:''}
+                ${(currentUser?.role==='admin'||canDo('editarSeguros')||canDo('editar'))?`<button class="btn btn-secondary btn-sm" onclick="editarSeguro('${s.id}')">✏️</button>`:''}
+                ${(currentUser?.role==='admin'||canDo('borrarSeguros')||canDo('eliminar'))?`<button class="btn btn-red btn-sm" onclick="eliminarSeguro('${s.id}')">🗑</button>`:''}
               </div>
             </td>
           </tr>`;
-        }).join(''):'<tr><td colspan="11" style="text-align:center;padding:24px;color:var(--gray)">Sin seguros registrados</td></tr>'}
+        }).join(''):'<tr><td colspan="12" style="text-align:center;padding:24px;color:var(--gray)">Sin seguros registrados</td></tr>'}
         </tbody>
       </table></div>
     </div>`;
 }
 
+function _getCompaniasSeguro(){
+  return DB.config.companiasSeguro||['Universal','Mapfre BHD','Reservas','Patria','Atlantica','HUMANO','Otra'];
+}
+
+function agregarCompaniaSeguro(){
+  const nombre=prompt('Nombre de la nueva compañía aseguradora:');
+  if(!nombre||!nombre.trim())return;
+  const n=nombre.trim();
+  if(!DB.config.companiasSeguro)DB.config.companiasSeguro=['Universal','Mapfre BHD','Reservas','Patria','Atlantica','HUMANO','Otra'];
+  if(DB.config.companiasSeguro.includes(n)){toast('Esa compañía ya existe','warning');return;}
+  DB.config.companiasSeguro.push(n);
+  sDB('config');
+  // Actualizar select en el modal abierto
+  const sel=document.getElementById('sg-comp');
+  if(sel){
+    const opt=document.createElement('option');
+    opt.value=n;opt.textContent=n;opt.selected=true;
+    sel.appendChild(opt);
+  }
+  toast('Compañía agregada ✓','success');
+}
+
 function _formSeguro(s){
-  const companias=(DB.config.companiasSeguro||['Universal','Mapfre BHD','Reservas','Patria','Atlantica','HUMANO','Otra']);
+  const companias=_getCompaniasSeguro();
+  const tipoVeh=s?.tipoVeh||'interno';
+  const quienPaga=s?.quienPaga||'empresa';
+  const modoCuotas=s?.cuotas&&s.cuotas.length>0?s.cuotas.length:1;
+  // Vehículos internos: solo tránsito y vendidos
+  const vehs=DB.vehiculos.filter(v=>v.status==='VENDIDO'||v.status==='TRANSITO'||v.status==='EN TRÁNSITO'||v.status==='transito');
   const abon=parseFloat(s?.abonado||0);
   const prim=parseFloat(s?.prima||0);
   return`
-    <div class="form-row c2">
+    <!-- Tipo vehículo -->
+    <div class="form-field" style="margin-bottom:10px">
+      <label style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--gray);margin-bottom:6px;display:block">Tipo de Vehículo</label>
+      <div style="display:flex;gap:8px">
+        <button type="button" id="btn-tipo-interno" onclick="toggleTipoVehSeguro('interno')"
+          class="btn ${tipoVeh==='interno'?'btn-primary':'btn-secondary'}" style="flex:1">
+          🏢 Interno (Tránsito / Vendido)
+        </button>
+        <button type="button" id="btn-tipo-externo" onclick="toggleTipoVehSeguro('externo')"
+          class="btn ${tipoVeh==='externo'?'btn-primary':'btn-secondary'}" style="flex:1">
+          👤 Externo (Cliente)
+        </button>
+      </div>
+    </div>
+    <!-- Vehículo interno -->
+    <div id="sg-veh-interno-wrap" style="display:${tipoVeh==='interno'?'block':'none'}">
       <div class="form-field"><label class="required">Vehículo</label>
         <select id="sg-veh">
           <option value="">Seleccionar...</option>
-          ${DB.vehiculos.map(v=>`<option value="${v.id}" ${v.id===s?.vehiculoId?'selected':''}>${escHtml(v.codigo+' — '+v.marca+' '+v.modelo+' '+v.anio)}</option>`).join('')}
+          ${vehs.map(v=>`<option value="${v.id}" ${v.id===s?.vehiculoId?'selected':''}>${escHtml(v.codigo+' — '+v.marca+' '+v.modelo+' '+v.anio)} [${v.status}]</option>`).join('')}
         </select>
       </div>
+    </div>
+    <!-- Vehículo externo -->
+    <div id="sg-veh-externo-wrap" style="display:${tipoVeh==='externo'?'block':'none'}">
+      <div class="form-field"><label class="required">Descripción del Vehículo</label>
+        <input type="text" id="sg-veh-texto" value="${escHtml(s?.vehiculoTexto||'')}" placeholder="Ej: Toyota Corolla 2022 Plateado — Placa ABC123">
+      </div>
+    </div>
+    <input type="hidden" id="sg-tipo-veh" value="${tipoVeh}">
+    <!-- Compañía + botón agregar -->
+    <div class="form-row c2">
       <div class="form-field"><label class="required">Compañía Aseguradora</label>
-        <select id="sg-comp">
-          ${companias.map(c=>`<option ${c===s?.compania?'selected':''}>${escHtml(c)}</option>`).join('')}
-        </select>
+        <div style="display:flex;gap:6px">
+          <select id="sg-comp" style="flex:1">
+            ${companias.map(c=>`<option ${c===s?.compania?'selected':''}>${escHtml(c)}</option>`).join('')}
+          </select>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="agregarCompaniaSeguro()" title="Agregar compañía">➕</button>
+        </div>
+      </div>
+      <div class="form-field"><label class="required">Cliente / Asegurado</label>
+        <input type="text" id="sg-cliente" value="${escHtml(s?.cliente||'')}" placeholder="Nombre del asegurado">
       </div>
     </div>
     <div class="form-row c2">
-      <div class="form-field"><label class="required">Cliente / Asegurado (Nombre)</label>
-        <input type="text" id="sg-cliente" value="${escHtml(s?.cliente||'')}" placeholder="Nombre del asegurado o cliente">
-      </div>
       <div class="form-field"><label>N° de Póliza</label>
         <input type="text" id="sg-poliza" value="${escHtml(s?.poliza||'')}" placeholder="Ej: POL-2024-001">
       </div>
-    </div>
-    <div class="form-row c3">
-      <div class="form-field"><label class="required">Prima Total</label>
-        <input type="text" id="sg-prima" value="${prim||0}" oninput="fmtMoneyInput(this);calcPendSeguro()" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)" placeholder="0.00">
-      </div>
-      <div class="form-field"><label>Abono Inicial</label>
-        <input type="text" id="sg-abonado" value="${abon||0}" oninput="fmtMoneyInput(this);calcPendSeguro()" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)" placeholder="0.00">
-      </div>
-      <div class="form-field"><label>Pendiente</label>
-        <input type="text" id="sg-pendiente" value="${fmtMoneyDisplay(Math.max(0,prim-abon))}" readonly style="background:#f8fafc;font-weight:700;color:var(--red)">
-      </div>
-    </div>
-    <div class="form-row c3">
-      <div class="form-field"><label>Vigencia Desde</label><input type="date" id="sg-desde" value="${s?.desde||today()}"></div>
-      <div class="form-field"><label>Vigencia Hasta</label><input type="date" id="sg-hasta" value="${s?.hasta||''}"></div>
       <div class="form-field"><label>Moneda</label>
         <select id="sg-moneda" onchange="filtrarBancosPorMoneda('sg')">
           <option value="RD$" ${(!s?.moneda||s?.moneda==='RD$')?'selected':''}>RD$ — Pesos</option>
           <option value="USD" ${s?.moneda==='USD'?'selected':''}>USD — Dólares</option>
         </select>
       </div>
-      <div class="form-field"><label>Banco</label>
-        <select id="sg-banco" onchange="filtrarCuentasPorBanco('sg')">${(()=>{const m=s?.moneda||'RD$';const bcs=DB.config.bancoCuentas||[];const disp=bcs.filter(b=>(b.cuentas||[]).some(c=>m==='USD'?c.tipo.includes('USD'):!c.tipo.includes('USD')));return disp.map(b=>`<option value="${escHtml(b.banco)}" ${b.banco===s?.banco?'selected':''}>${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos</option>';})()}</select>
+    </div>
+    <!-- Prima y cuotas -->
+    <div class="form-row c2" style="margin-bottom:6px">
+      <div class="form-field"><label class="required">Prima Total</label>
+        <input type="text" id="sg-prima" value="${prim||0}" oninput="fmtMoneyInput(this);recalcCuotasSeguro()" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
       </div>
-      <div class="form-field"><label>Cuenta de Pago</label>
-        <select id="sg-cuenta">${(()=>{const m=s?.moneda||'RD$';const bcs=DB.config.bancoCuentas||[];const b=bcs.find(x=>x.banco===s?.banco)||bcs.find(x=>(x.cuentas||[]).some(c=>m==='USD'?c.tipo.includes('USD'):!c.tipo.includes('USD')));const cts=(b?b.cuentas:[]).filter(c=>m==='USD'?c.tipo.includes('USD'):!c.tipo.includes('USD'));return cts.map(c=>{const v=c.tipo+' — '+c.numero;return`<option value="${escHtml(v)}" ${v===s?.cuenta?'selected':''}>${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('')||'<option value="">Sin cuentas</option>';})()}</select>
+      <div class="form-field"><label>Modalidad de Pago</label>
+        <select id="sg-modo-cuotas" onchange="recalcCuotasSeguro()">
+          <option value="1" ${modoCuotas===1?'selected':''}>💵 Contado (pago único)</option>
+          <option value="2" ${modoCuotas===2?'selected':''}>2️⃣ 2 Cuotas</option>
+          <option value="3" ${modoCuotas===3?'selected':''}>3️⃣ 3 Cuotas</option>
+        </select>
       </div>
+    </div>
+    <!-- Detalle cuotas dinámico -->
+    <div id="sg-cuotas-wrap" style="margin-bottom:12px"></div>
+    <!-- ¿Quién paga? -->
+    <div class="form-field" style="margin-bottom:10px">
+      <label style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--gray);margin-bottom:6px;display:block">¿Quién paga el seguro?</label>
+      <div style="display:flex;gap:8px">
+        <button type="button" id="btn-paga-empresa" onclick="toggleQuienPagaSeguro('empresa')"
+          class="btn ${quienPaga==='empresa'?'btn-primary':'btn-secondary'}" style="flex:1">
+          🏢 Lo paga la Empresa
+        </button>
+        <button type="button" id="btn-paga-cliente" onclick="toggleQuienPagaSeguro('cliente')"
+          class="btn ${quienPaga==='cliente'?'btn-green':'btn-secondary'}" style="flex:1">
+          👤 Lo paga el Cliente
+        </button>
+        <button type="button" id="btn-paga-pendiente" onclick="toggleQuienPagaSeguro('pendiente')"
+          class="btn ${quienPaga==='pendiente'?'btn-amber':'btn-secondary'}" style="flex:1">
+          ⏳ Pendiente
+        </button>
+      </div>
+      <input type="hidden" id="sg-quien-paga" value="${quienPaga}">
+      <div id="sg-quien-paga-info" style="font-size:11px;color:var(--gray);margin-top:6px;padding:6px 10px;background:var(--gray2);border-radius:6px"></div>
+    </div>
+    <!-- Banco/Cuenta (solo si no es pendiente) -->
+    <div id="sg-banco-wrap">
+      <div class="form-row c2">
+        <div class="form-field"><label>Banco</label>
+          <select id="sg-banco" onchange="filtrarCuentasPorBanco('sg')">${(()=>{const m=s?.moneda||'RD$';const bcs=DB.config.bancoCuentas||[];const disp=bcs.filter(b=>(b.cuentas||[]).some(c=>m==='USD'?(c.tipo.includes('USD')||c.tipo.includes('Dólares')):(!c.tipo.includes('USD')&&!c.tipo.includes('Dólares'))));return disp.map(b=>`<option value="${escHtml(b.banco)}" ${b.banco===s?.banco?'selected':''}>${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos</option>';})()}</select>
+        </div>
+        <div class="form-field"><label>Cuenta de Pago</label>
+          <select id="sg-cuenta">${(()=>{const m=s?.moneda||'RD$';const bcs=DB.config.bancoCuentas||[];const b=bcs.find(x=>x.banco===s?.banco)||bcs.find(x=>(x.cuentas||[]).some(c=>m==='USD'?(c.tipo.includes('USD')||c.tipo.includes('Dólares')):(!c.tipo.includes('USD')&&!c.tipo.includes('Dólares'))));const cts=(b?b.cuentas:[]).filter(c=>m==='USD'?(c.tipo.includes('USD')||c.tipo.includes('Dólares')):(!c.tipo.includes('USD')&&!c.tipo.includes('Dólares')));return cts.map(c=>{const v=c.tipo+' — '+c.numero;return`<option value="${escHtml(v)}" ${v===s?.cuenta?'selected':''}>${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('')||'<option value="">Sin cuentas</option>';})()}</select>
+        </div>
+      </div>
+    </div>
+    <!-- Vigencia -->
+    <div class="form-row c2">
+      <div class="form-field"><label>Vigencia Desde</label><input type="date" id="sg-desde" value="${s?.desde||today()}"></div>
+      <div class="form-field"><label>Vigencia Hasta</label><input type="date" id="sg-hasta" value="${s?.hasta||''}"></div>
     </div>
     <div class="form-field"><label>Observaciones</label>
       <input type="text" id="sg-obs" value="${escHtml(s?.obs||'')}" placeholder="Cobertura, condiciones especiales...">
     </div>`;
 }
+
+function toggleTipoVehSeguro(tipo){
+  document.getElementById('sg-tipo-veh').value=tipo;
+  document.getElementById('sg-veh-interno-wrap').style.display=tipo==='interno'?'block':'none';
+  document.getElementById('sg-veh-externo-wrap').style.display=tipo==='externo'?'block':'none';
+  document.getElementById('btn-tipo-interno').className='btn '+(tipo==='interno'?'btn-primary':'btn-secondary');
+  document.getElementById('btn-tipo-externo').className='btn '+(tipo==='externo'?'btn-primary':'btn-secondary');
+}
+
+function toggleQuienPagaSeguro(quien){
+  document.getElementById('sg-quien-paga').value=quien;
+  document.getElementById('btn-paga-empresa').className='btn '+(quien==='empresa'?'btn-primary':'btn-secondary');
+  document.getElementById('btn-paga-cliente').className='btn '+(quien==='cliente'?'btn-green':'btn-secondary');
+  document.getElementById('btn-paga-pendiente').className='btn '+(quien==='pendiente'?'btn-amber':'btn-secondary');
+  const info=document.getElementById('sg-quien-paga-info');
+  const bancoWrap=document.getElementById('sg-banco-wrap');
+  if(quien==='empresa'){
+    info.textContent='💳 El pago saldrá de caja como SALIDA al guardar.';
+    if(bancoWrap)bancoWrap.style.display='block';
+  } else if(quien==='cliente'){
+    info.textContent='💰 El pago entrará a caja como ENTRADA al guardar.';
+    if(bancoWrap)bancoWrap.style.display='block';
+  } else {
+    info.textContent='⏳ No se registrará ningún movimiento en caja. Quedará pendiente de pago.';
+    if(bancoWrap)bancoWrap.style.display='none';
+  }
+}
+
+function recalcCuotasSeguro(){
+  const prima=parseFloat((document.getElementById('sg-prima')?.value||'0').replace(/,/g,''))||0;
+  const modo=parseInt(document.getElementById('sg-modo-cuotas')?.value||'1');
+  const wrap=document.getElementById('sg-cuotas-wrap');
+  if(!wrap)return;
+  if(modo===1){
+    wrap.innerHTML='';
+    return;
+  }
+  const montoCuota=Math.floor((prima/modo)*100)/100;
+  const ultimo=Math.round((prima-(montoCuota*(modo-1)))*100)/100;
+  let html=`<div style="background:var(--blue3);border-radius:8px;padding:10px 12px;border:1px solid #bfdbfe">
+    <div style="font-size:11px;font-weight:700;color:var(--blue);margin-bottom:8px">📋 Detalle de ${modo} Cuotas</div>
+    <div style="display:grid;grid-template-columns:repeat(${modo},1fr);gap:8px">`;
+  for(let i=0;i<modo;i++){
+    const monto=i===modo-1?ultimo:montoCuota;
+    html+=`<div style="background:#fff;border-radius:6px;padding:8px;border:1px solid #bfdbfe">
+      <div style="font-size:10px;font-weight:700;color:var(--gray);margin-bottom:4px">CUOTA ${i+1}</div>
+      <div style="font-weight:800;color:var(--navy);font-size:13px">${fmt(monto)}</div>
+      <div style="margin-top:4px"><label style="font-size:9px;color:var(--gray);font-weight:700">FECHA</label>
+        <input type="date" id="sg-cuota-fecha-${i}" style="width:100%;font-size:11px;padding:3px 6px;border:1px solid var(--gray3);border-radius:4px">
+      </div>
+    </div>`;
+  }
+  html+=`</div></div>`;
+  wrap.innerHTML=html;
+}
+
 function calcPendSeguro(){
   const p=parseFloat((document.getElementById('sg-prima')?.value||'0').replace(/,/g,''));
   const a=parseFloat((document.getElementById('sg-abonado')?.value||'0').replace(/,/g,''));
   const el=document.getElementById('sg-pendiente');
   if(el)el.value=fmtMoneyDisplay(Math.max(0,p-a));
 }
+
 function nuevoSeguro(){
   openModal('🛡️ Nuevo Seguro',_formSeguro(null),
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
      <button class="btn btn-primary" onclick="guardarSeguro()">💾 Guardar Seguro</button>`);
+  setTimeout(()=>{
+    recalcCuotasSeguro();
+    toggleQuienPagaSeguro('empresa');
+  },50);
 }
+
 function guardarSeguro(id){
-  const vid=document.getElementById('sg-veh').value;
+  const tipoVeh=document.getElementById('sg-tipo-veh')?.value||'interno';
+  const quienPaga=document.getElementById('sg-quien-paga')?.value||'empresa';
   const comp=document.getElementById('sg-comp').value;
   const cliente=document.getElementById('sg-cliente').value.trim();
   const prima=parseFloat((document.getElementById('sg-prima').value||'0').replace(/,/g,''));
-  const abonado=parseFloat((document.getElementById('sg-abonado').value||'0').replace(/,/g,''));
-  if(!vid){toast('Selecciona un vehículo','error');return;}
-  const _sg_banco=document.getElementById('sg-banco')?.value||'';
-  const _sg_cuenta=document.getElementById('sg-cuenta')?.value||'';
-  if(!_sg_banco||!_sg_cuenta){toast('Selecciona banco y cuenta para continuar','error');return;}
+  const modoCuotas=parseInt(document.getElementById('sg-modo-cuotas')?.value||'1');
+  const moneda=document.getElementById('sg-moneda')?.value||'RD$';
+  const banco=document.getElementById('sg-banco')?.value||'';
+  const cuenta=document.getElementById('sg-cuenta')?.value||'';
+
+  // Validar vehículo
+  let vehiculoId='', vehiculoTexto='';
+  if(tipoVeh==='interno'){
+    vehiculoId=document.getElementById('sg-veh')?.value||'';
+    if(!vehiculoId){toast('Selecciona un vehículo','error');return;}
+    const v=DB.vehiculos.find(x=>x.id===vehiculoId);
+    vehiculoTexto=v?v.codigo+' '+v.marca+' '+v.modelo+' '+v.anio:'';
+  } else {
+    vehiculoTexto=document.getElementById('sg-veh-texto')?.value.trim()||'';
+    if(!vehiculoTexto){toast('Ingresa la descripción del vehículo','error');return;}
+  }
   if(!cliente){toast('Ingresa el nombre del asegurado','error');return;}
   if(!prima){toast('Ingresa la prima del seguro','error');return;}
-  const pendiente=Math.max(0,prima-abonado);
-  if(!DB.seguros)DB.seguros=[];
-  const prev=id?DB.seguros.find(x=>x.id===id):null;
+  if(quienPaga!=='pendiente'&&(!banco||!cuenta)){toast('Selecciona banco y cuenta para continuar','error');return;}
+
+  // Construir cuotas
+  let cuotas=[];
+  if(modoCuotas>1){
+    const montoCuota=Math.floor((prima/modoCuotas)*100)/100;
+    const ultimo=Math.round((prima-(montoCuota*(modoCuotas-1)))*100)/100;
+    for(let i=0;i<modoCuotas;i++){
+      const monto=i===modoCuotas-1?ultimo:montoCuota;
+      const fecha=document.getElementById('sg-cuota-fecha-'+i)?.value||'';
+      cuotas.push({num:i+1,monto,fecha,pagada:false,fechaPago:'',montoPagado:0});
+    }
+  }
+
+  const prev=id?(DB.seguros||[]).find(x=>x.id===id):null;
+  const pendiente=quienPaga==='pendiente'?prima:0;
+  const abonado=quienPaga==='pendiente'?0:prima;
+
   const s={
     id:id||uid(),
-    vehiculoId:vid,
-    compania:comp,
-    cliente,
+    tipoVeh,vehiculoId,vehiculoTexto,
+    compania:comp,cliente,
     poliza:document.getElementById('sg-poliza').value.trim(),
     prima,abonado,pendiente,
+    quienPaga,
+    cuotas: modoCuotas>1?cuotas:(prev?.cuotas||[]),
     status:pendiente<=0?'PAGADO':abonado>0?'ABONADO':'PENDIENTE',
     desde:document.getElementById('sg-desde').value,
     hasta:document.getElementById('sg-hasta').value,
-    banco:document.getElementById('sg-banco')?.value||'',
-    moneda:document.getElementById('sg-moneda')?.value||'RD$',
-    cuenta:document.getElementById('sg-cuenta').value,
+    banco,moneda,cuenta,
     obs:document.getElementById('sg-obs').value,
     fecha:prev?.fecha||today(),
     pagos:prev?.pagos||[]
   };
-  if(abonado>0&&(!prev||prev.abonado<abonado)){
-    DB.caja.push({id:uid(),fecha:today(),tipo:'SALIDA',categoria:'Seguro Vehículo',
-      descripcion:'Abono seguro: '+comp+' — '+cliente+' — Póliza: '+(s.poliza||''),
-      monto:abonado-(prev?.abonado||0),referencia:s.cuenta,responsable:currentUser.nombre});
-    sDB('caja');
+
+  // Registrar en caja si no es pendiente
+  if(quienPaga!=='pendiente'&&(!prev||(prev.quienPaga==='pendiente'))){
+    if(modoCuotas===1){
+      // Pago único inmediato
+      const tipoCaja=quienPaga==='cliente'?'ENTRADA':'SALIDA';
+      const catCaja=quienPaga==='cliente'?'Seguro Cobrado a Cliente':'Seguro Vehículo';
+      DB.caja.push({id:uid(),fecha:today(),tipo:tipoCaja,categoria:catCaja,
+        descripcion:(quienPaga==='cliente'?'Cliente paga seguro: ':'Pago seguro: ')+comp+' — '+cliente+(s.poliza?' — Póliza: '+s.poliza:''),
+        monto:prima,moneda,banco,cuenta,referencia:banco&&cuenta?banco+' / '+cuenta:cuenta,
+        responsable:currentUser?.nombre||''});
+      sDB('caja');
+    } else {
+      // Cuotas: no registrar nada todavía, se pagan individualmente
+      s.abonado=0;s.pendiente=prima;s.status='PENDIENTE';
+    }
   }
+
+  if(!DB.seguros)DB.seguros=[];
   if(id){const i=DB.seguros.findIndex(x=>x.id===id);if(i>=0)DB.seguros[i]=s;}
   else DB.seguros.push(s);
   sDB('seguros');closeModal();toast('Seguro guardado ✓','success');renderSeguros();
 }
+
 function editarSeguro(id){
-  const s=DB.seguros.find(x=>x.id===id);if(!s)return;
+  const s=(DB.seguros||[]).find(x=>x.id===id);if(!s)return;
   openModal('✏️ Editar Seguro — '+escHtml(s.compania),_formSeguro(s),
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
      <button class="btn btn-primary" onclick="guardarSeguro('${id}')">💾 Actualizar</button>`);
+  setTimeout(()=>{
+    toggleTipoVehSeguro(s.tipoVeh||'interno');
+    toggleQuienPagaSeguro(s.quienPaga||'empresa');
+    recalcCuotasSeguro();
+  },50);
 }
+
 function abonarSeguro(id){
-  const s=DB.seguros.find(x=>x.id===id);if(!s)return;
+  const s=(DB.seguros||[]).find(x=>x.id===id);if(!s)return;
   const pendiente=parseFloat(s.pendiente||0);
-  openModal('💵 Registrar Abono — '+escHtml(s.compania),`
+  // Si tiene cuotas, mostrar vista de cuotas
+  if(s.cuotas&&s.cuotas.length>0){
+    const cuotasPend=s.cuotas.filter(c=>!c.pagada);
+    if(cuotasPend.length===0){toast('Todas las cuotas están pagadas','success');return;}
+    const cuotasHTML=s.cuotas.map((c,i)=>`
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:${c.pagada?'var(--green2)':'var(--red2)'};border-radius:8px;margin-bottom:6px;border-left:4px solid ${c.pagada?'var(--green)':'var(--red)'}">
+        <div style="flex:1">
+          <div style="font-weight:700;font-size:13px">Cuota ${c.num} — ${fmt(c.monto)}</div>
+          <div style="font-size:11px;color:var(--gray)">Fecha: ${c.fecha?fmtDate(c.fecha):'Sin fecha'}</div>
+          ${c.pagada?`<div style="font-size:11px;color:var(--green);font-weight:700">✅ Pagada el ${fmtDate(c.fechaPago)}</div>`:''}
+        </div>
+        ${!c.pagada?`<button class="btn btn-green btn-sm" onclick="pagarCuotaSeguro('${s.id}',${i})">💵 Pagar</button>`:'<span class="badge badge-green">✅ Pagada</span>'}
+      </div>`).join('');
+    openModal('📋 Cuotas — '+escHtml(s.compania),`
+      <div style="background:var(--blue3);border-radius:8px;padding:10px 12px;margin-bottom:14px">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:12px">
+          <div><div style="font-size:10px;color:var(--gray);font-weight:700;text-transform:uppercase">Prima Total</div><div style="font-weight:800">${fmt(s.prima)}</div></div>
+          <div><div style="font-size:10px;color:var(--gray);font-weight:700;text-transform:uppercase">Pagado</div><div style="font-weight:700;color:var(--green)">${fmt(s.abonado||0)}</div></div>
+          <div><div style="font-size:10px;color:var(--gray);font-weight:700;text-transform:uppercase">Pendiente</div><div style="font-weight:800;color:var(--red)">${fmt(pendiente)}</div></div>
+        </div>
+      </div>
+      ${cuotasHTML}`,
+      `<button class="btn btn-secondary" onclick="closeModal()">Cerrar</button>`);
+    return;
+  }
+  // Pago único sin cuotas
+  openModal('💵 Registrar Pago — '+escHtml(s.compania),`
     <div style="background:var(--blue3);border-radius:8px;padding:10px;margin-bottom:14px">
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:12px">
         <div><div style="font-size:10px;color:var(--gray);font-weight:700;text-transform:uppercase">Prima Total</div><div style="font-weight:800">${fmt(s.prima)}</div></div>
@@ -11966,45 +12222,122 @@ function abonarSeguro(id){
         <div><div style="font-size:10px;color:var(--gray);font-weight:700;text-transform:uppercase">Pendiente</div><div style="font-weight:800;color:var(--red)">${fmt(pendiente)}</div></div>
       </div>
     </div>
-    <div style="margin-bottom:10px;font-size:13px">
-      <strong>Asegurado:</strong> ${escHtml(s.cliente||'—')} &nbsp;|&nbsp; <strong>Compañía:</strong> ${escHtml(s.compania||'—')}
+    <div style="margin-bottom:10px;font-size:13px"><strong>Asegurado:</strong> ${escHtml(s.cliente||'—')} &nbsp;|&nbsp; <strong>Compañía:</strong> ${escHtml(s.compania||'—')}</div>
+    <div class="form-field" style="margin-bottom:10px">
+      <label style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--gray);margin-bottom:6px;display:block">¿Quién paga?</label>
+      <div style="display:flex;gap:8px">
+        <button type="button" id="sgp-btn-empresa" onclick="togglePagoSeguroModal('empresa')" class="btn btn-primary" style="flex:1">🏢 Empresa (SALIDA caja)</button>
+        <button type="button" id="sgp-btn-cliente" onclick="togglePagoSeguroModal('cliente')" class="btn btn-secondary" style="flex:1">👤 Cliente (ENTRADA caja)</button>
+      </div>
+      <input type="hidden" id="sgp-quien" value="empresa">
     </div>
     <div class="form-row c2">
       <div class="form-field"><label class="required">Monto a Pagar</label>
-        <input type="text" id="sgp-monto" value="${fmtMoneyDisplay(pendiente)}" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)" placeholder="0.00">
+        <input type="text" id="sgp-monto" value="${fmtMoneyDisplay(pendiente)}" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
       </div>
       <div class="form-field"><label>Moneda</label>
         <select id="sgp-moneda" onchange="filtrarBancosPorMoneda('sgp')">
-          <option value="RD$">RD$ — Pesos</option>
-          <option value="USD">USD — Dólares</option>
+          <option value="RD$" ${(s.moneda||'RD$')==='RD$'?'selected':''}>RD$ — Pesos</option>
+          <option value="USD" ${s.moneda==='USD'?'selected':''}>USD — Dólares</option>
         </select>
       </div>
     </div>
     <div class="form-row c2">
       <div class="form-field"><label>Banco</label>
-        <select id="sgp-banco" onchange="filtrarCuentasPorBanco('sgp')">${(()=>{const bcs=DB.config.bancoCuentas||[];const disp=bcs.filter(b=>(b.cuentas||[]).some(c=>!c.tipo.includes('USD')));return disp.map(b=>`<option value="${escHtml(b.banco)}" ${b.banco===s.banco?'selected':''}>${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos</option>';})()}</select>
+        <select id="sgp-banco" onchange="filtrarCuentasPorBanco('sgp')">${(()=>{const bcs=DB.config.bancoCuentas||[];const disp=bcs.filter(b=>(b.cuentas||[]).some(c=>!c.tipo.includes('USD')&&!c.tipo.includes('Dólares')));return disp.map(b=>`<option value="${escHtml(b.banco)}" ${b.banco===s.banco?'selected':''}>${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos</option>';})()}</select>
       </div>
-      <div class="form-field"><label>Cuenta de Pago</label>
-        <select id="sgp-cuenta">${(()=>{const bcs=DB.config.bancoCuentas||[];const b=bcs.find(x=>x.banco===s.banco)||bcs.find(x=>(x.cuentas||[]).some(c=>!c.tipo.includes('USD')));const cts=(b?b.cuentas:[]).filter(c=>!c.tipo.includes('USD'));return cts.map(c=>{const v=c.tipo+' — '+c.numero;return`<option value="${escHtml(v)}" ${v===s.cuenta?'selected':''}>${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('')||'<option value="">Sin cuentas</option>';})()}</select>
+      <div class="form-field"><label>Cuenta</label>
+        <select id="sgp-cuenta">${(()=>{const bcs=DB.config.bancoCuentas||[];const b=bcs.find(x=>x.banco===s.banco)||bcs.find(x=>(x.cuentas||[]).some(c=>!c.tipo.includes('USD')&&!c.tipo.includes('Dólares')));const cts=(b?b.cuentas:[]).filter(c=>!c.tipo.includes('USD')&&!c.tipo.includes('Dólares'));return cts.map(c=>{const v=c.tipo+' — '+c.numero;return`<option value="${escHtml(v)}" ${v===s.cuenta?'selected':''}>${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('')||'<option value="">Sin cuentas</option>';})()}</select>
       </div>
     </div>
     <div class="form-field"><label>Fecha de Pago</label><input type="date" id="sgp-fecha" value="${today()}"></div>`,
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
      <button class="btn btn-green" onclick="confirmarAbonoSeguro('${id}')">✅ Confirmar Pago</button>`);
 }
+
+function togglePagoSeguroModal(quien){
+  document.getElementById('sgp-quien').value=quien;
+  document.getElementById('sgp-btn-empresa').className='btn '+(quien==='empresa'?'btn-primary':'btn-secondary')+' flex:1';
+  document.getElementById('sgp-btn-cliente').className='btn '+(quien==='cliente'?'btn-green':'btn-secondary')+' flex:1';
+}
+
+function pagarCuotaSeguro(segId, cuotaIdx){
+  const si=DB.seguros.findIndex(x=>x.id===segId);if(si<0)return;
+  const s=DB.seguros[si];
+  const cuota=s.cuotas[cuotaIdx];if(!cuota||cuota.pagada)return;
+  openModal(`💵 Pagar Cuota ${cuota.num} — ${escHtml(s.compania)}`,`
+    <div style="background:var(--blue3);border-radius:8px;padding:10px 12px;margin-bottom:14px">
+      <div style="font-size:14px;font-weight:700">Cuota ${cuota.num} de ${s.cuotas.length} — ${fmt(cuota.monto)}</div>
+      <div style="font-size:12px;color:var(--gray);margin-top:4px">Asegurado: ${escHtml(s.cliente||'—')} | ${escHtml(s.compania||'—')}</div>
+    </div>
+    <div class="form-field" style="margin-bottom:10px">
+      <label style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--gray);margin-bottom:6px;display:block">¿Quién paga esta cuota?</label>
+      <div style="display:flex;gap:8px">
+        <button type="button" id="sgpc-btn-empresa" onclick="document.getElementById('sgpc-quien').value='empresa';document.getElementById('sgpc-btn-empresa').className='btn btn-primary';document.getElementById('sgpc-btn-cliente').className='btn btn-secondary'" class="btn btn-primary" style="flex:1">🏢 Empresa</button>
+        <button type="button" id="sgpc-btn-cliente" onclick="document.getElementById('sgpc-quien').value='cliente';document.getElementById('sgpc-btn-cliente').className='btn btn-green';document.getElementById('sgpc-btn-empresa').className='btn btn-secondary'" class="btn btn-secondary" style="flex:1">👤 Cliente</button>
+      </div>
+      <input type="hidden" id="sgpc-quien" value="${s.quienPaga==='cliente'?'cliente':'empresa'}">
+    </div>
+    <div class="form-row c2">
+      <div class="form-field"><label>Banco</label>
+        <select id="sgpc-banco" onchange="filtrarCuentasPorBanco('sgpc')">${(()=>{const bcs=DB.config.bancoCuentas||[];return bcs.map(b=>`<option value="${escHtml(b.banco)}" ${b.banco===s.banco?'selected':''}>${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos</option>';})()}</select>
+      </div>
+      <div class="form-field"><label>Cuenta</label>
+        <select id="sgpc-cuenta">${(()=>{const bcs=DB.config.bancoCuentas||[];const b=bcs.find(x=>x.banco===s.banco)||bcs[0];return(b?b.cuentas:[]).map(c=>{const v=c.tipo+' — '+c.numero;return`<option value="${escHtml(v)}" ${v===s.cuenta?'selected':''}>${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('')||'<option value="">Sin cuentas</option>';})()}</select>
+      </div>
+    </div>
+    <div class="form-field"><label>Fecha de Pago</label><input type="date" id="sgpc-fecha" value="${today()}"></div>`,
+    `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+     <button class="btn btn-green" onclick="confirmarPagoCuotaSeguro('${segId}',${cuotaIdx})">✅ Confirmar Pago</button>`);
+}
+
+function confirmarPagoCuotaSeguro(segId,cuotaIdx){
+  const si=DB.seguros.findIndex(x=>x.id===segId);if(si<0)return;
+  const s=DB.seguros[si];
+  const cuota=s.cuotas[cuotaIdx];if(!cuota||cuota.pagada)return;
+  const banco=document.getElementById('sgpc-banco')?.value||'';
+  const cuenta=document.getElementById('sgpc-cuenta')?.value||'';
+  const fecha=document.getElementById('sgpc-fecha')?.value||today();
+  const quien=document.getElementById('sgpc-quien')?.value||'empresa';
+  if(!banco||!cuenta){toast('Selecciona banco y cuenta','error');return;}
+  // Marcar cuota como pagada
+  DB.seguros[si].cuotas[cuotaIdx].pagada=true;
+  DB.seguros[si].cuotas[cuotaIdx].fechaPago=fecha;
+  DB.seguros[si].cuotas[cuotaIdx].montoPagado=cuota.monto;
+  // Actualizar totales del seguro
+  const totalPag=DB.seguros[si].cuotas.filter(c=>c.pagada).reduce((a,c)=>a+c.monto,0);
+  DB.seguros[si].abonado=totalPag;
+  DB.seguros[si].pendiente=Math.max(0,DB.seguros[si].prima-totalPag);
+  DB.seguros[si].status=DB.seguros[si].pendiente<=0?'PAGADO':'ABONADO';
+  if(!DB.seguros[si].pagos)DB.seguros[si].pagos=[];
+  DB.seguros[si].pagos.push({fecha,monto:cuota.monto,cuenta,responsable:currentUser?.nombre||'',cuota:cuota.num});
+  // Registrar en caja
+  const tipoCaja=quien==='cliente'?'ENTRADA':'SALIDA';
+  const catCaja=quien==='cliente'?'Seguro Cobrado a Cliente':'Seguro Vehículo';
+  DB.caja.push({id:uid(),fecha,tipo:tipoCaja,categoria:catCaja,
+    descripcion:`Cuota ${cuota.num}/${s.cuotas.length} seguro: ${s.compania} — ${s.cliente}${s.poliza?' — Póliza: '+s.poliza:''}`,
+    monto:cuota.monto,moneda:s.moneda||'RD$',banco,cuenta,
+    referencia:banco&&cuenta?banco+' / '+cuenta:cuenta,
+    responsable:currentUser?.nombre||''});
+  sDB('seguros');sDB('caja');
+  closeModal();
+  toast(DB.seguros[si].pendiente<=0?'✅ Seguro pagado completamente':'💵 Cuota registrada ✓','success');
+  renderSeguros();
+}
+
 function pagarSeguro(id){abonarSeguro(id);}
 function confirmarPagoSeguro(id){confirmarAbonoSeguro(id);}
+
 function confirmarAbonoSeguro(id){
   const i=DB.seguros.findIndex(x=>x.id===id);if(i<0)return;
   const monto=parseFloat((document.getElementById('sgp-monto').value||'0').replace(/,/g,''));
   if(!monto||monto<=0){toast('Ingresa un monto válido','error');return;}
-  const _sgp_banco=document.getElementById('sgp-banco')?.value||'';
-  const _sgp_cuenta=document.getElementById('sgp-cuenta')?.value||'';
-  if(!_sgp_banco||!_sgp_cuenta){toast('Selecciona banco y cuenta para continuar','error');return;}
-  const cuenta=document.getElementById('sgp-cuenta').value;
   const banco=document.getElementById('sgp-banco')?.value||'';
+  const cuenta=document.getElementById('sgp-cuenta')?.value||'';
+  if(!banco||!cuenta){toast('Selecciona banco y cuenta','error');return;}
   const moneda=document.getElementById('sgp-moneda')?.value||'RD$';
-  const fecha=document.getElementById('sgp-fecha').value;
+  const fecha=document.getElementById('sgp-fecha')?.value||today();
+  const quien=document.getElementById('sgp-quien')?.value||'empresa';
   const pendienteActual=parseFloat(DB.seguros[i].pendiente||0);
   if(monto>pendienteActual){toast('El monto no puede superar el pendiente ('+fmt(pendienteActual)+')','error');return;}
   DB.seguros[i].abonado=(parseFloat(DB.seguros[i].abonado||0)+monto);
@@ -12012,15 +12345,19 @@ function confirmarAbonoSeguro(id){
   DB.seguros[i].status=DB.seguros[i].pendiente<=0?'PAGADO':'ABONADO';
   DB.seguros[i].cuenta=cuenta;
   if(!DB.seguros[i].pagos)DB.seguros[i].pagos=[];
-  DB.seguros[i].pagos.push({fecha,monto,cuenta,responsable:currentUser.nombre});
-  DB.caja.push({id:uid(),fecha,tipo:'SALIDA',categoria:'Seguro Vehículo',
+  DB.seguros[i].pagos.push({fecha,monto,cuenta,responsable:currentUser?.nombre||''});
+  const tipoCaja=quien==='cliente'?'ENTRADA':'SALIDA';
+  const catCaja=quien==='cliente'?'Seguro Cobrado a Cliente':'Seguro Vehículo';
+  DB.caja.push({id:uid(),fecha,tipo:tipoCaja,categoria:catCaja,
     descripcion:'Pago seguro: '+DB.seguros[i].compania+' — '+escHtml(DB.seguros[i].cliente||'')+(DB.seguros[i].poliza?' — Póliza: '+DB.seguros[i].poliza:''),
-    monto,moneda,banco,cuenta,referencia:banco&&cuenta?banco+' / '+cuenta:cuenta,responsable:currentUser.nombre});
+    monto,moneda,banco,cuenta,referencia:banco&&cuenta?banco+' / '+cuenta:cuenta,
+    responsable:currentUser?.nombre||''});
   sDB('seguros');sDB('caja');
   closeModal();
   toast(DB.seguros[i].pendiente<=0?'✅ Seguro pagado completamente':'💵 Abono registrado ✓','success');
   renderSeguros();
 }
+
 function exportarSegurosPDF(){
   const segs=DB.seguros||[];
   const empresa=DB.config.empresa||'DealerSystem';
@@ -12039,13 +12376,10 @@ function exportarSegurosPDF(){
   .r{background:#fee2e2;color:#dc2626;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700;display:inline-block}
   @media print{.np{display:none}}</style></head><body>
   <div style="border-bottom:3px solid #2563eb;padding-bottom:10px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center">
-    <div>
-      ${logo?`<img src="${logo}" style="height:40px;object-fit:contain;margin-bottom:4px"><br>`:''}
-      <h2>${escHtml(empresa)}</h2>
+    <div>${logo?`<img src="${logo}" style="height:40px;object-fit:contain;margin-bottom:4px"><br>`:''}<h2>${escHtml(empresa)}</h2>
       <div style="color:#6b7280;font-size:11px">REPORTE DE SEGUROS — ${fmtDate(today())}</div>
     </div>
-    <div style="text-align:right">
-      <div style="font-size:10px;color:#6b7280">TOTAL PENDIENTE</div>
+    <div style="text-align:right"><div style="font-size:10px;color:#6b7280">TOTAL PENDIENTE</div>
       <div style="font-size:20px;font-weight:800;color:#dc2626">${fmt(totalPend)}</div>
     </div>
   </div>
@@ -12055,32 +12389,36 @@ function exportarSegurosPDF(){
     <div style="text-align:center;padding:10px;background:#fee2e2;border-radius:6px"><div style="font-size:10px;font-weight:700;color:#dc2626">TOTAL PENDIENTE</div><div style="font-size:16px;font-weight:800;color:#dc2626">${fmt(totalPend)}</div></div>
   </div>
   <table><thead><tr>
-    <th>Vehículo</th><th>Cliente/Asegurado</th><th>Compañía</th><th>Póliza</th>
-    <th>Prima</th><th>Pagado</th><th>Pendiente</th><th>Desde</th><th>Hasta</th><th>Estado</th>
+    <th>Tipo</th><th>Vehículo</th><th>Cliente/Asegurado</th><th>Compañía</th><th>Póliza</th>
+    <th>Prima</th><th>Pagado</th><th>Pendiente</th><th>Cuotas</th><th>Desde</th><th>Hasta</th><th>Estado</th>
   </tr></thead><tbody>
   ${segs.map(s=>{
-    const v=DB.vehiculos.find(x=>x.id===s.vehiculoId);
+    const v=s.tipoVeh==='interno'?DB.vehiculos.find(x=>x.id===s.vehiculoId):null;
+    const vehLabel=v?v.codigo+' '+v.marca+' '+v.modelo:(s.vehiculoTexto||'—');
     const venc=s.hasta&&s.hasta<today();
-    const sc={PAGADO:'g',ABONADO:'a',PENDIENTE:'r'};
+    const sc2={PAGADO:'g',ABONADO:'a',PENDIENTE:'r'};
+    const cuotasLabel=s.cuotas&&s.cuotas.length>0?s.cuotas.filter(c=>c.pagada).length+'/'+s.cuotas.length:'Contado';
     return`<tr>
-      <td style="font-weight:700">${v?escHtml(v.codigo+' '+v.marca+' '+v.modelo):'—'}</td>
+      <td>${s.tipoVeh==='interno'?'Interno':'Externo'}</td>
+      <td style="font-weight:700">${escHtml(vehLabel)}</td>
       <td>${escHtml(s.cliente||'—')}</td>
       <td style="font-weight:600;color:#2563eb">${escHtml(s.compania||'—')}</td>
       <td style="font-family:monospace">${escHtml(s.poliza||'—')}</td>
       <td style="font-weight:700">${fmt(s.prima||0)}</td>
       <td style="color:#16a34a;font-weight:600">${fmt(s.abonado||0)}</td>
       <td style="font-weight:800;color:${parseFloat(s.pendiente||0)>0?'#dc2626':'#16a34a'}">${fmt(s.pendiente||0)}</td>
+      <td>${cuotasLabel}</td>
       <td>${fmtDate(s.desde)||'—'}</td>
       <td style="color:${venc?'#dc2626':'inherit'};font-weight:${venc?'700':'400'}">${fmtDate(s.hasta)||'—'}</td>
-      <td><span class="${sc[s.status||'PENDIENTE']||'r'}">${s.status||'PENDIENTE'}</span></td>
+      <td><span class="${sc2[s.status||'PENDIENTE']||'r'}">${s.status||'PENDIENTE'}</span></td>
     </tr>`;
   }).join('')}
   <tr style="background:#f0f9ff">
-    <td colspan="4" style="font-weight:800;text-align:right">TOTALES:</td>
+    <td colspan="5" style="font-weight:800;text-align:right">TOTALES:</td>
     <td style="font-weight:800">${fmt(totalPrima)}</td>
     <td style="font-weight:800;color:#16a34a">${fmt(totalAbonado)}</td>
     <td style="font-weight:800;color:#dc2626">${fmt(totalPend)}</td>
-    <td colspan="3"></td>
+    <td colspan="4"></td>
   </tr>
   </tbody></table>
   <div class="np" style="margin-top:20px;text-align:center">
@@ -12088,33 +12426,26 @@ function exportarSegurosPDF(){
   </div></body></html>`);
   win.document.close();
 }
+
 function eliminarSeguro(id){
-  if(currentUser?.role!=='admin'&&!canDo('eliminar')){toast('No tienes permiso para eliminar','error');return;}
-  openModal('🗑 Eliminar Seguro','<p>¿Eliminar este seguro?</p>',
+  if(currentUser?.role!=='admin'&&!canDo('borrarSeguros')&&!canDo('eliminar')){toast('No tienes permiso para eliminar','error');return;}
+  openModal('🗑 Eliminar Seguro','<p>¿Eliminar este seguro? Esta acción no se puede deshacer.</p>',
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
      <button class="btn btn-red" onclick="DB.seguros=DB.seguros.filter(x=>x.id!=='${id}');sDB('seguros');closeModal();toast('Eliminado','success');renderSeguros()">🗑 Eliminar</button>`);
 }
+
 
 // ══ FACTURA EXTERNA ══
 function renderFacturaExterna(){
   if(!DB.facturasExternas)DB.facturasExternas=[];
   document.getElementById('page-facturaExterna').innerHTML=`
     <div class="page-header">
-      <div><h1>🧾 Facturas Externas</h1><p>Vehículos de terceros — No se guardan en el sistema</p></div>
+      <div><h1>🧾 Facturas Externas</h1><p>Vehículos de terceros gestionados por la empresa</p></div>
       <div style="display:flex;gap:8px">
         <button class="btn btn-primary" onclick="nuevaFacturaExterna()">➕ Nueva Factura Externa</button>
       </div>
     </div>
-    <div class="card" style="background:var(--amber2);border:1px solid var(--amber)">
-      <div style="display:flex;gap:10px;align-items:flex-start">
-        <span style="font-size:22px">ℹ️</span>
-        <div style="font-size:13px;color:#92400e">
-          <strong>¿Qué es una Factura Externa?</strong><br>
-          Es una factura para vehículos de clientes que traen su vehículo a vender a través de la empresa, pero que <strong>no pertenecen al inventario</strong>. No se registra el vehículo ni el cliente en el sistema.
-        </div>
-      </div>
-    </div>
-    <div class="card" style="margin-top:16px">
+    <div class="card" style="margin-top:0">
       <div class="table-wrap"><table id="fext-tbl">
         <thead><tr><th>N° Factura</th><th>Fecha</th><th>Vehículo</th><th>Cliente/Comprador</th><th>Propietario/Vendedor</th><th>Monto</th><th>Abono</th><th>Pendiente</th><th>Acciones</th></tr></thead>
         <tbody>${(DB.facturasExternas||[]).length?(DB.facturasExternas||[]).slice().reverse().map(f=>`<tr>
@@ -12128,7 +12459,9 @@ function renderFacturaExterna(){
           <td style="font-weight:700;color:${parseFloat(f.pendiente||0)>0?'var(--red)':'var(--green)'}">${fmt(f.pendiente||0)}</td>
           <td>
             <div style="display:flex;gap:4px">
-              <button class="btn btn-sm btn-secondary" onclick="imprimirFacturaExterna('${f.id}')">🖨️</button>
+              <button class="btn btn-sm btn-secondary" onclick="imprimirFacturaExterna('${f.id}',true)">🖨️ Con encabezado</button>
+              <button class="btn btn-sm btn-secondary" onclick="imprimirFacturaExterna('${f.id}',false)">🖨️ Sin encabezado</button>
+              ${(currentUser?.role==='admin'||canDo('editar'))?`<button class="btn btn-sm btn-primary" onclick="editarFacturaExterna('${f.id}')">✏️</button>`:''}
               ${(currentUser?.role==='admin'||canDo('eliminar'))?`<button class="btn btn-sm btn-red" onclick="DB.facturasExternas=DB.facturasExternas.filter(x=>x.id!=='${f.id}');sDB('facturasExternas');toast('Eliminado','success');renderFacturaExterna()">🗑</button>`:''}
             </div>
           </td>
@@ -12144,9 +12477,6 @@ function nuevaFacturaExterna(){
       <span style="font-size:12px;font-weight:700">N° FACTURA EXTERNA</span>
       <span style="font-family:monospace;font-size:15px;font-weight:800;color:#fbbf24">${nFact}</span>
     </div>
-    <div style="font-size:12px;font-weight:700;color:var(--amber);background:var(--amber2);padding:8px 12px;border-radius:6px;margin-bottom:14px">
-      ⚠️ Esta factura NO se guardará en inventario ni en clientes del sistema.
-    </div>
     <div class="form-row c2">
       <div class="form-field"><label class="required">Vehículo (marca, modelo, año)</label>
         <input type="text" id="fe-vehiculo" placeholder="Ej: Toyota Corolla 2020 Plateado">
@@ -12156,7 +12486,7 @@ function nuevaFacturaExterna(){
       </div>
     </div>
     <div class="form-row c2">
-      <div class="form-field"><label>Propietario / Vendedor del Vehículo</label>
+      <div class="form-field"><label>Propietario / Vendedor</label>
         <input type="text" id="fe-propietario" placeholder="Nombre del dueño actual">
       </div>
       <div class="form-field"><label>Cédula / RNC del Propietario</label>
@@ -12192,7 +12522,83 @@ function nuevaFacturaExterna(){
       <textarea id="fe-obs" rows="2" placeholder="Condiciones del vehículo, acuerdos, notas..."></textarea>
     </div>`,
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
-     <button class="btn btn-primary" onclick="guardarFacturaExterna('${nFact}')">💾 Guardar e Imprimir</button>`);
+     <button class="btn btn-secondary" onclick="guardarFacturaExterna('${nFact}',false)">💾 Guardar sin imprimir</button>
+     <button class="btn btn-primary" onclick="guardarFacturaExterna('${nFact}',true)">💾 Guardar e Imprimir</button>`);
+}
+function editarFacturaExterna(id){
+  const f=(DB.facturasExternas||[]).find(x=>x.id===id);if(!f)return;
+  openModal('✏️ Editar Factura Externa — '+escHtml(f.numero),`
+    <div class="form-row c2">
+      <div class="form-field"><label class="required">Vehículo</label>
+        <input type="text" id="fe-vehiculo" value="${escHtml(f.vehiculo||'')}">
+      </div>
+      <div class="form-field"><label>N° Chasis / VIN</label>
+        <input type="text" id="fe-vin" value="${escHtml(f.vin||'')}" style="text-transform:uppercase;font-family:monospace">
+      </div>
+    </div>
+    <div class="form-row c2">
+      <div class="form-field"><label>Propietario / Vendedor</label>
+        <input type="text" id="fe-propietario" value="${escHtml(f.propietario||'')}">
+      </div>
+      <div class="form-field"><label>Cédula / RNC del Propietario</label>
+        <input type="text" id="fe-prop-doc" value="${escHtml(f.propietarioDoc||'')}">
+      </div>
+    </div>
+    <div class="form-row c2">
+      <div class="form-field"><label>Cliente / Comprador</label>
+        <input type="text" id="fe-cliente" value="${escHtml(f.cliente||'')}">
+      </div>
+      <div class="form-field"><label>Cédula / RNC del Comprador</label>
+        <input type="text" id="fe-cli-doc" value="${escHtml(f.clienteDoc||'')}">
+      </div>
+    </div>
+    <div class="form-row c3">
+      <div class="form-field"><label class="required">Monto Total</label>
+        <input type="text" id="fe-monto" value="${fmtMoneyDisplay(f.monto||0)}" oninput="fmtMoneyInput(this);calcPendFE()" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
+      </div>
+      <div class="form-field"><label>Abono</label>
+        <input type="text" id="fe-abono" value="${fmtMoneyDisplay(f.abono||0)}" oninput="fmtMoneyInput(this);calcPendFE()" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
+      </div>
+      <div class="form-field"><label>Pendiente</label>
+        <input type="text" id="fe-pendiente" readonly style="background:#f8fafc;font-weight:700;color:var(--red)" value="${fmtMoneyDisplay(f.pendiente||0)}">
+      </div>
+    </div>
+    <div class="form-row c2">
+      <div class="form-field"><label>Fecha</label><input type="date" id="fe-fecha" value="${f.fecha||today()}"></div>
+      <div class="form-field"><label>Moneda</label>
+        <select id="fe-moneda"><option value="RD$" ${(f.moneda||'RD$')==='RD$'?'selected':''}>RD$ — Pesos</option><option value="USD" ${f.moneda==='USD'?'selected':''}>USD — Dólares</option></select>
+      </div>
+    </div>
+    <div class="form-field"><label>Observaciones</label>
+      <textarea id="fe-obs" rows="2">${escHtml(f.obs||'')}</textarea>
+    </div>`,
+    `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+     <button class="btn btn-primary" onclick="guardarEditFacturaExterna('${id}')">💾 Guardar Cambios</button>`);
+}
+function guardarEditFacturaExterna(id){
+  const idx=(DB.facturasExternas||[]).findIndex(x=>x.id===id);if(idx<0)return;
+  const vehiculo=document.getElementById('fe-vehiculo').value.trim();
+  const monto=parseFloat((document.getElementById('fe-monto').value||'0').replace(/,/g,''));
+  if(!vehiculo){toast('Ingresa los datos del vehículo','error');return;}
+  if(!monto){toast('Ingresa el monto','error');return;}
+  const abono=parseFloat((document.getElementById('fe-abono').value||'0').replace(/,/g,''));
+  DB.facturasExternas[idx]={
+    ...DB.facturasExternas[idx],
+    vehiculo,
+    vin:document.getElementById('fe-vin').value.trim(),
+    propietario:document.getElementById('fe-propietario').value.trim(),
+    propietarioDoc:document.getElementById('fe-prop-doc').value.trim(),
+    cliente:document.getElementById('fe-cliente').value.trim(),
+    clienteDoc:document.getElementById('fe-cli-doc').value.trim(),
+    monto,abono,pendiente:Math.max(0,monto-abono),
+    moneda:document.getElementById('fe-moneda').value,
+    fecha:document.getElementById('fe-fecha').value,
+    obs:document.getElementById('fe-obs').value
+  };
+  sDB('facturasExternas');
+  closeModal();
+  toast('Factura actualizada ✓','success');
+  renderFacturaExterna();
 }
 function calcPendFE(){
   const m=parseFloat((document.getElementById('fe-monto')?.value||'0').replace(/,/g,''));
@@ -12200,7 +12606,7 @@ function calcPendFE(){
   const p=document.getElementById('fe-pendiente');
   if(p)p.value=fmtMoneyDisplay(Math.max(0,m-a));
 }
-function guardarFacturaExterna(nFact){
+function guardarFacturaExterna(nFact,imprimir){
   const vehiculo=document.getElementById('fe-vehiculo').value.trim();
   const monto=parseFloat((document.getElementById('fe-monto').value||'0').replace(/,/g,''));
   if(!vehiculo){toast('Ingresa los datos del vehículo','error');return;}
@@ -12223,11 +12629,11 @@ function guardarFacturaExterna(nFact){
   DB.facturasExternas.push(f);
   sDB('facturasExternas');
   closeModal();
-  imprimirFacturaExterna(f.id);
-  toast('Factura externa guardada ✓ — Generando...','success');
+  if(imprimir)imprimirFacturaExterna(f.id,true);
+  toast('Factura externa guardada ✓','success');
   renderFacturaExterna();
 }
-function imprimirFacturaExterna(id){
+function imprimirFacturaExterna(id,conEncabezado){
   const f=(DB.facturasExternas||[]).find(x=>x.id===id);if(!f)return;
   const tasa=parseFloat(DB.config.tasaCambio||60);
   const esUSD=f.moneda==='USD';
@@ -12239,7 +12645,6 @@ function imprimirFacturaExterna(id){
   <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',Arial,sans-serif;font-size:12px;color:#0f172a;background:#fff}
   .page{max-width:700px;margin:0 auto;padding:28px}
   .hdr{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:14px;border-bottom:4px solid #f59e0b;margin-bottom:18px}
-  .badge-ext{display:inline-block;padding:3px 10px;background:#fef3c7;border:1px solid #f59e0b;border-radius:4px;font-size:11px;font-weight:800;color:#92400e;margin-top:4px}
   .sec{margin-bottom:14px}
   .sec-titulo{font-size:10px;font-weight:800;text-transform:uppercase;color:#fff;background:#0f172a;padding:4px 10px;border-radius:4px;display:inline-block;margin-bottom:8px}
   .g2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
@@ -12254,6 +12659,7 @@ function imprimirFacturaExterna(id){
   .aviso{background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;padding:8px 12px;margin-top:12px;font-size:11px;color:#92400e}
   .pie{text-align:center;font-size:9px;color:#94a3b8;margin-top:16px;padding-top:10px;border-top:1px solid #e2e8f0}
   @media print{.np{display:none}}</style></head><body><div class="page">
+  ${conEncabezado?`
   <div class="hdr">
     <div style="display:flex;align-items:center;gap:12px">
       ${logo?`<img src="${logo}" style="width:56px;height:56px;object-fit:contain;border-radius:8px">`:`<div style="width:56px;height:56px;background:#f59e0b;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:900;color:#fff">${escHtml(empresa[0])}</div>`}
@@ -12261,7 +12667,7 @@ function imprimirFacturaExterna(id){
         <div style="font-size:18px;font-weight:900">${escHtml(empresa)}</div>
         ${DB.config.telefono?`<div style="font-size:11px;color:#6b7280">Tel: ${escHtml(DB.config.telefono)}</div>`:''}
         ${DB.config.rnc?`<div style="font-size:11px;color:#6b7280">RNC: ${escHtml(DB.config.rnc)}</div>`:''}
-        <div class="badge-ext">FACTURA EXTERNA — NO REGISTRADA EN SISTEMA</div>
+        ${DB.config.direccion?`<div style="font-size:11px;color:#6b7280">${escHtml(DB.config.direccion)}</div>`:''}
       </div>
     </div>
     <div style="text-align:right">
@@ -12269,7 +12675,12 @@ function imprimirFacturaExterna(id){
       <div style="font-family:monospace;font-size:20px;font-weight:900">${escHtml(f.numero)}</div>
       <div style="font-size:11px;color:#6b7280;margin-top:4px">Fecha: ${fmtDate(f.fecha)}</div>
     </div>
-  </div>
+  </div>`:`
+  <div style="text-align:right;margin-bottom:18px;padding-bottom:14px;border-bottom:4px solid #f59e0b">
+    <div style="font-size:22px;font-weight:900;color:#f59e0b">FACTURA</div>
+    <div style="font-family:monospace;font-size:20px;font-weight:900">${escHtml(f.numero)}</div>
+    <div style="font-size:11px;color:#6b7280;margin-top:4px">Fecha: ${fmtDate(f.fecha)}</div>
+  </div>`}
   <div class="sec">
     <div class="sec-titulo">🚗 Vehículo</div>
     <div class="g2">
@@ -12277,13 +12688,13 @@ function imprimirFacturaExterna(id){
       <div class="campo"><label>Chasis / VIN</label><span style="font-family:monospace">${escHtml(f.vin||'—')}</span></div>
     </div>
   </div>
-  <div class="sec">
+  ${(f.propietario||f.propietarioDoc)?`<div class="sec">
     <div class="sec-titulo">👤 Propietario / Vendedor</div>
     <div class="g2">
       <div class="campo"><label>Nombre</label><span>${escHtml(f.propietario||'—')}</span></div>
       <div class="campo"><label>Cédula / RNC</label><span>${escHtml(f.propietarioDoc||'—')}</span></div>
     </div>
-  </div>
+  </div>`:''}
   <div class="sec">
     <div class="sec-titulo">🏷️ Comprador</div>
     <div class="g2">
@@ -12307,7 +12718,7 @@ function imprimirFacturaExterna(id){
     <div><div style="height:40px"></div><div class="firma-linea"><div style="font-weight:700">${escHtml(f.propietario||'Propietario del Vehículo')}</div>Firma del Vendedor</div></div>
     <div><div style="height:40px"></div><div class="firma-linea"><div style="font-weight:700">${escHtml(f.cliente||'Comprador')}</div>Firma del Comprador</div></div>
   </div>
-  <div class="pie">${escHtml(empresa)} | ${fmtDate(today())} | Factura Externa — No pertenece al inventario del sistema</div>
+  <div class="pie">${conEncabezado?escHtml(empresa)+' | ':''} ${fmtDate(today())} | Factura Externa N° ${escHtml(f.numero)}</div>
   <div class="np" style="margin-top:16px;text-align:center">
     <button onclick="window.print()" style="padding:10px 24px;background:#f59e0b;color:#fff;border:none;border-radius:6px;font-size:14px;cursor:pointer;font-weight:700">🖨️ Imprimir / PDF</button>
   </div>
