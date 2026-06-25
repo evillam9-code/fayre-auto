@@ -4773,10 +4773,16 @@ function renderCuentas(){
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;padding-bottom:10px;border-bottom:2px solid var(--gray3)">
             <div style="display:flex;align-items:center;gap:10px">
               <div style="font-size:28px">🏦</div>
-              <div><div style="font-size:16px;font-weight:800">${escHtml(b.banco)}</div><div style="font-size:12px;color:var(--gray)">${(b.cuentas||[]).length} cuenta(s)</div></div>
+              <div>
+                <div style="font-size:16px;font-weight:800">${escHtml(b.banco)}</div>
+                <div style="font-size:12px;color:var(--gray)">${(b.cuentas||[]).length} cuenta(s)</div>
+              </div>
             </div>
             <div style="display:flex;gap:6px">
-              ${puedeEditar?`<button class="btn btn-secondary btn-sm" onclick="agregarCuentaABanco(${bi})">➕ Cuenta</button>`:''}
+              ${puedeEditar?`
+                <button class="btn btn-secondary btn-sm" onclick="editarNombreBanco(${bi})">✏️ Banco</button>
+                <button class="btn btn-secondary btn-sm" onclick="agregarCuentaABanco(${bi})">➕ Cuenta</button>
+              `:''}
               ${puedeBorrar?`<button class="btn btn-sm" style="background:var(--red2);color:var(--red)" onclick="eliminarBancoCuentas(${bi})">🗑</button>`:''}
             </div>
           </div>
@@ -4789,13 +4795,22 @@ function renderCuentas(){
                     <div style="font-size:15px;font-weight:800;font-family:monospace;letter-spacing:1px">${escHtml(c.numero||'—')}</div>
                     <div style="font-size:11px;color:var(--gray);margin-top:4px">${(c.tipo||'').includes('Corriente')?'🔄 Cuenta Corriente':(c.tipo||'').includes('Efectivo')?'💵 Efectivo':'💰 Cuenta de Ahorro'}</div>
                   </div>
-                  ${puedeBorrar?`<button class="btn btn-sm" style="background:var(--red2);color:var(--red);padding:4px 8px" onclick="eliminarCuentaBancoCuentas(${bi},${ci})">✕</button>`:''}
+                  <div style="display:flex;flex-direction:column;gap:4px">
+                    ${puedeEditar?`<button class="btn btn-sm btn-secondary" style="padding:4px 8px" onclick="editarCuentaBanco(${bi},${ci})">✏️</button>`:''}
+                    ${puedeBorrar?`<button class="btn btn-sm" style="background:var(--red2);color:var(--red);padding:4px 8px" onclick="eliminarCuentaBancoCuentas(${bi},${ci})">✕</button>`:''}
+                  </div>
                 </div>
               </div>`).join('')||`<div style="color:var(--gray);font-size:13px;padding:8px">Sin cuentas agregadas</div>`}
           </div>
         </div>`).join('')}
     </div>`}`;
 }
+
+function _tipoOpts(sel){
+  const tipos=['Corriente RD$','Corriente USD','Ahorro RD$','Ahorro USD','Efectivo Pesos','Efectivo Dólares'];
+  return tipos.map(t=>`<option value="${t}" ${t===sel?'selected':''}>${t}</option>`).join('');
+}
+
 function nuevoBancoCuenta(){
   if(!currentUser)return;
   const puedeEditar=currentUser.role==='admin'||canDo('editar')||(currentUser?.permisos?.editarCuentas);
@@ -4810,6 +4825,7 @@ function nuevoBancoCuenta(){
      <button class="btn btn-primary" onclick="guardarNuevoBancoCuenta()">💾 Guardar</button>`);
   agregarFilaCuentaNuevoBanco();
 }
+
 function agregarFilaCuentaNuevoBanco(){
   const list=document.getElementById('nb-cuentas-list');if(!list)return;
   const i=list.children.length;
@@ -4818,18 +4834,12 @@ function agregarFilaCuentaNuevoBanco(){
   div.innerHTML=`
     <div class="form-field" style="margin:0"><label style="font-size:10px">Número de Cuenta</label><input type="text" id="nb-num-${i}" placeholder="0000-0000-0000"></div>
     <div class="form-field" style="margin:0"><label style="font-size:10px">Tipo</label>
-      <select id="nb-tipo-${i}">
-        <option value="Corriente RD$">Corriente RD$</option>
-        <option value="Corriente USD">Corriente USD</option>
-        <option value="Ahorro RD$">Ahorro RD$</option>
-        <option value="Ahorro USD">Ahorro USD</option>
-        <option value="Efectivo Pesos">Efectivo Pesos</option>
-        <option value="Efectivo Dólares">Efectivo Dólares</option>
-      </select>
+      <select id="nb-tipo-${i}">${_tipoOpts('Corriente RD$')}</select>
     </div>
     <button class="btn btn-red btn-sm" onclick="this.parentElement.remove()">✕</button>`;
   list.appendChild(div);
 }
+
 function guardarNuevoBancoCuenta(){
   const nombre=document.getElementById('nb-nombre')?.value.trim();
   if(!nombre){toast('El nombre del banco es requerido','error');return;}
@@ -4839,9 +4849,12 @@ function guardarNuevoBancoCuenta(){
   const list=document.getElementById('nb-cuentas-list');
   const cuentas=[];
   if(list){
-    list.querySelectorAll('div').forEach(row=>{
-      const num=row.querySelector('[id^="nb-num-"]')?.value.trim();
-      const tipo=row.querySelector('[id^="nb-tipo-"]')?.value;
+    // Iterar solo hijos directos para evitar duplicados
+    Array.from(list.children).forEach(row=>{
+      const numEl=row.querySelector('[id^="nb-num-"]');
+      const tipoEl=row.querySelector('[id^="nb-tipo-"]');
+      const num=numEl?.value.trim();
+      const tipo=tipoEl?.value;
       if(num)cuentas.push({numero:num,tipo:tipo||'Corriente RD$',banco:nombre});
     });
   }
@@ -4850,6 +4863,30 @@ function guardarNuevoBancoCuenta(){
   DB.config.bancos=(DB.config.bancoCuentas||[]).map(b=>b.banco);
   sDB('config');closeModal();toast('Banco guardado ✓','success');renderCuentas();
 }
+
+function editarNombreBanco(bi){
+  const b=DB.config.bancoCuentas[bi];if(!b)return;
+  openModal('✏️ Editar Banco',`
+    <div class="form-field"><label class="required">Nombre del Banco</label>
+      <input type="text" id="eb-nombre" value="${escHtml(b.banco)}">
+    </div>`,
+    `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+     <button class="btn btn-primary" onclick="guardarEditNombreBanco(${bi})">💾 Guardar</button>`);
+}
+
+function guardarEditNombreBanco(bi){
+  const nombre=document.getElementById('eb-nombre')?.value.trim();
+  if(!nombre){toast('El nombre es requerido','error');return;}
+  const nombreAnterior=DB.config.bancoCuentas[bi].banco;
+  DB.config.bancoCuentas[bi].banco=nombre;
+  // Actualizar referencia banco en cuentas
+  (DB.config.bancoCuentas[bi].cuentas||[]).forEach(c=>{c.banco=nombre;});
+  // Actualizar en registros de caja
+  DB.caja.forEach(c=>{if(c.banco===nombreAnterior)c.banco=nombre;});
+  DB.config.bancos=DB.config.bancoCuentas.map(b=>b.banco);
+  sDB('config');sDB('caja');closeModal();toast('Banco actualizado ✓','success');renderCuentas();
+}
+
 function agregarCuentaABanco(bi){
   const puedeEditar=currentUser?.role==='admin'||canDo('editar')||(currentUser?.permisos?.editarCuentas);
   if(!puedeEditar){toast('No tienes permiso para agregar cuentas','error');return;}
@@ -4857,19 +4894,13 @@ function agregarCuentaABanco(bi){
     <div class="form-row c2">
       <div class="form-field"><label class="required">Número de Cuenta</label><input type="text" id="ac-numero" placeholder="0000-0000-0000"></div>
       <div class="form-field"><label>Tipo de Cuenta</label>
-        <select id="ac-tipo">
-          <option value="Corriente RD$">Corriente RD$</option>
-          <option value="Corriente USD">Corriente USD</option>
-          <option value="Ahorro RD$">Ahorro RD$</option>
-          <option value="Ahorro USD">Ahorro USD</option>
-          <option value="Efectivo Pesos">Efectivo Pesos</option>
-          <option value="Efectivo Dólares">Efectivo Dólares</option>
-        </select>
+        <select id="ac-tipo">${_tipoOpts('Corriente RD$')}</select>
       </div>
     </div>`,
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
      <button class="btn btn-primary" onclick="guardarCuentaEnBanco(${bi})">💾 Guardar</button>`);
 }
+
 function guardarCuentaEnBanco(bi){
   const num=document.getElementById('ac-numero')?.value.trim();
   const tipo=document.getElementById('ac-tipo')?.value||'Corriente RD$';
@@ -4878,6 +4909,35 @@ function guardarCuentaEnBanco(bi){
   DB.config.bancoCuentas[bi].cuentas.push({numero:num,tipo,banco:DB.config.bancoCuentas[bi].banco});
   sDB('config');closeModal();toast('Cuenta agregada ✓','success');renderCuentas();
 }
+
+function editarCuentaBanco(bi,ci){
+  const b=DB.config.bancoCuentas[bi];if(!b)return;
+  const c=(b.cuentas||[])[ci];if(!c)return;
+  openModal(`✏️ Editar Cuenta — ${escHtml(b.banco)}`,`
+    <div class="form-row c2">
+      <div class="form-field"><label class="required">Número de Cuenta</label>
+        <input type="text" id="ec-numero" value="${escHtml(c.numero||'')}">
+      </div>
+      <div class="form-field"><label>Tipo de Cuenta</label>
+        <select id="ec-tipo">${_tipoOpts(c.tipo||'Corriente RD$')}</select>
+      </div>
+    </div>`,
+    `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+     <button class="btn btn-primary" onclick="guardarEditCuentaBanco(${bi},${ci})">💾 Guardar Cambios</button>`);
+}
+
+function guardarEditCuentaBanco(bi,ci){
+  const num=document.getElementById('ec-numero')?.value.trim();
+  const tipo=document.getElementById('ec-tipo')?.value||'Corriente RD$';
+  if(!num){toast('El número de cuenta es requerido','error');return;}
+  const nombreAnteriorCuenta=DB.config.bancoCuentas[bi].cuentas[ci].tipo+' — '+DB.config.bancoCuentas[bi].cuentas[ci].numero;
+  DB.config.bancoCuentas[bi].cuentas[ci]={numero:num,tipo,banco:DB.config.bancoCuentas[bi].banco};
+  const nuevaNombreCuenta=tipo+' — '+num;
+  // Actualizar referencias en caja
+  DB.caja.forEach(c=>{if(c.cuenta===nombreAnteriorCuenta)c.cuenta=nuevaNombreCuenta;});
+  sDB('config');sDB('caja');closeModal();toast('Cuenta actualizada ✓','success');renderCuentas();
+}
+
 function eliminarBancoCuentas(bi){
   const puedeBorrar=currentUser?.role==='admin'||canDo('eliminar')||(currentUser?.permisos?.borrarCuentas);
   if(!puedeBorrar){toast('No tienes permiso para eliminar bancos','error');return;}
@@ -4885,6 +4945,7 @@ function eliminarBancoCuentas(bi){
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
      <button class="btn btn-red" onclick="DB.config.bancoCuentas.splice(${bi},1);DB.config.bancos=DB.config.bancoCuentas.map(b=>b.banco);sDB('config');closeModal();toast('Banco eliminado','success');renderCuentas()">🗑 Eliminar</button>`);
 }
+
 function eliminarCuentaBancoCuentas(bi,ci){
   const puedeBorrar=currentUser?.role==='admin'||canDo('eliminar')||(currentUser?.permisos?.borrarCuentas);
   if(!puedeBorrar){toast('No tienes permiso para eliminar cuentas','error');return;}
@@ -12470,6 +12531,120 @@ function renderFacturaExterna(){
       </table></div>
     </div>`;
 }
+function _formFE(f){
+  const bcs=DB.config.bancoCuentas||[];
+  const bancoSel=f?.banco||'';
+  const cuentaSel=f?.cuenta||'';
+  const b=bcs.find(x=>x.banco===bancoSel)||bcs[0];
+  const bancoOpts=bcs.map(x=>`<option value="${escHtml(x.banco)}" ${x.banco===bancoSel?'selected':''}>${escHtml(x.banco)}</option>`).join('')||'<option value="">Sin bancos</option>';
+  const cuentaOpts=(b?b.cuentas:[]).map(c=>{const v=c.tipo+' — '+c.numero;return`<option value="${escHtml(v)}" ${v===cuentaSel?'selected':''}>${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('')||'<option value="">Sin cuentas</option>';
+  const inclProp=!!(f?.propietario||f?.propietarioDoc);
+  return`
+    <div class="form-row c2">
+      <div class="form-field"><label class="required">Vehículo (marca, modelo, año)</label>
+        <input type="text" id="fe-vehiculo" value="${escHtml(f?.vehiculo||'')}" placeholder="Ej: Toyota Corolla 2020 Plateado">
+      </div>
+      <div class="form-field"><label>N° Chasis / VIN</label>
+        <input type="text" id="fe-vin" value="${escHtml(f?.vin||'')}" placeholder="Número de chasis" style="text-transform:uppercase;font-family:monospace">
+      </div>
+    </div>
+    <!-- Toggle propietario -->
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;padding:8px 12px;background:var(--gray2);border-radius:8px">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:600;margin:0">
+        <input type="checkbox" id="fe-incl-prop" ${inclProp?'checked':''} onchange="togglePropFE()" style="width:16px;height:16px;accent-color:var(--blue)">
+        Incluir datos del Propietario / Vendedor
+      </label>
+    </div>
+    <div id="fe-prop-wrap" style="display:${inclProp?'block':'none'}">
+      <div class="form-row c2">
+        <div class="form-field"><label>Propietario / Vendedor</label>
+          <input type="text" id="fe-propietario" value="${escHtml(f?.propietario||'')}" placeholder="Nombre del dueño actual">
+        </div>
+        <div class="form-field"><label>Cédula / RNC del Propietario</label>
+          <input type="text" id="fe-prop-doc" value="${escHtml(f?.propietarioDoc||'')}" placeholder="000-0000000-0">
+        </div>
+      </div>
+    </div>
+    <div class="form-row c2">
+      <div class="form-field"><label>Cliente / Comprador</label>
+        <input type="text" id="fe-cliente" value="${escHtml(f?.cliente||'')}" placeholder="Nombre del comprador">
+      </div>
+      <div class="form-field"><label>Cédula / RNC del Comprador</label>
+        <input type="text" id="fe-cli-doc" value="${escHtml(f?.clienteDoc||'')}" placeholder="000-0000000-0">
+      </div>
+    </div>
+    <div class="form-row c2">
+      <div class="form-field"><label>Teléfono del Cliente</label>
+        <input type="text" id="fe-telefono" value="${escHtml(f?.telefono||'')}" placeholder="809-000-0000">
+      </div>
+      <div class="form-field"><label>Ciudad</label>
+        <input type="text" id="fe-ciudad" value="${escHtml(f?.ciudad||'')}" placeholder="Ej: Santiago">
+      </div>
+    </div>
+    <div class="form-field"><label>Dirección del Cliente</label>
+      <input type="text" id="fe-direccion" value="${escHtml(f?.direccion||'')}" placeholder="Calle, sector, número...">
+    </div>
+    <div class="form-row c3">
+      <div class="form-field"><label class="required">Monto Total</label>
+        <input type="text" id="fe-monto" value="${fmtMoneyDisplay(f?.monto||0)||'0'}" oninput="fmtMoneyInput(this);calcPendFE()" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
+      </div>
+      <div class="form-field"><label>Abono Inicial</label>
+        <input type="text" id="fe-abono" value="${fmtMoneyDisplay(f?.abono||0)||'0'}" oninput="fmtMoneyInput(this);calcPendFE()" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
+      </div>
+      <div class="form-field"><label>Pendiente</label>
+        <input type="text" id="fe-pendiente" readonly style="background:#f8fafc;font-weight:700;color:var(--red)" value="${fmtMoneyDisplay(Math.max(0,(f?.monto||0)-(f?.abono||0)))||'0'}">
+      </div>
+    </div>
+    <div class="form-row c2">
+      <div class="form-field"><label>Banco</label>
+        <select id="fe-banco" onchange="actualizarCuentasFE()">${bancoOpts}</select>
+      </div>
+      <div class="form-field"><label>Cuenta</label>
+        <select id="fe-cuenta">${cuentaOpts}</select>
+      </div>
+    </div>
+    <div class="form-row c2">
+      <div class="form-field"><label>Fecha</label><input type="date" id="fe-fecha" value="${f?.fecha||today()}"></div>
+      <div class="form-field"><label>Moneda</label>
+        <select id="fe-moneda"><option value="RD$" ${(!f?.moneda||f?.moneda==='RD$')?'selected':''}>RD$ — Pesos</option><option value="USD" ${f?.moneda==='USD'?'selected':''}>USD — Dólares</option></select>
+      </div>
+    </div>
+    <div class="form-field"><label>Observaciones</label>
+      <textarea id="fe-obs" rows="2" placeholder="Condiciones del vehículo, acuerdos, notas...">${escHtml(f?.obs||'')}</textarea>
+    </div>`;
+}
+function togglePropFE(){
+  const wrap=document.getElementById('fe-prop-wrap');
+  if(wrap)wrap.style.display=document.getElementById('fe-incl-prop')?.checked?'block':'none';
+}
+function actualizarCuentasFE(){
+  const banco=document.getElementById('fe-banco')?.value;
+  const sel=document.getElementById('fe-cuenta');if(!sel)return;
+  const bcs=DB.config.bancoCuentas||[];
+  const b=bcs.find(x=>x.banco===banco);
+  sel.innerHTML=(b?b.cuentas:[]).map(c=>`<option value="${escHtml(c.tipo+' — '+c.numero)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`).join('')||'<option value="">Sin cuentas</option>';
+}
+function _leerCamposFE(){
+  const inclProp=document.getElementById('fe-incl-prop')?.checked;
+  return{
+    vehiculo:document.getElementById('fe-vehiculo').value.trim(),
+    vin:document.getElementById('fe-vin').value.trim(),
+    propietario:inclProp?(document.getElementById('fe-propietario')?.value.trim()||''):'',
+    propietarioDoc:inclProp?(document.getElementById('fe-prop-doc')?.value.trim()||''):'',
+    cliente:document.getElementById('fe-cliente').value.trim(),
+    clienteDoc:document.getElementById('fe-cli-doc').value.trim(),
+    telefono:document.getElementById('fe-telefono').value.trim(),
+    ciudad:document.getElementById('fe-ciudad').value.trim(),
+    direccion:document.getElementById('fe-direccion').value.trim(),
+    monto:parseFloat((document.getElementById('fe-monto').value||'0').replace(/,/g,'')),
+    abono:parseFloat((document.getElementById('fe-abono').value||'0').replace(/,/g,'')),
+    moneda:document.getElementById('fe-moneda').value,
+    fecha:document.getElementById('fe-fecha').value,
+    banco:document.getElementById('fe-banco')?.value||'',
+    cuenta:document.getElementById('fe-cuenta')?.value||'',
+    obs:document.getElementById('fe-obs').value
+  };
+}
 function nuevaFacturaExterna(){
   const nFact='FE-'+String(((DB.facturasExternas||[]).length+1)).padStart(5,'0');
   openModal('🧾 Nueva Factura Externa',`
@@ -12477,128 +12652,24 @@ function nuevaFacturaExterna(){
       <span style="font-size:12px;font-weight:700">N° FACTURA EXTERNA</span>
       <span style="font-family:monospace;font-size:15px;font-weight:800;color:#fbbf24">${nFact}</span>
     </div>
-    <div class="form-row c2">
-      <div class="form-field"><label class="required">Vehículo (marca, modelo, año)</label>
-        <input type="text" id="fe-vehiculo" placeholder="Ej: Toyota Corolla 2020 Plateado">
-      </div>
-      <div class="form-field"><label>N° Chasis / VIN</label>
-        <input type="text" id="fe-vin" placeholder="Número de chasis" style="text-transform:uppercase;font-family:monospace">
-      </div>
-    </div>
-    <div class="form-row c2">
-      <div class="form-field"><label>Propietario / Vendedor</label>
-        <input type="text" id="fe-propietario" placeholder="Nombre del dueño actual">
-      </div>
-      <div class="form-field"><label>Cédula / RNC del Propietario</label>
-        <input type="text" id="fe-prop-doc" placeholder="000-0000000-0">
-      </div>
-    </div>
-    <div class="form-row c2">
-      <div class="form-field"><label>Cliente / Comprador</label>
-        <input type="text" id="fe-cliente" placeholder="Nombre del comprador">
-      </div>
-      <div class="form-field"><label>Cédula / RNC del Comprador</label>
-        <input type="text" id="fe-cli-doc" placeholder="000-0000000-0">
-      </div>
-    </div>
-    <div class="form-row c3">
-      <div class="form-field"><label class="required">Monto Total</label>
-        <input type="text" id="fe-monto" value="0" oninput="fmtMoneyInput(this);calcPendFE()" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
-      </div>
-      <div class="form-field"><label>Abono Inicial</label>
-        <input type="text" id="fe-abono" value="0" oninput="fmtMoneyInput(this);calcPendFE()" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
-      </div>
-      <div class="form-field"><label>Pendiente</label>
-        <input type="text" id="fe-pendiente" readonly style="background:#f8fafc;font-weight:700;color:var(--red)" value="0">
-      </div>
-    </div>
-    <div class="form-row c2">
-      <div class="form-field"><label>Fecha</label><input type="date" id="fe-fecha" value="${today()}"></div>
-      <div class="form-field"><label>Moneda</label>
-        <select id="fe-moneda"><option value="RD$">RD$ — Pesos</option><option value="USD">USD — Dólares</option></select>
-      </div>
-    </div>
-    <div class="form-field"><label>Observaciones</label>
-      <textarea id="fe-obs" rows="2" placeholder="Condiciones del vehículo, acuerdos, notas..."></textarea>
-    </div>`,
+    ${_formFE(null)}`,
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
      <button class="btn btn-secondary" onclick="guardarFacturaExterna('${nFact}',false)">💾 Guardar sin imprimir</button>
      <button class="btn btn-primary" onclick="guardarFacturaExterna('${nFact}',true)">💾 Guardar e Imprimir</button>`);
 }
 function editarFacturaExterna(id){
   const f=(DB.facturasExternas||[]).find(x=>x.id===id);if(!f)return;
-  openModal('✏️ Editar Factura Externa — '+escHtml(f.numero),`
-    <div class="form-row c2">
-      <div class="form-field"><label class="required">Vehículo</label>
-        <input type="text" id="fe-vehiculo" value="${escHtml(f.vehiculo||'')}">
-      </div>
-      <div class="form-field"><label>N° Chasis / VIN</label>
-        <input type="text" id="fe-vin" value="${escHtml(f.vin||'')}" style="text-transform:uppercase;font-family:monospace">
-      </div>
-    </div>
-    <div class="form-row c2">
-      <div class="form-field"><label>Propietario / Vendedor</label>
-        <input type="text" id="fe-propietario" value="${escHtml(f.propietario||'')}">
-      </div>
-      <div class="form-field"><label>Cédula / RNC del Propietario</label>
-        <input type="text" id="fe-prop-doc" value="${escHtml(f.propietarioDoc||'')}">
-      </div>
-    </div>
-    <div class="form-row c2">
-      <div class="form-field"><label>Cliente / Comprador</label>
-        <input type="text" id="fe-cliente" value="${escHtml(f.cliente||'')}">
-      </div>
-      <div class="form-field"><label>Cédula / RNC del Comprador</label>
-        <input type="text" id="fe-cli-doc" value="${escHtml(f.clienteDoc||'')}">
-      </div>
-    </div>
-    <div class="form-row c3">
-      <div class="form-field"><label class="required">Monto Total</label>
-        <input type="text" id="fe-monto" value="${fmtMoneyDisplay(f.monto||0)}" oninput="fmtMoneyInput(this);calcPendFE()" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
-      </div>
-      <div class="form-field"><label>Abono</label>
-        <input type="text" id="fe-abono" value="${fmtMoneyDisplay(f.abono||0)}" oninput="fmtMoneyInput(this);calcPendFE()" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
-      </div>
-      <div class="form-field"><label>Pendiente</label>
-        <input type="text" id="fe-pendiente" readonly style="background:#f8fafc;font-weight:700;color:var(--red)" value="${fmtMoneyDisplay(f.pendiente||0)}">
-      </div>
-    </div>
-    <div class="form-row c2">
-      <div class="form-field"><label>Fecha</label><input type="date" id="fe-fecha" value="${f.fecha||today()}"></div>
-      <div class="form-field"><label>Moneda</label>
-        <select id="fe-moneda"><option value="RD$" ${(f.moneda||'RD$')==='RD$'?'selected':''}>RD$ — Pesos</option><option value="USD" ${f.moneda==='USD'?'selected':''}>USD — Dólares</option></select>
-      </div>
-    </div>
-    <div class="form-field"><label>Observaciones</label>
-      <textarea id="fe-obs" rows="2">${escHtml(f.obs||'')}</textarea>
-    </div>`,
+  openModal('✏️ Editar — '+escHtml(f.numero),_formFE(f),
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
      <button class="btn btn-primary" onclick="guardarEditFacturaExterna('${id}')">💾 Guardar Cambios</button>`);
 }
 function guardarEditFacturaExterna(id){
   const idx=(DB.facturasExternas||[]).findIndex(x=>x.id===id);if(idx<0)return;
-  const vehiculo=document.getElementById('fe-vehiculo').value.trim();
-  const monto=parseFloat((document.getElementById('fe-monto').value||'0').replace(/,/g,''));
-  if(!vehiculo){toast('Ingresa los datos del vehículo','error');return;}
-  if(!monto){toast('Ingresa el monto','error');return;}
-  const abono=parseFloat((document.getElementById('fe-abono').value||'0').replace(/,/g,''));
-  DB.facturasExternas[idx]={
-    ...DB.facturasExternas[idx],
-    vehiculo,
-    vin:document.getElementById('fe-vin').value.trim(),
-    propietario:document.getElementById('fe-propietario').value.trim(),
-    propietarioDoc:document.getElementById('fe-prop-doc').value.trim(),
-    cliente:document.getElementById('fe-cliente').value.trim(),
-    clienteDoc:document.getElementById('fe-cli-doc').value.trim(),
-    monto,abono,pendiente:Math.max(0,monto-abono),
-    moneda:document.getElementById('fe-moneda').value,
-    fecha:document.getElementById('fe-fecha').value,
-    obs:document.getElementById('fe-obs').value
-  };
-  sDB('facturasExternas');
-  closeModal();
-  toast('Factura actualizada ✓','success');
-  renderFacturaExterna();
+  const d=_leerCamposFE();
+  if(!d.vehiculo){toast('Ingresa los datos del vehículo','error');return;}
+  if(!d.monto){toast('Ingresa el monto','error');return;}
+  DB.facturasExternas[idx]={...DB.facturasExternas[idx],...d,pendiente:Math.max(0,d.monto-d.abono)};
+  sDB('facturasExternas');closeModal();toast('Factura actualizada ✓','success');renderFacturaExterna();
 }
 function calcPendFE(){
   const m=parseFloat((document.getElementById('fe-monto')?.value||'0').replace(/,/g,''));
@@ -12607,31 +12678,15 @@ function calcPendFE(){
   if(p)p.value=fmtMoneyDisplay(Math.max(0,m-a));
 }
 function guardarFacturaExterna(nFact,imprimir){
-  const vehiculo=document.getElementById('fe-vehiculo').value.trim();
-  const monto=parseFloat((document.getElementById('fe-monto').value||'0').replace(/,/g,''));
-  if(!vehiculo){toast('Ingresa los datos del vehículo','error');return;}
-  if(!monto){toast('Ingresa el monto','error');return;}
-  const abono=parseFloat((document.getElementById('fe-abono').value||'0').replace(/,/g,''));
-  const f={
-    id:uid(),numero:nFact,
-    vehiculo,
-    vin:document.getElementById('fe-vin').value.trim(),
-    propietario:document.getElementById('fe-propietario').value.trim(),
-    propietarioDoc:document.getElementById('fe-prop-doc').value.trim(),
-    cliente:document.getElementById('fe-cliente').value.trim(),
-    clienteDoc:document.getElementById('fe-cli-doc').value.trim(),
-    monto,abono,pendiente:Math.max(0,monto-abono),
-    moneda:document.getElementById('fe-moneda').value,
-    fecha:document.getElementById('fe-fecha').value,
-    obs:document.getElementById('fe-obs').value
-  };
+  const d=_leerCamposFE();
+  if(!d.vehiculo){toast('Ingresa los datos del vehículo','error');return;}
+  if(!d.monto){toast('Ingresa el monto','error');return;}
+  const f={id:uid(),numero:nFact,...d,pendiente:Math.max(0,d.monto-d.abono)};
   if(!DB.facturasExternas)DB.facturasExternas=[];
   DB.facturasExternas.push(f);
-  sDB('facturasExternas');
-  closeModal();
+  sDB('facturasExternas');closeModal();
   if(imprimir)imprimirFacturaExterna(f.id,true);
-  toast('Factura externa guardada ✓','success');
-  renderFacturaExterna();
+  toast('Factura externa guardada ✓','success');renderFacturaExterna();
 }
 function imprimirFacturaExterna(id,conEncabezado){
   const f=(DB.facturasExternas||[]).find(x=>x.id===id);if(!f)return;
@@ -12700,6 +12755,8 @@ function imprimirFacturaExterna(id,conEncabezado){
     <div class="g2">
       <div class="campo"><label>Nombre</label><span>${escHtml(f.cliente||'—')}</span></div>
       <div class="campo"><label>Cédula / RNC</label><span>${escHtml(f.clienteDoc||'—')}</span></div>
+      ${f.telefono?`<div class="campo"><label>Teléfono</label><span>${escHtml(f.telefono)}</span></div>`:''}
+      ${(f.ciudad||f.direccion)?`<div class="campo"><label>Dirección</label><span>${escHtml([f.direccion,f.ciudad].filter(Boolean).join(', '))}</span></div>`:''}
     </div>
   </div>
   <div class="sec">
@@ -12711,6 +12768,7 @@ function imprimirFacturaExterna(id,conEncabezado){
         <td style="font-weight:800">${parseFloat(f.pendiente||0)>0?'PENDIENTE':'SALDADO'}</td>
         <td class="val" style="font-size:16px">${fV(f.pendiente||0)}</td>
       </tr>
+      ${f.banco&&f.cuenta?`<tr><td class="lbl" style="font-size:10px">Banco / Cuenta</td><td class="val" style="font-size:11px">${escHtml(f.banco)} — ${escHtml(f.cuenta)}</td></tr>`:''}
     </table>
   </div>
   ${f.obs?`<div class="aviso">📋 ${escHtml(f.obs)}</div>`:''}
