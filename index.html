@@ -2275,7 +2275,25 @@ function agregarGastoVeh(vid){
   toast('Gasto agregado ✓','success');
   gastosVehiculo(vid);
 }
-function eliminarGastoVeh(gid,vid){if(currentUser?.role!=='admin'&&!canDo('eliminar')){toast('No tienes permiso para eliminar','error');return;}const _gv=(DB.gastosVehiculos||[]).find(g=>g.id===gid);DB.gastosVehiculos=(DB.gastosVehiculos||[]).filter(g=>g.id!==gid);sDB('gastosVehiculos');logBit('gastosVeh','Eliminó gasto vehículo',(_gv?.tipo||'')+(` — `)+(_gv?.descripcion||''));toast('Eliminado','success');gastosVehiculo(vid);}
+function eliminarGastoVeh(gid,vid){
+  if(currentUser?.role!=='admin'&&!canDo('eliminar')){toast('No tienes permiso para eliminar','error');return;}
+  const _gv=(DB.gastosVehiculos||[]).find(g=>g.id===gid);
+  // Eliminar movimiento de caja si era CONTADO
+  if(_gv&&(_gv.formaPago||'CONTADO')!=='CREDITO'){
+    const monto=parseFloat(_gv.montoFactura||_gv.monto||0);
+    const fecha=_gv.fecha||'';
+    const cajaBefore=DB.caja.length;
+    DB.caja=DB.caja.filter(c=>!(
+      c.categoria==='Gasto de Vehículo'&&c.fecha===fecha&&
+      Math.abs(parseFloat(c.monto||0)-monto)<0.01
+    ));
+    if(DB.caja.length<cajaBefore)sDB('caja');
+  }
+  DB.gastosVehiculos=(DB.gastosVehiculos||[]).filter(g=>g.id!==gid);
+  sDB('gastosVehiculos');
+  logBit('gastosVeh','Eliminó gasto vehículo',(_gv?.tipo||'')+(' — ')+(_gv?.descripcion||''));
+  toast('Eliminado','success');gastosVehiculo(vid);
+}
 
 function imprimirGastosVehiculo(vid){
   const v=DB.vehiculos.find(x=>x.id===vid);if(!v)return;
@@ -2856,7 +2874,21 @@ function gasAccion(accion){
   if(!gasSelectedId)return;
   const i=DB.gastos.findIndex(g=>g.id===gasSelectedId);if(i<0)return;
   if(accion==='editar'&&!canDo('editar')){toast('No tienes permiso para editar','error');return;}else if(accion==='editar')editarGasto(i);
-  else if(accion==='eliminar'&&!canDo('eliminar')){toast('No tienes permiso para eliminar','error');return;}else if(accion==='eliminar'){if(currentUser?.role!=='admin'&&!canDo('eliminar')){toast('No tienes permiso para eliminar','error');return;}const _gd=DB.gastos[i];logBit('gastos','Eliminó gasto empresa',_gd?.descripcion||'');DB.gastos.splice(i,1);sDB('gastos');toast('Eliminado','success');gasSelectedId=null;renderGastos();}
+  else if(accion==='eliminar'&&!canDo('eliminar')){toast('No tienes permiso para eliminar','error');return;}else if(accion==='eliminar'){if(currentUser?.role!=='admin'&&!canDo('eliminar')){toast('No tienes permiso para eliminar','error');return;}const _gd=DB.gastos[i];
+    // Eliminar movimientos de caja asociados a este gasto
+    if(_gd&&(_gd.formaPago==='CONTADO'||_gd.formaPago==='TRANSFERENCIA'||_gd.formaPago==='CHEQUE')){
+      const descKey='Gasto: '+(_gd.descripcion||'');
+      const fechaKey=_gd.fecha||'';
+      const montoKey=parseFloat(_gd.montoAbonado||_gd.monto||0);
+      const cajaBefore=DB.caja.length;
+      DB.caja=DB.caja.filter(c=>!(
+        c.categoria==='Gasto de Empresa'&&
+        c.fecha===fechaKey&&
+        Math.abs(parseFloat(c.monto||0)-montoKey)<0.01
+      ));
+      if(DB.caja.length<cajaBefore)sDB('caja');
+    }
+    logBit('gastos','Eliminó gasto empresa',_gd?.descripcion||'');DB.gastos.splice(i,1);sDB('gastos');toast('Eliminado ✓','success');gasSelectedId=null;renderGastos();}
 }
 function editarGasto(i){
   const g=DB.gastos[i];
@@ -2967,14 +2999,22 @@ function guardarEditGasto(i){
   DB.gastos[i].cuenta=cuenta;
   DB.gastos[i].moneda=moneda;
   DB.gastos[i].fechaLimite=document.getElementById('g-fecha-limite')?.value||g.fechaLimite||'';
-  // Registrar en caja si es pago inmediato y el abonado aumentó
+  // Sincronizar caja: eliminar movimiento anterior y recrear con datos actualizados
   const esPagoInm=['CONTADO','TRANSFERENCIA','CHEQUE'].includes(formaPago);
-  if(esPagoInm&&diferencia>0){
-    DB.caja.push({id:uid(),fecha:DB.gastos[i].fecha,tipo:'SALIDA',categoria:'Gasto de Empresa',
-      descripcion:'Gasto: '+desc,monto:diferencia,moneda,banco,cuenta,
-      referencia:banco&&cuenta?banco+' / '+cuenta:cuenta,responsable:currentUser?.nombre||''});
-    sDB('caja');
-  } else if(esPagoInm&&abonadoAnterior===0&&montoAbonado>0){
+  const eraContadoAntes=['CONTADO','TRANSFERENCIA','CHEQUE'].includes(g.formaPago||'CONTADO');
+  // Eliminar movimiento anterior de caja si existía
+  if(eraContadoAntes&&abonadoAnterior>0){
+    const fechaAntes=g.fecha||'';
+    const cajaBefore=DB.caja.length;
+    DB.caja=DB.caja.filter(c=>!(
+      c.categoria==='Gasto de Empresa'&&
+      c.fecha===fechaAntes&&
+      Math.abs(parseFloat(c.monto||0)-abonadoAnterior)<0.01
+    ));
+    if(DB.caja.length<cajaBefore)sDB('caja');
+  }
+  // Crear nuevo movimiento en caja si corresponde
+  if(esPagoInm&&montoAbonado>0){
     DB.caja.push({id:uid(),fecha:DB.gastos[i].fecha,tipo:'SALIDA',categoria:'Gasto de Empresa',
       descripcion:'Gasto: '+desc,monto:montoAbonado,moneda,banco,cuenta,
       referencia:banco&&cuenta?banco+' / '+cuenta:cuenta,responsable:currentUser?.nombre||''});
@@ -3094,8 +3134,8 @@ function agregarCatGasto(){
   toast('Categoría "'+n+'" agregada ✓','success');
 }
 function calcPendienteGasto(){
-  const factura=parseFloat(document.getElementById('g-monto-factura')?.value||0);
-  const abonado=parseFloat(document.getElementById('g-monto-abonado')?.value||0);
+  const factura=parseFloat((document.getElementById('g-monto-factura')?.value||'0').replace(/,/g,''));
+  const abonado=parseFloat((document.getElementById('g-monto-abonado')?.value||'0').replace(/,/g,''));
   const pend=document.getElementById('g-monto-pendiente');
   if(pend)pend.value=fmtMoneyDisplay(Math.max(0,factura-abonado));
   // Actualizar estado automático
@@ -3267,13 +3307,38 @@ function nomAccion(accion){
     const p=(DB.nominaPagos||[]).find(x=>x.id===nomPagoSelectedId);
     if(!p)return;
     const emp=DB.nomina.find(e=>e.id===p.empleadoId);
+    const epBcs=DB.config.bancoCuentas||[];
+    const epMonedaAct=p.moneda||'RD$';
+    const epBancosDisp=epBcs.filter(b=>(b.cuentas||[]).some(c=>epMonedaAct==='USD'?c.tipo.includes('USD'):!c.tipo.includes('USD')));
+    const epBancoSel=epBcs.find(b=>b.banco===p.banco)||epBancosDisp[0]||epBcs[0];
+    const epCuentasDisp=(epBancoSel?.cuentas||[]).filter(c=>epMonedaAct==='USD'?c.tipo.includes('USD'):!c.tipo.includes('USD'));
+    const epBancoOpts=epBcs.map(b=>`<option value="${escHtml(b.banco)}" ${b.banco===p.banco?'selected':''}>${escHtml(b.banco)}</option>`).join('');
+    const epCuentaOpts=epCuentasDisp.map(c=>{const v=c.tipo+' — '+c.numero;return`<option value="${escHtml(v)}" ${v===p.cuenta?'selected':''}>${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('');
     openModal('✏️ Editar Pago — '+escHtml(emp?.nombre||p.empleadoNombre||''),`
-      <div class="form-field"><label>Fecha</label><input type="date" id="ep-fecha" value="${p.fecha||''}"></div>
-      <div class="form-field"><label>Monto</label><input type="text" id="ep-monto" value="${fmtMoneyDisplay(p.monto||0)}" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)" min="0"></div>
-      <div class="form-field"><label>Tipo</label><select id="ep-tipo">
-        ${[['MEN','Mensual'],['1Q','1ra Quincena'],['2Q','2da Quincena'],['SEM','Semanal'],['COM','Comisión']].map(([v,l])=>`<option value="${v}" ${p.tipo===v?'selected':''}>${l}</option>`).join('')}
-      </select></div>
-      <div class="form-field"><label>Nota</label><input type="text" id="ep-nota" value="${escHtml(p.nota||'')}"></div>`,
+      <div class="form-row c2">
+        <div class="form-field"><label>Fecha</label><input type="date" id="ep-fecha" value="${p.fecha||''}"></div>
+        <div class="form-field"><label>Monto</label><input type="text" id="ep-monto" value="${fmtMoneyDisplay(p.monto||0)}" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)" min="0"></div>
+      </div>
+      <div class="form-row c3">
+        <div class="form-field"><label>Moneda</label>
+          <select id="ep-moneda" onchange="filtrarBancosPorMoneda('ep')">
+            <option value="RD$" ${epMonedaAct==='RD$'?'selected':''}>RD$ — Pesos</option>
+            <option value="USD" ${epMonedaAct==='USD'?'selected':''}>USD — Dólares</option>
+          </select>
+        </div>
+        <div class="form-field"><label>Banco</label>
+          <select id="ep-banco" onchange="filtrarCuentasPorBanco('ep')">${epBancoOpts}</select>
+        </div>
+        <div class="form-field"><label>Cuenta</label>
+          <select id="ep-cuenta">${epCuentaOpts}</select>
+        </div>
+      </div>
+      <div class="form-row c2">
+        <div class="form-field"><label>Tipo</label><select id="ep-tipo">
+          ${[['MEN','Mensual'],['1Q','1ra Quincena'],['2Q','2da Quincena'],['SEM','Semanal'],['COM','Comisión']].map(([v,l])=>`<option value="${v}" ${p.tipo===v?'selected':''}>${l}</option>`).join('')}
+        </select></div>
+        <div class="form-field"><label>Nota</label><input type="text" id="ep-nota" value="${escHtml(p.nota||'')}"></div>
+      </div>`,
       `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
        <button class="btn btn-primary" onclick="guardarEditPagoNomina('${p.id}')">💾 Guardar</button>`);
     return;
@@ -3281,6 +3346,17 @@ function nomAccion(accion){
   if(accion==='eliminar-pago'){
     if(!nomPagoSelectedId){toast('Selecciona un pago','error');return;}
     if(currentUser?.role!=='admin'&&!canDo('eliminar')){toast('No tienes permiso para eliminar pagos','error');return;}
+    const _np=(DB.nominaPagos||[]).find(p=>p.id===nomPagoSelectedId);
+    // Eliminar movimiento de caja asociado
+    if(_np){
+      const monto=parseFloat(_np.monto||_np.total||0);
+      const fecha=_np.fecha||'';
+      DB.caja=DB.caja.filter(c=>!(
+        c.categoria==='Nómina/Salario'&&c.fecha===fecha&&
+        Math.abs(parseFloat(c.monto||0)-monto)<0.01
+      ));
+      sDB('caja');
+    }
     DB.nominaPagos=(DB.nominaPagos||[]).filter(p=>p.id!==nomPagoSelectedId);
     sDB('nominaPagos');nomPagoSelectedId=null;toast('Pago eliminado','success');renderNomina();return;
   }
@@ -3298,12 +3374,27 @@ function guardarEditPagoNomina(pid){
   const monto=parseFloat((document.getElementById('ep-monto')?.value||'0').replace(/,/g,''));
   const tipo=document.getElementById('ep-tipo')?.value||'MEN';
   const nota=document.getElementById('ep-nota')?.value?.trim()||'';
+  const banco=document.getElementById('ep-banco')?.value||'';
+  const cuenta=document.getElementById('ep-cuenta')?.value||'';
+  const moneda=document.getElementById('ep-moneda')?.value||'RD$';
   if(!fecha){toast('La fecha es requerida','error');return;}
   if(!monto||monto<=0){toast('El monto debe ser mayor a 0','error');return;}
   const idx=(DB.nominaPagos||[]).findIndex(p=>p.id===pid);
   if(idx<0){toast('Pago no encontrado','error');return;}
-  DB.nominaPagos[idx]={...DB.nominaPagos[idx],fecha,monto,tipo,nota};
-  sDB('nominaPagos');closeModal();toast('Pago actualizado ✓','success');renderNomina();
+  const pagoAnteriorNom=DB.nominaPagos[idx];
+  // Remove previous caja movement
+  DB.caja=DB.caja.filter(c=>!(
+    c.categoria==='Nómina/Salario'&&
+    c.fecha===pagoAnteriorNom.fecha&&
+    Math.abs(parseFloat(c.monto||0)-parseFloat(pagoAnteriorNom.monto||0))<0.01
+  ));
+  // Add updated movement
+  DB.caja.push({id:uid(),fecha,tipo:'SALIDA',categoria:'Nómina/Salario',
+    descripcion:'Pago nómina: '+(pagoAnteriorNom.empleadoNombre||''),
+    monto,moneda,banco,cuenta,referencia:banco&&cuenta?banco+' / '+cuenta:cuenta,
+    responsable:currentUser?.nombre||''});
+  DB.nominaPagos[idx]={...DB.nominaPagos[idx],fecha,monto,tipo,nota,banco,cuenta,moneda};
+  sDB('nominaPagos');sDB('caja');closeModal();toast('Pago actualizado ✓','success');renderNomina();
 }
 function registrarPagoNomina(i){
   const e=DB.nomina[i];
@@ -3367,7 +3458,7 @@ function guardarPagoNomina(i){
   const nota=document.getElementById('np-nota')?.value||'';
   const tipoLabel={MEN:'Mensual','1Q':'1ra Quincena','2Q':'2da Quincena',SEM:'Semanal',COM:'Comisión'}[tipo]||tipo;
   if(!DB.nominaPagos)DB.nominaPagos=[];
-  DB.nominaPagos.push({id:uid(),empleadoId:e.id,empleadoNombre:e.nombre,mes,tipo,monto,cuenta,fecha:today(),nota});
+  DB.nominaPagos.push({id:uid(),empleadoId:e.id,empleadoNombre:e.nombre,mes,tipo,monto,banco,cuenta,moneda,fecha:today(),nota});
   DB.caja.push({id:uid(),fecha:today(),tipo:'SALIDA',categoria:'Nómina/Salario',
     descripcion:'Pago nómina: '+e.nombre+' ('+tipoLabel+')',
     monto,moneda,banco,cuenta,referencia:banco&&cuenta?banco+' / '+cuenta:cuenta,responsable:currentUser.nombre});
@@ -3769,7 +3860,7 @@ function editarUsuario(i){
       </div>
       <div style="font-size:11px;font-weight:700;margin-bottom:6px;color:var(--gray);text-transform:uppercase">✏️ Permisos de Editar por módulo:</div>
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-bottom:10px">
-        ${[{k:'editarVentas',l:'Ventas'},{k:'editarClientes',l:'Clientes'},{k:'editarSuplidores',l:'Suplidores'},{k:'editarGastos',l:'Gastos'},{k:'editarNomina',l:'Nómina'},{k:'editarGastosVeh',l:'Gastos Vehículo'},{k:'editarCobros',l:'CxC Cobros'},{k:'editarCxp',l:'CxP Pagos'},{k:'editarVehiculos',l:'Vehículos'},{k:'editarCaja',l:'Caja'},{k:'editarCotizaciones',l:'Cotizaciones'},{k:'editarAutorizaciones',l:'Autorizaciones'},{k:'editarSeguros',l:'Seguros'},{k:'editarFacturas',l:'Facturas Ext.'},{k:'editarCuentas',l:'Cuentas'},{k:'editarCumpleanos',l:'Cumpleaños'},{k:'prestamosOtorgados',l:'🤝 Préstamos Otorgados'}].map(p=>`<label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;padding:4px 6px;background:#eff6ff;border-radius:5px;border:1px solid #bfdbfe"><input type="checkbox" id="u-perm-${p.k}" ${(perms[p.k]||u.role==='admin')?'checked':''} style="accent-color:var(--blue)"> ${p.l}</label>`).join('')}
+        ${[{k:'editarVentas',l:'Ventas'},{k:'editarClientes',l:'Clientes'},{k:'editarSuplidores',l:'Suplidores'},{k:'editarGastos',l:'Gastos'},{k:'editarNomina',l:'Nómina'},{k:'editarGastosVeh',l:'Gastos Vehículo'},{k:'editarCobros',l:'CxC Cobros'},{k:'editarCxp',l:'CxP Pagos'},{k:'editarVehiculos',l:'Vehículos'},{k:'editarCaja',l:'Caja'},{k:'editarCotizaciones',l:'Cotizaciones'},{k:'editarAutorizaciones',l:'Autorizaciones'},{k:'editarSeguros',l:'Seguros'},{k:'editarFacturas',l:'Facturas Ext.'},{k:'editarCuentas',l:'Cuentas'},{k:'editarCumpleanos',l:'Cumpleaños'}].map(p=>`<label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;padding:4px 6px;background:#eff6ff;border-radius:5px;border:1px solid #bfdbfe"><input type="checkbox" id="u-perm-${p.k}" ${(perms[p.k]||u.role==='admin')?'checked':''} style="accent-color:var(--blue)"> ${p.l}</label>`).join('')}
       </div>
       <div style="font-size:11px;font-weight:700;margin-bottom:6px;color:var(--gray);text-transform:uppercase">🗑 Permisos de Borrar por módulo:</div>
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px">
@@ -3823,7 +3914,7 @@ function guardarUsuario(idx){
   if(idx===undefined&&DB.users.find(u=>u.username===user)){toast('El usuario ya existe','error');return;}
   const MODS_IDS=['dashboard','informes','consultas','suplidores','inventario','gastosVeh','cxp','clientes','ventas','cxc','lavado','gastos','nomina','caja','cotizaciones','autorizaciones','seguros','facturaExterna','alertas','verSaldoCaja','chat','prestamos','cuentas','cumpleanos'];
   const nuevosMods=MODS_IDS.filter(m=>{const el=document.getElementById('u-mod-'+m);return el&&el.checked;});
-  const permKeys=['editar','eliminar','imprimir','pdf','editarVentas','editarClientes','editarSuplidores','editarGastos','editarNomina','editarGastosVeh','editarCobros','editarCxp','editarVehiculos','editarCaja','editarCotizaciones','editarAutorizaciones','editarSeguros','editarFacturas','editarCuentas','editarCumpleanos','prestamosOtorgados','borrarVentas','borrarClientes','borrarSuplidores','borrarGastos','borrarNomina','borrarGastosVeh','borrarCobros','borrarCxp','borrarVehiculos','borrarCaja','borrarCotizaciones','borrarAutorizaciones','borrarSeguros','borrarFacturas','borrarCuentas','borrarCumpleanos'];
+  const permKeys=['editar','eliminar','imprimir','pdf','editarVentas','editarClientes','editarSuplidores','editarGastos','editarNomina','editarGastosVeh','editarCobros','editarCxp','editarVehiculos','editarCaja','editarCotizaciones','editarAutorizaciones','editarSeguros','editarFacturas','editarCuentas','editarCumpleanos','borrarVentas','borrarClientes','borrarSuplidores','borrarGastos','borrarNomina','borrarGastosVeh','borrarCobros','borrarCxp','borrarVehiculos','borrarCaja','borrarCotizaciones','borrarAutorizaciones','borrarSeguros','borrarFacturas','borrarCuentas','borrarCumpleanos'];
   const nuevosPerms={};permKeys.forEach(k=>{const el=document.getElementById('u-perm-'+k);if(el)nuevosPerms[k]=el.checked;});
   if(idx!==undefined){DB.users[idx].nombre=nombre;DB.users[idx].username=user;DB.users[idx].role=document.getElementById('u-role').value;if(pass)DB.users[idx].password=pass;DB.users[idx].modulos=nuevosMods;DB.users[idx].permisos=nuevosPerms;if(currentUser.id===DB.users[idx].id){currentUser=DB.users[idx];}}
   else DB.users.push({id:uid(),nombre,username:user,password:pass,role:document.getElementById('u-role').value,activo:true,modulos:nuevosMods,permisos:nuevosPerms});
@@ -5153,7 +5244,7 @@ function renderAlertas(){
   });
   (DB.prestamosOtorgados||[]).filter(p=>p.saldoPendiente>0).forEach(po=>{
     const vencidas=(po.tablaAmortizacion||[]).filter(r=>!r.pagado&&r.fecha&&r.fecha<=hoy);
-    if(vencidas.length>0)todasAlertas.push({tipo:'CUOTA_VENC_PRESTAMO',tipoLabel:'Cuota Préstamo Vencida',nivel:'danger',titulo:'Cuota(s) vencida(s) — Préstamo Otorgado',msg:`${po.cliente} — ${vencidas.length} cuota(s) sin pagar — Saldo: ${fmtP(po.saldoPendiente,po.moneda||'RD$')}`,modulo:'cxc',moduloLabel:'CxC',id:'pvenc_'+po.id});
+  
   });
   (DB.cxc||[]).filter(x=>(x.status==='PENDIENTE'||x.status==='PARCIAL')&&(!x.fechaVence||x.fechaVence>hoy)).forEach(x=>{
     todasAlertas.push({tipo:'CXC',tipoLabel:'CxC Pendiente',nivel:'warning',titulo:'Cuenta por cobrar pendiente',msg:`${x.cliente} — ${fmt(x.saldo)}`,modulo:'cxc',moduloLabel:'CxC',id:'cxc_'+x.id});
@@ -5243,7 +5334,7 @@ function exportarAlertasFiltradas(){
   DB.vehiculos.filter(v=>v.status!=='VENDIDO'&&!(DB.gastosVehiculos||[]).some(g=>g.vehiculoId===v.id)).forEach(v=>todasAlertas.push({nivel:'🟡',nivelKey:'warning',tipo:'SIN_COSTO',tipoLabel:'Sin Costos',modulo:'gastosVeh',titulo:'Sin costos registrados',msg:`${v.codigo||''} ${v.marca} ${v.modelo}`}));
   (DB.gastosVehiculos||[]).filter(g=>parseFloat(g.montoPendiente||0)>0).forEach(g=>{const v=DB.vehiculos.find(x=>x.id===g.vehiculoId);todasAlertas.push({nivel:'🔴',nivelKey:'danger',tipo:'CXP',tipoLabel:'CxP Pendiente',modulo:'cxp',titulo:'Gasto pendiente',msg:`${v?v.codigo+' '+v.marca+' '+v.modelo:'?'} — ${g.tipo} — ${fmt(g.montoPendiente)}`});});
   (DB.cxc||[]).filter(x=>(x.status==='PENDIENTE'||x.status==='PARCIAL')&&x.fechaVence&&x.fechaVence<=hoy).forEach(x=>todasAlertas.push({nivel:'🔴',nivelKey:'danger',tipo:'CXC_VENCIDA',tipoLabel:'CxC Vencida',modulo:'cxc',titulo:'CxC Vencida',msg:`${x.cliente} — ${fmt(x.saldo)} — Venció: ${fmtDate(x.fechaVence)}`}));
-  (DB.prestamosOtorgados||[]).filter(p=>p.saldoPendiente>0).forEach(po=>{const venc=(po.tablaAmortizacion||[]).filter(r=>!r.pagado&&r.fecha&&r.fecha<=hoy);if(venc.length>0)todasAlertas.push({nivel:'🔴',nivelKey:'danger',tipo:'CUOTA_VENC_PRESTAMO',tipoLabel:'Cuota Préstamo Vencida',modulo:'cxc',titulo:'Cuota(s) vencida(s)',msg:`${po.cliente} — ${venc.length} cuota(s) — Saldo: ${fmtP(po.saldoPendiente,po.moneda||'RD$')}`});});
+  // Préstamos Otorgados removido del sistema
   (DB.cxc||[]).filter(x=>(x.status==='PENDIENTE'||x.status==='PARCIAL')&&(!x.fechaVence||x.fechaVence>hoy)).forEach(x=>todasAlertas.push({nivel:'🟡',nivelKey:'warning',tipo:'CXC',tipoLabel:'CxC Pendiente',modulo:'cxc',titulo:'CxC Pendiente',msg:`${x.cliente} — ${fmt(x.saldo)}`}));
   DB.vehiculos.filter(v=>v.status!=='VENDIDO'&&v.fecha).forEach(v=>{const d=Math.floor((hoyDate-new Date(v.fecha+'T12:00:00'))/(1000*60*60*24));if(d>=365)todasAlertas.push({nivel:'🔴',nivelKey:'danger',tipo:'SIN_VENDER_1A',tipoLabel:'1 Año sin Vender',modulo:'inventario',titulo:'1 Año sin venderse',msg:`${v.codigo} ${v.marca} ${v.modelo} — ${d} días`});else if(d>=180)todasAlertas.push({nivel:'🟡',nivelKey:'warning',tipo:'SIN_VENDER_6M',tipoLabel:'6 Meses sin Vender',modulo:'inventario',titulo:'6 Meses sin venderse',msg:`${v.codigo} ${v.marca} ${v.modelo} — ${d} días`});});
   DB.ventas.filter(v=>v.docsPendientes&&v.fechaLimDocs).forEach(v=>{const venc=v.fechaLimDocs<=hoy;todasAlertas.push({nivel:venc?'🔴':'🟡',nivelKey:venc?'danger':'warning',tipo:'DOCS',tipoLabel:'Documentos Pendientes',modulo:'ventas',titulo:venc?'Docs VENCIDOS':'Docs Pendientes',msg:`${v.vehiculo||''} — Límite: ${fmtDate(v.fechaLimDocs)}`});});
@@ -5270,7 +5361,7 @@ function guardarPermisosUsuarioConfig(i){
   const u=DB.users[i];
   if(!u)return;
   const MODS_IDS=['dashboard','informes','consultas','suplidores','inventario','gastosVeh','cxp','clientes','ventas','cxc','lavado','gastos','nomina','caja','cotizaciones','autorizaciones','seguros','facturaExterna','alertas','verSaldoCaja','chat','prestamos','cuentas','cumpleanos'];
-  const ALERT_IDS=['SIN_VIN','SIN_COSTO','CXP','CXC_VENCIDA','CXC','CUOTA_VENC_PRESTAMO','SIN_VENDER_6M','SIN_VENDER_1A','DOCS'];
+  const ALERT_IDS=['SIN_VIN','SIN_COSTO','CXP','CXC_VENCIDA','CXC','SIN_VENDER_6M','SIN_VENDER_1A','DOCS'];
   if(u.role!=='admin'){
     const mods=MODS_IDS.filter(id=>document.getElementById(`cfg-mod-${i}-${id}`)?.checked);
     const alertas=ALERT_IDS.filter(id=>document.getElementById(`cfg-alerta-${i}-${id}`)?.checked);
@@ -5344,7 +5435,7 @@ function renderConfig(){
     {id:'CXP',label:'Gastos por pagar (CxP)'},
     {id:'CXC_VENCIDA',label:'CxC vencidas'},
     {id:'CXC',label:'CxC pendientes'},
-    {id:'CUOTA_VENC_PRESTAMO',label:'Cuotas vencidas — Préstamos Otorgados'},
+    
     {id:'SIN_VENDER_6M',label:'6 meses sin venderse'},
     {id:'SIN_VENDER_1A',label:'1 año sin venderse'},
     {id:'DOCS',label:'Documentos de entrega pendientes'}
@@ -5670,7 +5761,7 @@ function renderConfig(){
       <div style="display:flex;flex-direction:column;gap:12px">
         ${DB.users.map((u,ui)=>{
           const MODS_LIST=[{id:'dashboard',label:'Inicio'},{id:'informes',label:'Informe'},{id:'consultas',label:'🔍 Consultas'},{id:'suplidores',label:'Suplidores'},{id:'inventario',label:'Reg. Vehículo'},{id:'gastosVeh',label:'Gastos Veh.'},{id:'cxp',label:'CxP'},{id:'clientes',label:'Clientes'},{id:'ventas',label:'Ventas'},{id:'cxc',label:'CxC'},{id:'lavado',label:'🛡️ Lavado'},{id:'gastos',label:'Gastos Emp.'},{id:'nomina',label:'Nómina'},{id:'caja',label:'Caja'},{id:'cotizaciones',label:'Cotizaciones'},{id:'autorizaciones',label:'Autorización Compra'},{id:'seguros',label:'Seguros'},{id:'facturaExterna',label:'Facturas Externas'},{id:'alertas',label:'Alertas'},{id:'verSaldoCaja',label:'💰 Ver Saldo Caja'},{id:'chat',label:'💬 Chat'},{id:'cuentas',label:'🏦 Cuentas'},{id:'cumpleanos',label:'🎂 Cumpleaños'}];
-          const ALERT_TYPES=[{id:'SIN_VIN',label:'Sin VIN'},{id:'SIN_COSTO',label:'Sin costos'},{id:'CXP',label:'CxP pendientes'},{id:'CXC_VENCIDA',label:'CxC vencidas'},{id:'CXC',label:'CxC pendientes'},{id:'CUOTA_VENC_PRESTAMO',label:'Cuotas préstamos'},{id:'SIN_VENDER_6M',label:'6m sin vender'},{id:'SIN_VENDER_1A',label:'1 año sin vender'},{id:'DOCS',label:'Docs pendientes'}];
+          const ALERT_TYPES=[{id:'SIN_VIN',label:'Sin VIN'},{id:'SIN_COSTO',label:'Sin costos'},{id:'CXP',label:'CxP pendientes'},{id:'CXC_VENCIDA',label:'CxC vencidas'},{id:'CXC',label:'CxC pendientes'},{id:'SIN_VENDER_6M',label:'6m sin vender'},{id:'SIN_VENDER_1A',label:'1 año sin vender'},{id:'DOCS',label:'Docs pendientes'}];
           const mods=u.modulos||[];
           const alertas=u.alertasPermitidas||ALERT_TYPES.map(a=>a.id);
           return '<div style="background:var(--gray2);border-radius:10px;padding:14px;border:1px solid var(--gray3);margin-bottom:8px">'
@@ -5700,7 +5791,7 @@ function renderConfig(){
     </div>`;
 }
 function guardarMisNotificaciones(){
-  const ALERT_IDS=['SIN_VIN','SIN_COSTO','CXP','CXC_VENCIDA','CXC','CUOTA_VENC_PRESTAMO','SIN_VENDER_6M','SIN_VENDER_1A','DOCS'];
+  const ALERT_IDS=['SIN_VIN','SIN_COSTO','CXP','CXC_VENCIDA','CXC','SIN_VENDER_6M','SIN_VENDER_1A','DOCS'];
   const seleccionadas=ALERT_IDS.filter(id=>{const el=document.getElementById('mn-'+id);return el&&el.checked;});
   const idx=DB.users.findIndex(u=>u.id===currentUser.id);
   if(idx!==-1){
@@ -6763,6 +6854,32 @@ function guardarEditGastoVeh(i){
     DB.vehiculos[iv].costo=totalGastos;
     sDB('vehiculos');
   }
+  // Sync caja: remove old movement and add updated one
+  const _gvOld=DB.gastosVehiculos[i];
+  const montoAnterior=parseFloat(_gvOld.montoFactura||_gvOld.monto||0);
+  const fechaAnterior=_gvOld.fecha||'';
+  // Remove old caja movement
+  const cajaBefore=DB.caja.length;
+  DB.caja=DB.caja.filter(c=>!(
+    c.categoria==='Gasto de Vehículo'&&c.fecha===fechaAnterior&&
+    Math.abs(parseFloat(c.monto||0)-montoAnterior)<0.01
+  ));
+  if(DB.caja.length<cajaBefore)sDB('caja');
+  // Add updated movement if not credit
+  const nuevaForma=document.getElementById('egv-forma')?.value||_gvOld.formaPago||'CONTADO';
+  if(nuevaForma!=='CREDITO'){
+    const nuevoBanco=document.getElementById('egv-banco')?.value||_gvOld.banco||'';
+    const nuevaCuenta=document.getElementById('egv-cuenta')?.value||_gvOld.cuenta||'';
+    const nuevaMoneda=document.getElementById('egv-moneda')?.value||_gvOld.moneda||'RD$';
+    const nuevoMonto=parseFloat((document.getElementById('egv-factura')?.value||'0').replace(/,/g,''));
+    DB.caja.push({id:uid(),fecha:DB.gastosVehiculos[i].fecha,tipo:'SALIDA',
+      categoria:'Gasto de Vehículo',
+      descripcion:`Gasto [${DB.gastosVehiculos[i].vehiculo||''}]: ${DB.gastosVehiculos[i].tipo||''} — ${DB.gastosVehiculos[i].descripcion||''}`,
+      monto:nuevoMonto,moneda:nuevaMoneda,banco:nuevoBanco,cuenta:nuevaCuenta,
+      referencia:nuevoBanco&&nuevaCuenta?nuevoBanco+' / '+nuevaCuenta:nuevaCuenta,
+      responsable:currentUser?.nombre||''});
+    sDB('caja');
+  }
   sDB('gastosVehiculos');
   closeModal();
   logBit('gastosVeh','Editó gasto',DB.gastosVehiculos[i]?.tipo||'');toast('Gasto actualizado ✓','success');
@@ -7700,6 +7817,14 @@ function confirmarEliminarVenta(id){
     if(vi>=0){DB.vehiculos[vi].status='ACTIVO';DB.vehiculos[vi].fechaVenta='';DB.vehiculos[vi].precioVentaFinal=0;sDB('vehiculos');}
     // Eliminar CxC asociada
     DB.cxc=DB.cxc.filter(x=>x.ventaId!==id);sDB('cxc');
+  }
+  // Eliminar movimientos de caja asociados a la venta
+  if(v){
+    DB.caja=DB.caja.filter(c=>!(
+      (c.categoria==='Venta de Vehículo'||c.categoria==='Cobro de Venta')&&
+      (c.referencia===v.factura||c.descripcion?.includes(v.factura||'__NONE__'))
+    ));
+    sDB('caja');
   }
   DB.ventas=DB.ventas.filter(x=>x.id!==id);
   logBit('ventas','Eliminó venta',v?.factura||'');sDB('ventas');closeModal();toast('Venta eliminada','success');renderVentas();
@@ -9253,9 +9378,30 @@ function eliminarRegistroCXP(id,origen){
   if(!canDo('eliminar')&&!currentUser?.permisos?.borrarCxp&&currentUser?.role!=='admin'){toast('No tienes permiso para eliminar','error');return;}
   if(!confirm('¿Eliminar este registro de CXP? Esta acción no se puede deshacer.'))return;
   if(origen==='manual'){
+    const _cxp=(DB.cxp||[]).find(g=>g.id===id);
+    // Eliminar movimientos de caja asociados (pagos registrados)
+    if(_cxp&&parseFloat(_cxp.montoPagado||0)>0){
+      const monto=parseFloat(_cxp.montoPagado||0);
+      const fecha=_cxp.fechaPago||_cxp.fecha||'';
+      DB.caja=DB.caja.filter(c=>!(
+        (c.categoria==='CXP Manual'||c.categoria==='CXP USD')&&
+        c.fecha===fecha&&Math.abs(parseFloat(c.monto||0)-monto)<0.01
+      ));
+      sDB('caja');
+    }
     DB.cxp=(DB.cxp||[]).filter(g=>g.id!==id);
     sDB('cxp');
   } else {
+    const _gvcxp=(DB.gastosVehiculos||[]).find(g=>g.id===id);
+    // Eliminar movimiento de caja si era CONTADO
+    if(_gvcxp&&(_gvcxp.formaPago||'CONTADO')!=='CREDITO'){
+      const monto=parseFloat(_gvcxp.montoFactura||_gvcxp.monto||0);
+      DB.caja=DB.caja.filter(c=>!(
+        c.categoria==='Gasto de Vehículo'&&c.fecha===(_gvcxp.fecha||'')&&
+        Math.abs(parseFloat(c.monto||0)-monto)<0.01
+      ));
+      sDB('caja');
+    }
     DB.gastosVehiculos=(DB.gastosVehiculos||[]).filter(g=>g.id!==id);
     sDB('gastosVehiculos');
   }
@@ -9358,7 +9504,30 @@ function guardarEditCXP(gid, origen){
   arr[i].noFactura = document.getElementById('ecxp-nofactura')?.value.trim()||'';
   arr[i].comentario = document.getElementById('ecxp-comentario')?.value.trim()||'';
   arr[i].statusGasto = pendiente<=0?'PAGADO':pagado>0?'ABONADO':'PENDIENTE';
+  // Sync caja: remove old movement and recreate with updated amounts
+  const pagoAnteriorCXP=parseFloat(arr[i].montoPagado||0);
+  const nuevoBancoCXP=document.getElementById('ecxp-banco')?.value||arr[i].banco||'';
+  const nuevaCuentaCXP=document.getElementById('ecxp-cuenta')?.value||arr[i].cuenta||'';
+  const nuevaMonedaCXP=document.getElementById('ecxp-moneda')?.value||arr[i].moneda||'RD$';
+  // Remove previous caja movement for this record
+  if(pagoAnteriorCXP>0){
+    const fechaAntCXP=arr[i].fechaPago||arr[i].fecha||'';
+    DB.caja=DB.caja.filter(c=>!(
+      (c.categoria==='CXP Manual'||c.categoria==='CXP USD'||c.categoria==='Gasto de Vehículo')&&
+      c.fecha===fechaAntCXP&&Math.abs(parseFloat(c.monto||0)-pagoAnteriorCXP)<0.01
+    ));
+  }
+  // Add new caja movement if pagado > 0
+  if(pagado>0){
+    DB.caja.push({id:uid(),fecha:arr[i].fechaPago||arr[i].fecha||today(),tipo:'SALIDA',
+      categoria:origen==='manual'?'CXP Manual':'Gasto de Vehículo',
+      descripcion:(origen==='manual'?'Pago CXP: ':'Pago GV: ')+(arr[i].descripcion||arr[i].tipo||''),
+      monto:pagado,moneda:nuevaMonedaCXP,banco:nuevoBancoCXP,cuenta:nuevaCuentaCXP,
+      referencia:nuevoBancoCXP&&nuevaCuentaCXP?nuevoBancoCXP+' / '+nuevaCuentaCXP:nuevaCuentaCXP,
+      responsable:currentUser?.nombre||''});
+  }
   if(origen==='manual') sDB('cxp'); else sDB('gastosVehiculos');
+  sDB('caja');
   closeModal();
   toast('CxP actualizada ✓','success');
   renderCXP();
@@ -9461,6 +9630,14 @@ function guardarCXPManual(){
     statusGasto:pendiente<=0?'PAGADO':abono>0?'ABONADO':'PENDIENTE',
     pagos:[]
   });
+  // Registrar en caja si hay abono inicial
+  if(abono>0){
+    DB.caja.push({id:uid(),fecha:document.getElementById('cxpm-fecha')?.value||today(),tipo:'SALIDA',
+      categoria:'CXP Manual',descripcion:'Pago CXP: '+desc+(sup?' — '+sup:''),
+      monto:abono,moneda,banco,cuenta,referencia:banco&&cuenta?banco+' / '+cuenta:cuenta,
+      responsable:currentUser?.nombre||''});
+    sDB('caja');
+  }
   logBit('cxp','Nueva CXP manual',desc+' — '+fmtMoneyDisplay(monto));sDB('cxp');
   closeModal();toast('CXP manual guardada ✓','success');renderCXP();
 }
@@ -9626,13 +9803,22 @@ function confirmarPagoCXP(i){
   DB.gastosVehiculos[i].pagos.push({id:uid(),fecha:fechaPago,monto,cuenta:cuentaPago,nota:notaPago,saldado,
     ...(esUSD&&tasa?{tasa,equivRD,moneda:'USD'}:{})
   });
-  // Registrar en caja — si USD, registra el equivalente en RD$
+  // Registrar en caja — RD$ o USD
+  const bancoPagoCXP=document.getElementById('cxpp-banco')?.value||'';
   if(esUSD&&tasa){
     DB.caja.push({id:uid(),fecha:fechaPago,tipo:'SALIDA',categoria:'CXP USD',
       descripcion:'Pago CXP USD: '+g.descripcion+(g.suplidor?' — '+g.suplidor:'')+' (Tasa: '+tasa.toFixed(2)+')',
-      monto:equivRD,moneda:'USD',banco:document.getElementById('cxpp-banco')?.value||'',cuenta:cuentaPago,referencia:(document.getElementById('cxpp-banco')?.value||'')&&cuentaPago?(document.getElementById('cxpp-banco')?.value||'')+' / '+cuentaPago:cuentaPago,responsable:currentUser?.nombre||''});
-    sDB('caja');
+      monto:equivRD,moneda:'USD',banco:bancoPagoCXP,cuenta:cuentaPago,
+      referencia:bancoPagoCXP&&cuentaPago?bancoPagoCXP+' / '+cuentaPago:cuentaPago,
+      responsable:currentUser?.nombre||''});
+  } else {
+    DB.caja.push({id:uid(),fecha:fechaPago,tipo:'SALIDA',categoria:'CXP Manual',
+      descripcion:'Pago GV: '+g.tipo+' — '+(g.vehiculo||g.descripcion||'')+(g.suplidor?' — '+g.suplidor:''),
+      monto,moneda:g.moneda||'RD$',banco:bancoPagoCXP,cuenta:cuentaPago,
+      referencia:bancoPagoCXP&&cuentaPago?bancoPagoCXP+' / '+cuentaPago:cuentaPago,
+      responsable:currentUser?.nombre||''});
   }
+  sDB('caja');
   sDB('gastosVehiculos');
   closeModal();
   imprimirReciboPagoCXP(DB.gastosVehiculos[i],{fecha:fechaPago,monto,cuenta:cuentaPago,nota:notaPago,saldado,tasa,equivRD});
@@ -10232,14 +10418,12 @@ function renderCXC(){
         </select>
         <div style="width:1px;height:28px;background:var(--gray3);margin:0 2px"></div>
         <button id="cxc-btn-cobrar" disabled class="btn btn-sm" style="${ds}" onclick="cxcAccion('cobrar')">💵 Registrar Cobro</button>
-        <button id="cxc-btn-abono-extra" disabled class="btn btn-sm" style="${ds}" onclick="cxcAccion('abono_extra')">⚡ Abono Extra</button>
         <button id="cxc-btn-historial" disabled class="btn btn-sm" style="${ds}" onclick="cxcAccion('historial')">👁 Historial</button>
         ${(currentUser?.role==='admin'||canDo('editar')||(currentUser?.permisos?.editarCobros))?`<button id="cxc-btn-editar" disabled class="btn btn-sm" style="${ds}" onclick="cxcAccion('editar')">✏️ Editar</button>`:''}
         ${(currentUser?.role==='admin'||canDo('eliminar'))?`<button id="cxc-btn-eliminar" disabled class="btn btn-sm" style="${ds}" onclick="cxcAccion('eliminar')">🗑 Eliminar</button>`:''}
         <div style="width:1px;height:28px;background:var(--gray3);margin:0 2px"></div>
         <button class="btn btn-secondary btn-sm" onclick="imprimirCXC()">📄 PDF</button>
         ${(currentUser?.role==='admin'||canDo('editar')||(currentUser?.permisos?.editarCobros))?`<button class="btn btn-primary" onclick="nuevaCXCManual()">➕ Nueva CxC</button>`:''}
-        ${(currentUser?.role==='admin'||currentUser?.permisos?.prestamosOtorgados)?`<button class="btn btn-sm" style="background:var(--green);color:#fff" onclick="nuevaPrestamoOtorgado()">🤝 Préstamo Otorgado</button>`:''}
       </div>
     </div>
 
@@ -10320,8 +10504,8 @@ function selCXC(id,tr){
   const actB=(bid,bg,c)=>{const b=document.getElementById(bid);if(b){b.disabled=false;b.style.cssText='background:'+bg+';color:'+c+';cursor:pointer;border:none;';}};
   const disB=(bid)=>{const b=document.getElementById(bid);if(b){b.disabled=true;b.style.cssText='background:#f1f5f9;color:#94a3b8;cursor:not-allowed;border:none;';}};
   if(x?.status!=='SALDADO')actB('cxc-btn-cobrar','#16a34a','#fff');
-  if(x?.status!=='SALDADO'&&x?.esPrestamo)actB('cxc-btn-abono-extra','#d97706','#fff');
-  else disB('cxc-btn-abono-extra');
+  
+  
   actB('cxc-btn-historial','#475569','#fff');
   if(currentUser?.role==='admin'||canDo('editar')||(currentUser?.permisos?.editarCobros))actB('cxc-btn-editar','#2563eb','#fff');
   if(currentUser?.role==='admin'||canDo('eliminar'))actB('cxc-btn-eliminar','#dc2626','#fff');
@@ -10458,18 +10642,12 @@ function guardarCXCManual(){
 function cxcAccion(accion){
   if(!cxcSelectedId)return;
   if(accion==='cobrar'){if(!canDo('editar')){toast('No tienes permiso para registrar cobros','error');return;}abonarCXC(cxcSelectedId);}
-  else if(accion==='abono_extra'){
-    if(!canDo('editar')){toast('No tienes permiso','error');return;}
-    const xae=DB.cxc.find(c=>c.id===cxcSelectedId);
-    if(!xae?.esPrestamo){toast('Solo disponible para préstamos otorgados','warning');return;}
-    modalAbonoExtraPO(cxcSelectedId);
-  }
+
   else if(accion==='historial')verAbonosCXC(cxcSelectedId);
   else if(accion==='editar'){
     if(currentUser?.role!=='admin'&&!canDo('editar')&&!currentUser?.permisos?.editarCobros){toast('No tienes permiso para editar CxC','error');return;}
     const xed=DB.cxc.find(c=>c.id===cxcSelectedId);
-    if(xed?.esPrestamo&&xed?.prestamoId)editarPrestamoOtorgado(cxcSelectedId);
-    else editarCXC(cxcSelectedId);
+    editarCXC(cxcSelectedId);
   }
   else if(accion==='eliminar'){
     if(!canDo('eliminar')){toast('No tienes permiso para eliminar','error');return;}
@@ -10495,11 +10673,23 @@ function eliminarCXCConPrestamo(cxcId){
   if(x.esPrestamo&&x.prestamoId){
     const po=(DB.prestamosOtorgados||[]).find(p=>p.id===x.prestamoId);
     if(po){
-      // Borrar movimientos de caja del préstamo (salida inicial + cobros)
       DB.caja=DB.caja.filter(c=>!(c.descripcion&&c.descripcion.includes(po.cliente)&&
         (c.categoria==='Préstamo Otorgado'||c.categoria==='Cobro Capital Préstamo'||c.categoria==='Interés Cobrado Préstamo')));
       DB.prestamosOtorgados=DB.prestamosOtorgados.filter(p=>p.id!==x.prestamoId);
       sDB('prestamosOtorgados');sDB('caja');
+    }
+  } else {
+    // CxC manual o de venta — eliminar cobros de caja asociados
+    const factura=x.factura||'';
+    const cliente=x.cliente||'';
+    if(factura||cliente){
+      const cajaBefore=DB.caja.length;
+      DB.caja=DB.caja.filter(c=>!(
+        (c.categoria==='CxC Manual'||c.categoria==='Cobro CxC'||c.categoria==='Cobro de Venta')&&
+        ((factura&&(c.descripcion||'').includes(factura))||
+         (c.descripcion||'').includes(cliente))
+      ));
+      if(DB.caja.length<cajaBefore)sDB('caja');
     }
   }
   DB.cxc=DB.cxc.filter(c=>c.id!==cxcId);
@@ -10722,7 +10912,29 @@ function guardarEditCXC(id){
     editadoPor:currentUser?.nombre||'',
     editadoEn:new Date().toISOString()
   };
-  sDB('cxc');
+  // Sync caja: update movement if abono changed
+  const abonadoAnteriorCXC=parseFloat(DB.cxc[idx].abonado||0);
+  const diferenciaCXC=abonadoNuevo-abonadoAnteriorCXC;
+  const bancoCXCEdit=document.getElementById('ecxc-banco')?.value||DB.cxc[idx].banco||'';
+  const cuentaCXCEdit=document.getElementById('ecxc-cuenta')?.value||DB.cxc[idx].cuenta||'';
+  const monedaCXCEdit=document.getElementById('ecxc-moneda')?.value||DB.cxc[idx].moneda||'RD$';
+  const fechaCXCEdit=document.getElementById('ecxc-fecha')?.value||DB.cxc[idx].fecha||'';
+  if(abonadoAnteriorCXC>0){
+    // Remove previous caja movement
+    DB.caja=DB.caja.filter(c=>!(
+      (c.categoria==='CxC Manual'||c.categoria==='Cobro CxC')&&
+      Math.abs(parseFloat(c.monto||0)-abonadoAnteriorCXC)<0.01&&
+      c.fecha===DB.cxc[idx].fecha
+    ));
+  }
+  if(abonadoNuevo>0){
+    DB.caja.push({id:uid(),fecha:fechaCXCEdit,tipo:'ENTRADA',categoria:'CxC Manual',
+      descripcion:'Abono CxC: '+concepto+' — '+(cli?.nombre||DB.cxc[idx].cliente||''),
+      monto:abonadoNuevo,moneda:monedaCXCEdit,banco:bancoCXCEdit,cuenta:cuentaCXCEdit,
+      referencia:bancoCXCEdit&&cuentaCXCEdit?bancoCXCEdit+' / '+cuentaCXCEdit:cuentaCXCEdit,
+      responsable:currentUser?.nombre||''});
+  }
+  sDB('cxc');sDB('caja');
   closeModal();
   toast('CxC actualizada correctamente ✓','success');
   renderCXC();
@@ -10730,8 +10942,7 @@ function guardarEditCXC(id){
 
 function abonarCXC(id){
   const x=DB.cxc.find(c=>c.id===id);if(!x)return;
-  // Si es préstamo otorgado, usar flujo especializado con interés
-  if(x.esPrestamo&&x.prestamoId)return abonarCXCPrestamo(id);
+
   const ventaRel=DB.ventas.find(v=>v.id===x.ventaId);
   const esUSD=(x.moneda||ventaRel?.moneda||'RD$')==='USD';
   const fV=(n)=>esUSD?'$'+parseFloat(n||0).toLocaleString('en-US',{minimumFractionDigits:2})+' USD':fmt(n);
@@ -12681,7 +12892,22 @@ function eliminarSeguro(id){
   if(currentUser?.role!=='admin'&&!canDo('borrarSeguros')&&!canDo('eliminar')){toast('No tienes permiso para eliminar','error');return;}
   openModal('🗑 Eliminar Seguro','<p>¿Eliminar este seguro? Esta acción no se puede deshacer.</p>',
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
-     <button class="btn btn-red" onclick="DB.seguros=DB.seguros.filter(x=>x.id!=='${id}');sDB('seguros');closeModal();toast('Eliminado','success');renderSeguros()">🗑 Eliminar</button>`);
+     <button class="btn btn-red" onclick="confirmarEliminarSeguro('${id}')">🗑 Eliminar</button>`);
+}
+function confirmarEliminarSeguro(id){
+  const seg=DB.seguros.find(x=>x.id===id);
+  if(seg){
+    // Remove all caja movements for this seguro
+    const prima=parseFloat(seg.prima||seg.monto||0);
+    DB.caja=DB.caja.filter(c=>!(
+      (c.categoria==='Seguro Vehículo'||c.categoria==='Seguro Cobrado a Cliente')&&
+      (c.descripcion||'').includes(seg.compania||'__NONE__')&&
+      (c.descripcion||'').includes(seg.cliente||'__NONE__')
+    ));
+    sDB('caja');
+  }
+  DB.seguros=DB.seguros.filter(x=>x.id!==id);
+  sDB('seguros');closeModal();toast('Eliminado','success');renderSeguros();
 }
 
 
