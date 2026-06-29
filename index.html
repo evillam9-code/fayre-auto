@@ -597,7 +597,7 @@ function filtrarCuentasPorBanco(prefix){
 function getCuentasFlat(selected){
   const bcs=DB.config.bancoCuentas||[];
   return bcs.flatMap(b=>(b.cuentas||[]).map(c=>{
-    const val=c.tipo+' — '+c.numero+' ('+b.banco+')';
+    const val=c.tipo+' — '+c.numero;
     return '<option value="'+escHtml(val)+'"'+(val===selected?' selected':'')+'>'+escHtml(b.banco+' | '+c.tipo+' — '+c.numero)+'</option>';
   })).join('')||'<option value="">Sin cuentas configuradas</option>';
 }
@@ -2226,7 +2226,7 @@ function gastosVehiculo(vid){
         <div class="form-field" style="margin:0"><label style="font-size:10px">Forma de Pago</label><select id="gv-forma"><option value="CONTADO">Contado</option><option value="CREDITO">Crédito</option></select></div>
         <div class="form-field" style="margin:0"><label style="font-size:10px">Moneda</label><select id="gv-moneda" onchange="filtrarBancosPorMoneda('gv')"><option value="RD$">RD$</option><option value="USD">USD</option></select></div>
         <div class="form-field" style="margin:0"><label style="font-size:10px">Banco</label><select id="gv-banco" onchange="filtrarCuentasPorBanco('gv')">${(DB.config.bancoCuentas||[]).map(b=>`<option value="${escHtml(b.banco)}">${escHtml(b.banco)}</option>`).join('')}</select></div>
-        <div class="form-field" style="margin:0"><label style="font-size:10px">Cuenta</label><select id="gv-cuenta">${getCuentasFlat()}</select></div>
+        <div class="form-field" style="margin:0"><label style="font-size:10px">Cuenta</label><select id="gv-cuenta">${(()=>{const bcs=DB.config.bancoCuentas||[];const b=bcs.find(x=>(x.cuentas||[]).some(c=>!c.tipo.includes('USD')&&!c.tipo.includes('Dólares')))||bcs[0];return(b?b.cuentas:[]).filter(c=>!c.tipo.includes('USD')&&!c.tipo.includes('Dólares')).map(c=>{const v=c.tipo+' — '+c.numero;return`<option value="${escHtml(v)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('')||'<option value="">Sin cuentas</option>';})()}</select></div>
         <div class="form-field" style="margin:0"><label style="font-size:10px">Fecha</label><input type="date" id="gv-fecha" value="${today()}"></div>
         <div class="form-field" style="margin:0;display:flex;align-items:flex-end"><button class="btn btn-red btn-sm" style="width:100%" onclick="agregarGastoVeh('${vid}')">💾 Agregar</button></div>
       </div>
@@ -2254,8 +2254,10 @@ function agregarGastoVeh(vid){
   const formaPago=document.getElementById('gv-forma').value;
   const esCredito=formaPago==='CREDITO';
   if(!DB.gastosVehiculos)DB.gastosVehiculos=[];
-  const gvBanco=document.getElementById('gv-banco')?.value||'';
-  const gvCuenta=document.getElementById('gv-cuenta')?.value||'';
+  const gvBanco=normalizarBancoGlobal(document.getElementById('gv-banco')?.value||'');
+  const gvCuentaRaw=document.getElementById('gv-cuenta')?.value||'';
+  // Strip "(banco)" suffix in case old getCuentasFlat format slips through
+  const gvCuenta=gvCuentaRaw.replace(/\s*\([^)]+\)$/,'').trim();
   const gvMoneda=document.getElementById('gv-moneda')?.value||'RD$';
   const g={
     id:uid(),
@@ -2274,7 +2276,7 @@ function agregarGastoVeh(vid){
   };
   DB.gastosVehiculos.push(g);
   if(!esCredito){
-    DB.caja.push({id:uid(),fecha:g.fecha,tipo:'SALIDA',categoria:'Gasto de Vehículo',descripcion:`Gasto [${DB.vehiculos.find(v=>v.id===vid)?.codigo||vid}]: ${g.tipo} — ${g.descripcion}`,monto,moneda:g.moneda||'RD$',banco:normalizarBancoGlobal(g.banco||''),cuenta:g.cuenta||'',referencia:g.banco&&g.cuenta?g.banco+' / '+g.cuenta:g.cuenta||'',responsable:currentUser?.nombre||''});
+    DB.caja.push({id:uid(),fecha:g.fecha,tipo:'SALIDA',categoria:'Gasto de Vehículo',descripcion:`Gasto [${DB.vehiculos.find(v=>v.id===vid)?.codigo||vid}]: ${g.tipo} — ${g.descripcion}`,monto,moneda:g.moneda||'RD$',banco:normalizarBancoGlobal(g.banco||''),cuenta:limpiarCuenta(g.cuenta||''),referencia:g.banco&&g.cuenta?g.banco+' / '+g.cuenta:limpiarCuenta(g.cuenta||''),responsable:currentUser?.nombre||''});
     sDB('caja');
     refreshCajaIfActive();
   }
@@ -2322,6 +2324,11 @@ function actualizarTasaCaja(){
 }
 
 // ── Normaliza nombre de banco para que siempre coincida con las keys de Caja ──
+function limpiarCuenta(c){
+  // Removes "(banco)" suffix that getCuentasFlat used to add to values
+  if(!c) return c;
+  return c.replace(/\s*\([^)]+\)$/, '').trim();
+}
 function normalizarBancoGlobal(b){
   if(!b) return b;
   const u=b.toUpperCase();
@@ -3228,7 +3235,7 @@ function guardarGasto(idx){
   // Registrar en caja si es pago inmediato (CONTADO, TRANSFERENCIA, CHEQUE) con monto abonado
   const esPagoInmediato=['CONTADO','TRANSFERENCIA','CHEQUE'].includes(g.formaPago);
   if(esPagoInmediato&&montoAbonado>0)
-    DB.caja.push({id:uid(),fecha:g.fecha,tipo:'SALIDA',categoria:'Gasto de Empresa',descripcion:'Gasto: '+desc,monto:montoAbonado,moneda:g.moneda||'RD$',banco:normalizarBancoGlobal(g.banco||''),cuenta:g.cuenta||'',referencia:g.banco&&g.cuenta?g.banco+' / '+g.cuenta:g.cuenta||'',responsable:g.responsable});
+    DB.caja.push({id:uid(),fecha:g.fecha,tipo:'SALIDA',categoria:'Gasto de Empresa',descripcion:'Gasto: '+desc,monto:montoAbonado,moneda:g.moneda||'RD$',banco:normalizarBancoGlobal(g.banco||''),cuenta:limpiarCuenta(g.cuenta||''),referencia:g.banco&&g.cuenta?g.banco+' / '+g.cuenta:limpiarCuenta(g.cuenta||''),responsable:g.responsable});
   logBit('gastos','Guardó gasto empresa','');sDB('gastos');sDB('caja');closeModal();toast('Gasto guardado ✓','success');renderGastos();
   refreshCajaIfActive();
 }
@@ -6674,7 +6681,7 @@ function guardarNuevoGastoVeh(){
   }
   if(!tipo){toast('Selecciona el tipo de gasto','error');return;}
   const _ngv_banco=document.getElementById('ngv-banco')?.value||'';
-  const _ngv_cuenta=document.getElementById('ngv-cuenta')?.value||'';
+  const _ngv_cuenta=limpiarCuenta(document.getElementById('ngv-cuenta')?.value||'');
   if(!_ngv_banco||!_ngv_cuenta){toast('Selecciona banco y cuenta para continuar','error');return;}
   const factura=parseFloat((document.getElementById('ngv-factura').value||'0').replace(/,/g,''));
   if(!factura){toast('El monto de factura es requerido','error');return;}
@@ -6771,7 +6778,7 @@ function confirmarAbonoGastoVeh(i){
   const monto=parseFloat((document.getElementById('abgv-monto').value||'0').replace(/,/g,''));
   if(!monto||monto<=0){toast('Ingresa un monto válido','error');return;}
   const _abgv_banco=document.getElementById('abgv-banco')?.value||'';
-  const _abgv_cuenta=document.getElementById('abgv-cuenta')?.value||'';
+  const _abgv_cuenta=limpiarCuenta(document.getElementById('abgv-cuenta')?.value||'');
   if(!_abgv_banco||!_abgv_cuenta){toast('Selecciona banco y cuenta para continuar','error');return;}
   const g=DB.gastosVehiculos[i];
   if(monto>parseFloat(g.montoPendiente||0)){toast('El monto no puede superar el pendiente','error');return;}
@@ -6870,7 +6877,7 @@ function editarGastoVeh(gid){
 function guardarEditGastoVeh(i){
   if(currentUser?.role!=='admin'&&!canDo('editar')&&!currentUser?.permisos?.editarGastosVeh){toast('No tienes permiso para editar','error');return;}
   const _egv_banco=document.getElementById('egv-banco')?.value||'';
-  const _egv_cuenta=document.getElementById('egv-cuenta')?.value||'';
+  const _egv_cuenta=limpiarCuenta(document.getElementById('egv-cuenta')?.value||'');
   if(!_egv_banco||!_egv_cuenta){toast('Selecciona banco y cuenta para continuar','error');return;}
   const factura=parseFloat((document.getElementById('egv-factura').value||'0').replace(/,/g,''));
   const pagado=parseFloat((document.getElementById('egv-pagado').value||'0').replace(/,/g,''));
@@ -8082,7 +8089,7 @@ function confirmarVenta(nf){
     sDB('vehiculos');
   }
   // Registrar en caja
-  DB.caja.push({id:uid(),fecha:venta.fecha,tipo:'ENTRADA',categoria:'Venta de Vehículo',descripcion:`Venta: ${v.codigo} ${v.marca} ${v.modelo}`,monto:inicial||precio,moneda:monedaVenta||'RD$',banco:normalizarBancoGlobal(banco||''),cuenta:cuenta||'',referencia:banco&&cuenta?banco+' / '+cuenta:cuenta||'',responsable:currentUser.nombre});
+  DB.caja.push({id:uid(),fecha:venta.fecha,tipo:'ENTRADA',categoria:'Venta de Vehículo',descripcion:`Venta: ${v.codigo} ${v.marca} ${v.modelo}`,monto:inicial||precio,moneda:monedaVenta||'RD$',banco:normalizarBancoGlobal(banco||''),cuenta:limpiarCuenta(cuenta||''),referencia:banco&&cuenta?banco+' / '+cuenta:limpiarCuenta(cuenta||''),responsable:currentUser.nombre});
   // Si hay pendiente → CxC automática
   if(pendiente>0){
     const abonadoInicial=inicial+montoRecibido;
@@ -8229,7 +8236,7 @@ function confirmarAbVenta(vid){
     sDB('cxc');
   }
   const _abBanco=document.getElementById('ab-banco')?.value||'';const _abCuenta=document.getElementById('ab-cuenta')?.value||'';const _abMoneda=document.getElementById('ab-moneda')?.value||'RD$';
-  DB.caja.push({id:uid(),fecha:document.getElementById('ab-fecha').value,tipo:'ENTRADA',categoria:'Cobro de Venta',descripcion:`Cobro ${DB.ventas[i].factura}: ${DB.ventas[i].cliente}`,monto,moneda:_abMoneda,banco:normalizarBancoGlobal(_abBanco),cuenta:_abCuenta,referencia:_abBanco&&_abCuenta?_abBanco+' / '+_abCuenta:_abCuenta,responsable:currentUser.nombre});
+  DB.caja.push({id:uid(),fecha:document.getElementById('ab-fecha').value,tipo:'ENTRADA',categoria:'Cobro de Venta',descripcion:`Cobro ${DB.ventas[i].factura}: ${DB.ventas[i].cliente}`,monto,moneda:_abMoneda,banco:normalizarBancoGlobal(_abBanco),cuenta:limpiarCuenta(_abCuenta),referencia:_abBanco&&_abCuenta?_abBanco+' / '+_abCuenta:_abCuenta,responsable:currentUser.nombre});
   sDB('ventas');sDB('caja');
   refreshCajaIfActive();
   closeModal();
@@ -11091,7 +11098,7 @@ function confirmarAbonarCXC(id){
       sDB('ventas');
     }
   }
-  DB.caja.push({id:uid(),fecha:fechaCobro,tipo:'ENTRADA',categoria:'Cobro CxC',descripcion:`Cobro CxC: ${DB.cxc[i].cliente} — ${DB.cxc[i].factura}`,monto,moneda:DB.cxc[i].moneda||'RD$',banco:normalizarBancoGlobal(bancoCobro),cuenta:cuentaCobro,referencia:bancoCobro?(bancoCobro+' / '+cuentaCobro):cuentaCobro,responsable:currentUser.nombre});
+  DB.caja.push({id:uid(),fecha:fechaCobro,tipo:'ENTRADA',categoria:'Cobro CxC',descripcion:`Cobro CxC: ${DB.cxc[i].cliente} — ${DB.cxc[i].factura}`,monto,moneda:DB.cxc[i].moneda||'RD$',banco:normalizarBancoGlobal(bancoCobro),cuenta:limpiarCuenta(cuentaCobro),referencia:bancoCobro?(bancoCobro+' / '+cuentaCobro):cuentaCobro,responsable:currentUser.nombre});
   sDB('cxc');sDB('caja');
   refreshCajaIfActive();
   closeModal();
