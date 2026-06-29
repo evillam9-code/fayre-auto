@@ -2358,32 +2358,70 @@ function renderCaja(){
 
   let filtrados=tab==='ENTRADAS'?cajaFilt.filter(c=>c.tipo==='ENTRADA'):tab==='SALIDAS'?cajaFilt.filter(c=>c.tipo==='SALIDA'):cajaFilt;
 
-  const bancoCards=Object.entries(bancoGroups).map(([banco,cuentas])=>{
+  // All known accounts — always show even with zero movements in period
+  const ALL_ACCOUNTS=[
+    {banco:'Banreservas',            cuenta:'Corriente RD\$ \u2014 9601135173 - Personal',     moneda:'RD$'},
+    {banco:'Banreservas',            cuenta:'Corriente RD\$ \u2014 9600627287 - Creditfayre',   moneda:'RD$'},
+    {banco:'Banco Popular - Empresa',cuenta:'Corriente RD\$ \u2014 832387831',                 moneda:'RD$'},
+    {banco:'Banco Popular',          cuenta:'Ahorro USD \u2014 801633066 - Personal',            moneda:'USD'},
+    {banco:'Banco Popular',          cuenta:'Corriente USD \u2014 8219255930 - Credifayre',      moneda:'USD'},
+  ];
+  // Merge known accounts with data, always keeping all accounts visible
+  const allCuentasData={};
+  ALL_ACCOUNTS.forEach(a=>{
+    const key=`${a.banco}||${a.cuenta}||${a.moneda}`;
+    allCuentasData[key]={banco:a.banco,cuenta:a.cuenta,moneda:a.moneda,entradas:0,salidas:0,sinMovs:true};
+  });
+  // Overlay with actual data
+  Object.entries(cuentasData).forEach(([key,val])=>{
+    if(allCuentasData[key]){
+      allCuentasData[key].entradas=val.entradas;
+      allCuentasData[key].salidas=val.salidas;
+      allCuentasData[key].sinMovs=(val.entradas===0&&val.salidas===0);
+    } else {
+      allCuentasData[key]={...val,sinMovs:false};
+    }
+  });
+  // Group by banco
+  const allBancoGroups={};
+  Object.values(allCuentasData).forEach(c=>{
+    if(!allBancoGroups[c.banco])allBancoGroups[c.banco]=[];
+    allBancoGroups[c.banco].push(c);
+  });
+
+  const bancoCards=Object.entries(allBancoGroups).map(([banco,cuentas])=>{
     const cuentasHTML=cuentas.map(c=>{
       const saldo=c.entradas-c.salidas;
       const isUSD=c.moneda==='USD';
-      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:#fff;border-radius:8px;border:1px solid var(--gray3);margin-bottom:6px">
+      const sinMovs=c.sinMovs&&saldo===0;
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:${sinMovs?'rgba(100,116,139,.06)':'#fff'};border-radius:8px;border:1px solid ${sinMovs?'rgba(100,116,139,.2)':'var(--gray3)'};margin-bottom:6px;opacity:${sinMovs?'.65':'1'}">
         <div>
-          <div style="font-size:13px;font-weight:700;color:var(--navy)">${escHtml(c.cuenta)}</div>
+          <div style="font-size:13px;font-weight:700;color:${sinMovs?'var(--gray)':'var(--navy)'}">${escHtml(c.cuenta)}</div>
           <div style="font-size:11px;color:var(--gray);margin-top:2px">${isUSD?'🇺🇸 Dólares':'🇩🇴 Pesos'} · Ent: ${isUSD?fmtUSD(c.entradas):fmt(c.entradas)} · Sal: ${isUSD?fmtUSD(c.salidas):fmt(c.salidas)}</div>
           ${isUSD?`<div style="font-size:11px;color:var(--gray);margin-top:1px">≈ ${fmt(saldo*tasa)} al cambio</div>`:''}
+          ${sinMovs?'<div style="font-size:10px;color:var(--gray);margin-top:2px;font-style:italic">Sin movimientos en este período</div>':''}
         </div>
         <div style="text-align:right">
-          <div style="font-size:18px;font-weight:900;color:${saldo>=0?'var(--green)':'var(--red)'}">${isUSD?fmtUSD(saldo):fmt(saldo)}</div>
+          <div style="font-size:18px;font-weight:900;color:${sinMovs?'var(--gray)':saldo>=0?'var(--green)':'var(--red)'}">${isUSD?fmtUSD(saldo):fmt(saldo)}</div>
           <div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--gray)">Saldo ${vista==='ACUMULADO'?'acumulado':periodoLabel}</div>
         </div>
       </div>`;
     }).join('');
     const totRD=cuentas.filter(c=>c.moneda==='RD$').reduce((a,c)=>a+(c.entradas-c.salidas),0);
     const totUSD=cuentas.filter(c=>c.moneda==='USD').reduce((a,c)=>a+(c.entradas-c.salidas),0);
+    const totEntRD=cuentas.filter(c=>c.moneda==='RD$').reduce((a,c)=>a+c.entradas,0);
+    const totSalRD=cuentas.filter(c=>c.moneda==='RD$').reduce((a,c)=>a+c.salidas,0);
+    const totEntUSD=cuentas.filter(c=>c.moneda==='USD').reduce((a,c)=>a+c.entradas,0);
+    const totSalUSD=cuentas.filter(c=>c.moneda==='USD').reduce((a,c)=>a+c.salidas,0);
     return `<div class="card" style="border-top:3px solid var(--blue);margin-bottom:14px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
         <div class="card-title" style="margin:0;padding:0;border:none">🏦 ${escHtml(banco)}</div>
-        <div style="text-align:right;font-size:12px">
-          ${totRD!==0?`<span style="font-weight:700;color:${totRD>=0?'var(--green)':'var(--red)'}">${fmt(totRD)}</span>`:''}
-          ${totUSD!==0?`<span style="font-weight:700;color:${totUSD>=0?'var(--blue)':'var(--red)'};margin-left:8px">${fmtUSD(totUSD)}</span>`:''}
+        <div style="text-align:right;font-size:12px;line-height:1.6">
+          ${totRD!==0||totEntRD!==0?`<div><span style="color:var(--gray);font-size:11px">RD$ Ent: </span><span style="color:var(--green);font-weight:700">${fmt(totEntRD)}</span> <span style="color:var(--gray);font-size:11px">Sal: </span><span style="color:var(--red);font-weight:700">${fmt(totSalRD)}</span> <span style="color:var(--gray);font-size:11px">Saldo: </span><span style="font-weight:900;color:${totRD>=0?'var(--green)':'var(--red)'}">${fmt(totRD)}</span></div>`:''}
+          ${totUSD!==0||totEntUSD!==0?`<div><span style="color:var(--gray);font-size:11px">USD Ent: </span><span style="color:var(--blue);font-weight:700">${fmtUSD(totEntUSD)}</span> <span style="color:var(--gray);font-size:11px">Sal: </span><span style="color:var(--red);font-weight:700">${fmtUSD(totSalUSD)}</span> <span style="color:var(--gray);font-size:11px">Saldo: </span><span style="font-weight:900;color:${totUSD>=0?'var(--blue)':'var(--red)'}">${fmtUSD(totUSD)}</span></div>`:''}
         </div>
       </div>
+      <div style="height:1px;background:var(--gray3);margin-bottom:12px"></div>
       ${cuentasHTML}
     </div>`;
   }).join('');
@@ -2436,26 +2474,25 @@ function renderCaja(){
       <!-- TOTAL GENERAL DEL PERÍODO destacado -->
       <div style="background:rgba(${totalGeneralPeriodo>=0?'74,222,128':'248,113,113'},.18);border-radius:12px;padding:16px 20px;margin-bottom:14px;border:2px solid rgba(${totalGeneralPeriodo>=0?'74,222,128':'248,113,113'},.4);text-align:center">
         <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:${totalGeneralPeriodo>=0?'#4ade80':'#f87171'};letter-spacing:.8px;margin-bottom:6px">💰 BALANCE TOTAL DEL PERÍODO (RD$ + USD al cambio)</div>
-        <div style="font-size:32px;font-weight:900;color:${totalGeneralPeriodo>=0?'#4ade80':'#f87171'}">${fmt(totalGeneralPeriodo)}</div>
-        <div style="font-size:10px;color:#94a3b8;margin-top:4px">RD$ ${fmt(balRD)} + USD ${fmtUSD(balUSD)} × ${tasa.toLocaleString('es-DO',{minimumFractionDigits:2})}</div>
-      </div>
-
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;text-align:center">
-        <div style="background:rgba(74,222,128,.12);border-radius:10px;padding:12px 8px">
-          <div style="font-size:9px;font-weight:700;text-transform:uppercase;color:#4ade80;letter-spacing:.5px;margin-bottom:6px">Entradas RD$</div>
-          <div style="font-size:18px;font-weight:900;color:#4ade80">${fmt(entradasRD)}</div>
+        <!-- 3 balance cards -->
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:10px">
+        <!-- Balance RD$ -->
+        <div style="background:rgba(${balRD>=0?'74,222,128':'248,113,113'},.13);border:1px solid rgba(${balRD>=0?'74,222,128':'248,113,113'},.3);border-radius:10px;padding:14px 12px;text-align:center">
+          <div style="font-size:9px;font-weight:700;text-transform:uppercase;color:${balRD>=0?'#4ade80':'#f87171'};letter-spacing:.8px;margin-bottom:4px">🇩🇴 BALANCE PESOS (RD$)</div>
+          <div style="font-size:22px;font-weight:900;color:${balRD>=0?'#4ade80':'#f87171'}">${fmt(balRD)}</div>
+          <div style="font-size:10px;color:#94a3b8;margin-top:4px">Ent: ${fmt(entradasRD)} · Sal: ${fmt(salidasRD)}</div>
         </div>
-        <div style="background:rgba(248,113,113,.12);border-radius:10px;padding:12px 8px">
-          <div style="font-size:9px;font-weight:700;text-transform:uppercase;color:#f87171;letter-spacing:.5px;margin-bottom:6px">Salidas RD$</div>
-          <div style="font-size:18px;font-weight:900;color:#f87171">${fmt(salidasRD)}</div>
+        <!-- Balance USD -->
+        <div style="background:rgba(${balUSD>=0?'96,165,250':'248,113,113'},.13);border:1px solid rgba(${balUSD>=0?'96,165,250':'248,113,113'},.3);border-radius:10px;padding:14px 12px;text-align:center">
+          <div style="font-size:9px;font-weight:700;text-transform:uppercase;color:${balUSD>=0?'#60a5fa':'#f87171'};letter-spacing:.8px;margin-bottom:4px">🇺🇸 BALANCE DÓLARES (USD)</div>
+          <div style="font-size:22px;font-weight:900;color:${balUSD>=0?'#60a5fa':'#f87171'}">${fmtUSD(balUSD)}</div>
+          <div style="font-size:10px;color:#94a3b8;margin-top:4px">Ent: ${fmtUSD(entradasUSD)} · Sal: ${fmtUSD(salidasUSD)}</div>
         </div>
-        <div style="background:rgba(96,165,250,.12);border-radius:10px;padding:12px 8px">
-          <div style="font-size:9px;font-weight:700;text-transform:uppercase;color:#60a5fa;letter-spacing:.5px;margin-bottom:6px">Entradas USD</div>
-          <div style="font-size:18px;font-weight:900;color:#60a5fa">${fmtUSD(entradasUSD)}</div>
-        </div>
-        <div style="background:rgba(248,113,113,.12);border-radius:10px;padding:12px 8px">
-          <div style="font-size:9px;font-weight:700;text-transform:uppercase;color:#f87171;letter-spacing:.5px;margin-bottom:6px">Salidas USD</div>
-          <div style="font-size:18px;font-weight:900;color:#f87171">${fmtUSD(salidasUSD)}</div>
+        <!-- Balance General -->
+        <div style="background:rgba(${totalGeneralPeriodo>=0?'74,222,128':'248,113,113'},.18);border:2px solid rgba(${totalGeneralPeriodo>=0?'74,222,128':'248,113,113'},.4);border-radius:10px;padding:14px 12px;text-align:center">
+          <div style="font-size:9px;font-weight:700;text-transform:uppercase;color:${totalGeneralPeriodo>=0?'#4ade80':'#f87171'};letter-spacing:.8px;margin-bottom:4px">💰 BALANCE GENERAL EN PESOS</div>
+          <div style="font-size:22px;font-weight:900;color:${totalGeneralPeriodo>=0?'#4ade80':'#f87171'}">${fmt(totalGeneralPeriodo)}</div>
+          <div style="font-size:10px;color:#94a3b8;margin-top:4px">RD$ ${fmt(balRD)} + USD ${fmtUSD(balUSD)} × ${tasa.toLocaleString('es-DO',{minimumFractionDigits:2})}</div>
         </div>
       </div>
     </div>
@@ -2520,7 +2557,7 @@ function renderCaja(){
     </div>
 
     <!-- Tarjetas por banco/cuenta -->
-    ${Object.keys(bancoGroups).length>0?bancoCards:'<div class="card" style="text-align:center;padding:24px;color:var(--gray)">Sin movimientos registrados en este período</div>'}
+    ${bancoCards}
     `:''}<!-- fin verSaldoCaja -->
     <div class="card">
       <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
