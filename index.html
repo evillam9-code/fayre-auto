@@ -2403,13 +2403,19 @@ function renderCaja(){
   let filtrados=tab==='ENTRADAS'?cajaFilt.filter(c=>c.tipo==='ENTRADA'):tab==='SALIDAS'?cajaFilt.filter(c=>c.tipo==='SALIDA'):cajaFilt;
 
   // All known accounts — always show even with zero movements in period
-  const ALL_ACCOUNTS=[
-    {banco:'Banreservas',            cuenta:'Corriente RD$ — 9601135173 - Personal',     moneda:'RD$'},
-    {banco:'Banreservas',            cuenta:'Corriente RD$ — 9600627287 - Creditfayre',   moneda:'RD$'},
-    {banco:'Banco Popular - Empresa',cuenta:'Corriente RD$ — 832387831',                 moneda:'RD$'},
-    {banco:'Banco Popular',          cuenta:'Ahorro USD — 801633066 - Personal',          moneda:'USD'},
-    {banco:'Banco Popular',          cuenta:'Corriente USD — 8219255930 - Credifayre',    moneda:'USD'},
-  ];
+  // Generate ALL_ACCOUNTS dynamically from DB.config.bancoCuentas
+  // This way any new bank account or efectivo account added in Cuentas module
+  // automatically appears in Caja as a fixed row
+  const ALL_ACCOUNTS=[];
+  (DB.config.bancoCuentas||[]).forEach(b=>{
+    (b.cuentas||[]).forEach(c=>{
+      const tipo=c.tipo||'';
+      const isUSD=tipo.includes('USD')||tipo.includes('Dólares');
+      const moneda=isUSD?'USD':'RD$';
+      const cuentaLabel=tipo+' — '+c.numero;
+      ALL_ACCOUNTS.push({banco:b.banco,cuenta:cuentaLabel,moneda});
+    });
+  });
   // Helper: normalize banco name to match ALL_ACCOUNTS (avoid case/format mismatches)
   function normalizarBanco(b){ 
     if(!b) return b;
