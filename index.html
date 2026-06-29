@@ -562,6 +562,18 @@ function getMonedaBancoCuentaFields(prefix, monedaSel, bancoSel, cuentaSel){
   const cuentaOpts=cuentasDisp.map(c=>{const v=c.tipo+' — '+c.numero;return`<option value="${escHtml(v)}" ${v===cuentaSel?'selected':''}>${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('')||'<option value="">Sin cuentas</option>';
   return {bancoOpts, cuentaOpts, moneda, bancoPre};
 }
+function filtrarBancosPrestamoOtorgado(){
+  const moneda=document.getElementById('po2-pago-moneda')?.value||'RD$';
+  const bancoEl=document.getElementById('po2-banco');
+  const cuentaEl=document.getElementById('po2-cuenta');
+  if(!bancoEl||!cuentaEl)return;
+  const bcs=DB.config.bancoCuentas||[];
+  const disp=bcs.filter(b=>(b.cuentas||[]).some(c=>moneda==='USD'?c.tipo.includes('USD'):!c.tipo.includes('USD')));
+  bancoEl.innerHTML=disp.map(b=>`<option value="${escHtml(b.banco)}">${escHtml(b.banco)}</option>`).join('')||'<option>Sin bancos</option>';
+  const bancoSel=disp[0]||bcs[0];
+  const cts=(bancoSel?.cuentas||[]).filter(c=>moneda==='USD'?c.tipo.includes('USD'):!c.tipo.includes('USD'));
+  cuentaEl.innerHTML=cts.map(c=>`<option value="${escHtml(c.tipo+' — '+c.numero)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`).join('')||'<option>Sin cuentas</option>';
+}
 function filtrarBancosPorMoneda(prefix){
   const moneda=document.getElementById(prefix+'-moneda')?.value||'RD$';
   const bancoEl=document.getElementById(prefix+'-banco');
@@ -2317,7 +2329,7 @@ function renderCaja(){
   // Saldo ACUMULADO por cuenta (todos los movimientos históricos)
   const cuentasAcum={};
   DB.caja.forEach(c=>{
-    const banco=c.banco||'Sin banco';
+    const banco=normalizarBanco(c.banco)||'Sin banco';
     const cuenta=c.cuenta||'Sin cuenta';
     const moneda=c.moneda||'RD$';
     const key=`${banco}||${cuenta}||${moneda}`;
@@ -2329,7 +2341,7 @@ function renderCaja(){
   // Saldo del PERÍODO por cuenta (coincide con filtro activo)
   const cuentasPeriodo={};
   cajaFilt.forEach(c=>{
-    const banco=c.banco||'Sin banco';
+    const banco=normalizarBanco(c.banco)||'Sin banco';
     const cuenta=c.cuenta||'Sin cuenta';
     const moneda=c.moneda||'RD$';
     const key=`${banco}||${cuenta}||${moneda}`;
@@ -2360,12 +2372,22 @@ function renderCaja(){
 
   // All known accounts — always show even with zero movements in period
   const ALL_ACCOUNTS=[
-    {banco:'Banreservas',            cuenta:'Corriente RD\$ \u2014 9601135173 - Personal',     moneda:'RD$'},
-    {banco:'Banreservas',            cuenta:'Corriente RD\$ \u2014 9600627287 - Creditfayre',   moneda:'RD$'},
-    {banco:'Banco Popular - Empresa',cuenta:'Corriente RD\$ \u2014 832387831',                 moneda:'RD$'},
-    {banco:'Banco Popular',          cuenta:'Ahorro USD \u2014 801633066 - Personal',            moneda:'USD'},
-    {banco:'Banco Popular',          cuenta:'Corriente USD \u2014 8219255930 - Credifayre',      moneda:'USD'},
+    {banco:'Banreservas',            cuenta:'Corriente RD$ — 9601135173 - Personal',     moneda:'RD$'},
+    {banco:'Banreservas',            cuenta:'Corriente RD$ — 9600627287 - Creditfayre',   moneda:'RD$'},
+    {banco:'Banco Popular - Empresa',cuenta:'Corriente RD$ — 832387831',                 moneda:'RD$'},
+    {banco:'Banco Popular',          cuenta:'Ahorro USD — 801633066 - Personal',          moneda:'USD'},
+    {banco:'Banco Popular',          cuenta:'Corriente USD — 8219255930 - Credifayre',    moneda:'USD'},
   ];
+  // Helper: normalize banco name to match ALL_ACCOUNTS (avoid case/format mismatches)
+  function normalizarBanco(b){ 
+    if(!b) return b;
+    const upper=b.toUpperCase();
+    if(upper==='BANCO POPULAR - EMPRESA'||upper==='BANCO POPULAR-EMPRESA') return 'Banco Popular - Empresa';
+    if(upper==='BANRESERVAS'||upper==='BANCO DE RESERVAS') return 'Banreservas';
+    if(upper==='BANCO POPULAR'&&!upper.includes('EMPRESA')) return 'Banco Popular';
+    return b;
+  }
+
   // Merge known accounts with data, always keeping all accounts visible
   const allCuentasData={};
   ALL_ACCOUNTS.forEach(a=>{
@@ -2917,12 +2939,16 @@ function editarGasto(i){
 function guardarEditGasto(i){
   const g=DB.gastos[i];
   const montoFactura=parseFloat((document.getElementById('g-monto-factura').value||'0').replace(/,/g,''));
-  const montoAbonado=parseFloat((document.getElementById('g-monto-abonado').value||'0').replace(/,/g,''));
-  const montoPendiente=Math.max(0,montoFactura-montoAbonado);
   const banco=document.getElementById('g-banco')?.value||g.banco||'';
   const cuenta=document.getElementById('g-cuenta')?.value||g.cuenta||'';
   const moneda=document.getElementById('g-moneda')?.value||g.moneda||'RD$';
   const formaPago=document.getElementById('g-forma')?.value||g.formaPago||'CONTADO';
+  const statusGasto=document.getElementById('g-status')?.value||g.statusGasto||'SALDADO';
+  // Si es CONTADO/TRANSFERENCIA/CHEQUE y SALDADO, abonado = factura automáticamente
+  let montoAbonado=parseFloat((document.getElementById('g-monto-abonado').value||'0').replace(/,/g,''));
+  const esPagoInmediatoEdit=['CONTADO','TRANSFERENCIA','CHEQUE'].includes(formaPago);
+  if(esPagoInmediatoEdit&&statusGasto==='SALDADO') montoAbonado=montoFactura;
+  const montoPendiente=Math.max(0,montoFactura-montoAbonado);
   const desc=document.getElementById('g-desc').value;
   // Detectar si el abonado aumentó para registrar la diferencia en caja
   const abonadoAnterior=parseFloat(g.montoAbonado||0);
@@ -2941,13 +2967,14 @@ function guardarEditGasto(i){
   DB.gastos[i].cuenta=cuenta;
   DB.gastos[i].moneda=moneda;
   DB.gastos[i].fechaLimite=document.getElementById('g-fecha-limite')?.value||g.fechaLimite||'';
-  // Registrar en caja si hay monto abonado (CONTADO) o si el abonado aumentó
-  if(formaPago==='CONTADO'&&diferencia>0){
+  // Registrar en caja si es pago inmediato y el abonado aumentó
+  const esPagoInm=['CONTADO','TRANSFERENCIA','CHEQUE'].includes(formaPago);
+  if(esPagoInm&&diferencia>0){
     DB.caja.push({id:uid(),fecha:DB.gastos[i].fecha,tipo:'SALIDA',categoria:'Gasto de Empresa',
       descripcion:'Gasto: '+desc,monto:diferencia,moneda,banco,cuenta,
       referencia:banco&&cuenta?banco+' / '+cuenta:cuenta,responsable:currentUser?.nombre||''});
     sDB('caja');
-  } else if(formaPago==='CONTADO'&&abonadoAnterior===0&&montoAbonado>0){
+  } else if(esPagoInm&&abonadoAnterior===0&&montoAbonado>0){
     DB.caja.push({id:uid(),fecha:DB.gastos[i].fecha,tipo:'SALIDA',categoria:'Gasto de Empresa',
       descripcion:'Gasto: '+desc,monto:montoAbonado,moneda,banco,cuenta,
       referencia:banco&&cuenta?banco+' / '+cuenta:cuenta,responsable:currentUser?.nombre||''});
@@ -3082,12 +3109,16 @@ function calcPendienteGasto(){
 }
 function guardarGasto(idx){
   const desc=document.getElementById('g-desc').value.trim();
-  const montoFactura=parseFloat(document.getElementById('g-monto-factura')?.value||document.getElementById('g-monto')?.value||0);
+  const montoFactura=parseFloat((document.getElementById('g-monto-factura')?.value||document.getElementById('g-monto')?.value||'0').replace(/,/g,''));
   if(!montoFactura||!desc){toast('Monto y descripción son requeridos','error');return;}
   const _g_banco=document.getElementById('g-banco')?.value||'';
   const _g_cuenta=document.getElementById('g-cuenta')?.value||'';
   if(!_g_banco||!_g_cuenta){toast('Selecciona banco y cuenta para continuar','error');return;}
-  const montoAbonado=parseFloat(document.getElementById('g-monto-abonado')?.value||0);
+  const formaPago=document.getElementById('g-forma')?.value||'CONTADO';
+  const statusGasto=document.getElementById('g-status')?.value||'SALDADO';
+  // Si es CONTADO y SALDADO, el monto abonado es igual al monto factura automáticamente
+  let montoAbonado=parseFloat((document.getElementById('g-monto-abonado')?.value||'0').replace(/,/g,''));
+  if(formaPago==='CONTADO'&&statusGasto==='SALDADO') montoAbonado=montoFactura;
   const montoPendiente=Math.max(0,montoFactura-montoAbonado);
   const g={
     id:idx!==undefined?DB.gastos[idx].id:uid(),
@@ -3107,7 +3138,9 @@ function guardarGasto(idx){
   };
   if(idx!==undefined)DB.gastos[idx]=g;
   else DB.gastos.push(g);
-  if(g.formaPago==='CONTADO'&&montoAbonado>0)
+  // Registrar en caja si es pago inmediato (CONTADO, TRANSFERENCIA, CHEQUE) con monto abonado
+  const esPagoInmediato=['CONTADO','TRANSFERENCIA','CHEQUE'].includes(g.formaPago);
+  if(esPagoInmediato&&montoAbonado>0)
     DB.caja.push({id:uid(),fecha:g.fecha,tipo:'SALIDA',categoria:'Gasto de Empresa',descripcion:'Gasto: '+desc,monto:montoAbonado,moneda:g.moneda||'RD$',banco:g.banco||'',cuenta:g.cuenta||'',referencia:g.banco&&g.cuenta?g.banco+' / '+g.cuenta:g.cuenta||'',responsable:g.responsable});
   logBit('gastos','Guardó gasto empresa','');sDB('gastos');sDB('caja');closeModal();toast('Gasto guardado ✓','success');renderGastos();
 }
@@ -9851,6 +9884,20 @@ function nuevaPrestamoOtorgado(){
     <div class="form-row c2">
       <div class="form-field"><label>Fecha Inicio</label><input type="date" id="po2-fecha" value="${today()}"></div>
       <div class="form-field"><label>Notas</label><input type="text" id="po2-notas" placeholder="Referencia, contrato..."></div>
+    </div>
+    <div class="form-row c3">
+      <div class="form-field"><label class="required">Moneda Desembolso</label>
+        <select id="po2-pago-moneda" onchange="filtrarBancosPrestamoOtorgado()">
+          <option value="RD$">RD$ — Pesos</option>
+          <option value="USD">USD — Dólares</option>
+        </select>
+      </div>
+      <div class="form-field"><label class="required">Banco Desembolso</label>
+        <select id="po2-banco" onchange="filtrarCuentasPorBanco('po2')">${(DB.config.bancoCuentas||[]).map(b=>`<option value="${escHtml(b.banco)}">${escHtml(b.banco)}</option>`).join('')}</select>
+      </div>
+      <div class="form-field"><label class="required">Cuenta Desembolso</label>
+        <select id="po2-cuenta">${((DB.config.bancoCuentas||[])[0]?.cuentas||[]).map(c=>`<option value="${escHtml(c.tipo+' — '+c.numero)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`).join('')}</select>
+      </div>
     </div>`,
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
      <button class="btn btn-green" onclick="guardarPrestamoOtorgado()">🤝 Registrar Préstamo</button>`);
@@ -9895,9 +9942,12 @@ function guardarPrestamoOtorgado(){
     total:monto,abonado:0,saldo:monto,fecha,fechaVence:'',
     status:'PENDIENTE',pagos:[],esPrestamo:true,cuotaMensual,tasaAnual:tasa,tipoPrestamo:tipo,prestamoId:po.id});
   sDB('cxc');
+  const po2MonedaPago=document.getElementById('po2-pago-moneda')?.value||moneda;
+  const po2Banco=document.getElementById('po2-banco')?.value||'';
+  const po2Cuenta=document.getElementById('po2-cuenta')?.value||'';
   DB.caja.push({id:uid(),fecha,tipo:'SALIDA',categoria:'Préstamo Otorgado',
     descripcion:`Préstamo otorgado a: ${cliNombre}${ref?' — '+ref:''}`,
-    monto,moneda,banco:'',cuenta:'',referencia:'',responsable:currentUser?.nombre||''});
+    monto,moneda:po2MonedaPago,banco:po2Banco,cuenta:po2Cuenta,referencia:po2Banco&&po2Cuenta?po2Banco+' / '+po2Cuenta:po2Cuenta,responsable:currentUser?.nombre||''});
   sDB('caja');sDB('prestamosOtorgados');
   closeModal();toast('Préstamo otorgado. CxC creada ✓','success');renderCXC();
 }
