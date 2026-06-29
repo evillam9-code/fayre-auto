@@ -2256,7 +2256,7 @@ function agregarGastoVeh(vid){
   };
   DB.gastosVehiculos.push(g);
   if(!esCredito){
-    DB.caja.push({id:uid(),fecha:g.fecha,tipo:'SALIDA',categoria:'Gasto de Vehículo',descripcion:`Gasto [${DB.vehiculos.find(v=>v.id===vid)?.codigo||vid}]: ${g.tipo} — ${g.descripcion}`,monto,moneda:'RD$',referencia:g.cuenta,responsable:currentUser?.nombre||''});
+    DB.caja.push({id:uid(),fecha:g.fecha,tipo:'SALIDA',categoria:'Gasto de Vehículo',descripcion:`Gasto [${DB.vehiculos.find(v=>v.id===vid)?.codigo||vid}]: ${g.tipo} — ${g.descripcion}`,monto,moneda:g.moneda||'RD$',banco:g.banco||'',cuenta:g.cuenta||'',referencia:g.banco&&g.cuenta?g.banco+' / '+g.cuenta:g.cuenta||'',responsable:currentUser?.nombre||''});
     sDB('caja');
   }
   sDB('gastosVehiculos');
@@ -2963,13 +2963,16 @@ function guardarGasto(idx){
     descripcion:desc,
     monto:montoFactura,
     montoFactura,montoAbonado,montoPendiente,
+    banco:document.getElementById('g-banco')?.value||'',
+    cuenta:document.getElementById('g-cuenta')?.value||'',
+    moneda:document.getElementById('g-moneda')?.value||'RD$',
     fechaLimite:document.getElementById('g-fecha-limite')?.value||'',
     responsable:currentUser?.nombre||''
   };
   if(idx!==undefined)DB.gastos[idx]=g;
   else DB.gastos.push(g);
   if(g.formaPago==='CONTADO'&&montoAbonado>0)
-    DB.caja.push({id:uid(),fecha:g.fecha,tipo:'SALIDA',categoria:'Gasto de Empresa',descripcion:'Gasto: '+desc,monto:montoAbonado,responsable:g.responsable});
+    DB.caja.push({id:uid(),fecha:g.fecha,tipo:'SALIDA',categoria:'Gasto de Empresa',descripcion:'Gasto: '+desc,monto:montoAbonado,moneda:g.moneda||'RD$',banco:g.banco||'',cuenta:g.cuenta||'',referencia:g.banco&&g.cuenta?g.banco+' / '+g.cuenta:g.cuenta||'',responsable:g.responsable});
   logBit('gastos','Guardó gasto empresa','');sDB('gastos');sDB('caja');closeModal();toast('Gasto guardado ✓','success');renderGastos();
 }
 
@@ -7725,7 +7728,7 @@ function confirmarVenta(nf){
     sDB('vehiculos');
   }
   // Registrar en caja
-  DB.caja.push({id:uid(),fecha:venta.fecha,tipo:'ENTRADA',categoria:'Venta de Vehículo',descripcion:`Venta: ${v.codigo} ${v.marca} ${v.modelo}`,monto:inicial||precio,referencia:nf,cuenta,responsable:currentUser.nombre});
+  DB.caja.push({id:uid(),fecha:venta.fecha,tipo:'ENTRADA',categoria:'Venta de Vehículo',descripcion:`Venta: ${v.codigo} ${v.marca} ${v.modelo}`,monto:inicial||precio,moneda:monedaVenta||'RD$',banco:banco||'',cuenta:cuenta||'',referencia:banco&&cuenta?banco+' / '+cuenta:cuenta||'',responsable:currentUser.nombre});
   // Si hay pendiente → CxC automática
   if(pendiente>0){
     const abonadoInicial=inicial+montoRecibido;
@@ -9357,7 +9360,7 @@ function confirmarPagoCXPManual(i){
   DB.cxp[i].statusGasto=DB.cxp[i].montoPendiente<=0?'PAGADO':'ABONADO';
   DB.caja.push({id:uid(),fecha,tipo:'SALIDA',categoria:'CXP Manual',
     descripcion:'Pago CXP: '+g.descripcion+(g.suplidor?' \u2014 '+g.suplidor:''),
-    monto,referencia:cuenta,banco,responsable:currentUser?.nombre||''});
+    monto,moneda:g.moneda||'RD$',banco,cuenta,referencia:banco&&cuenta?banco+' / '+cuenta:cuenta,responsable:currentUser?.nombre||''});
   sDB('cxp');sDB('caja');
   closeModal();toast('Pago registrado \u2713','success');renderCXP();
 }
@@ -9458,7 +9461,7 @@ function confirmarPagoCXP(i){
   if(esUSD&&tasa){
     DB.caja.push({id:uid(),fecha:fechaPago,tipo:'SALIDA',categoria:'CXP USD',
       descripcion:'Pago CXP USD: '+g.descripcion+(g.suplidor?' — '+g.suplidor:'')+' (Tasa: '+tasa.toFixed(2)+')',
-      monto:equivRD,moneda:'RD$',referencia:cuentaPago,banco:document.getElementById('cxpp-banco')?.value||'',responsable:currentUser?.nombre||''});
+      monto:equivRD,moneda:'USD',banco:document.getElementById('cxpp-banco')?.value||'',cuenta:cuentaPago,referencia:(document.getElementById('cxpp-banco')?.value||'')&&cuentaPago?(document.getElementById('cxpp-banco')?.value||'')+' / '+cuentaPago:cuentaPago,responsable:currentUser?.nombre||''});
     sDB('caja');
   }
   sDB('gastosVehiculos');
@@ -10262,7 +10265,7 @@ function guardarCXCManual(){
   });
   if(abono>0)DB.caja.push({id:uid(),fecha,tipo:'ENTRADA',categoria:'CxC Manual',
     descripcion:'Abono CxC: '+concepto+' — '+cli?.nombre,
-    monto:abono,referencia:cuenta,responsable:currentUser.nombre});
+    monto:abono,moneda:document.getElementById('cxcm-moneda')?.value||'RD$',banco,cuenta,referencia:banco&&cuenta?banco+' / '+cuenta:cuenta,responsable:currentUser.nombre});
   sDB('cxc');sDB('caja');closeModal();
   toast('Cuenta por cobrar creada ✓','success');renderCXC();
 }
@@ -10616,7 +10619,7 @@ function confirmarAbonarCXC(id){
       sDB('ventas');
     }
   }
-  DB.caja.push({id:uid(),fecha:fechaCobro,tipo:'ENTRADA',categoria:'Cobro CxC',descripcion:`Cobro CxC: ${DB.cxc[i].cliente} — ${DB.cxc[i].factura}`,monto,banco:bancoCobro,cuenta:cuentaCobro,referencia:bancoCobro?(bancoCobro+' / '+cuentaCobro):cuentaCobro,responsable:currentUser.nombre});
+  DB.caja.push({id:uid(),fecha:fechaCobro,tipo:'ENTRADA',categoria:'Cobro CxC',descripcion:`Cobro CxC: ${DB.cxc[i].cliente} — ${DB.cxc[i].factura}`,monto,moneda:DB.cxc[i].moneda||'RD$',banco:bancoCobro,cuenta:cuentaCobro,referencia:bancoCobro?(bancoCobro+' / '+cuentaCobro):cuentaCobro,responsable:currentUser.nombre});
   sDB('cxc');sDB('caja');
   closeModal();
   imprimirReciboCobro(DB.cxc[i],{id:uid(),fecha:fechaCobro,monto,cuenta:cuentaCobro,nota:notaCobro,saldado});
