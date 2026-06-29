@@ -2838,22 +2838,121 @@ function gasAccion(accion){
 }
 function editarGasto(i){
   const g=DB.gastos[i];
-  const catList=['Mantenimiento','Publicidad','Oficina','Transporte','Servicios','Seguro','Legal','Salarios','Otro'];
-  openModal('Editar Gasto',`
-    <div class="form-row c2"><div class="form-field"><label>Fecha</label><input type="date" id="g-fecha" value="${g.fecha||today()}"></div><div class="form-field"><label>Categoría</label><select id="g-cat">${catList.map(c=>`<option ${c===g.categoria?'selected':''}>${c}</option>`).join('')}</select></div></div>
-    <div class="form-row c2"><div class="form-field"><label>Suplidor</label><select id="g-sup"><option value="">Sin suplidor</option>${(DB.suplidores||[]).filter(s=>s.tipoSuplidor==='empresa').map(s=>`<option ${s.nombre===g.suplidor?'selected':''}>${escHtml(s.nombre)}</option>`).join('')}</select></div><div class="form-field"><label>Monto</label><input type="text" id="g-monto" value="${fmtMoneyDisplay(g.monto||0)}" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)"></div></div>
-    <div class="form-row c2"><div class="form-field"><label>Forma de Pago</label><select id="g-forma"><option value="CONTADO" ${(g.formaPago||'CONTADO')==='CONTADO'?'selected':''}>Contado</option><option value="CREDITO" ${g.formaPago==='CREDITO'?'selected':''}>Crédito</option></select></div><div class="form-field"><label>Estado</label><select id="g-status"><option value="SALDADO" ${(g.statusGasto||'SALDADO')==='SALDADO'?'selected':''}>Saldado</option><option value="ABONADO" ${g.statusGasto==='ABONADO'?'selected':''}>Abonado</option><option value="PENDIENTE" ${g.statusGasto==='PENDIENTE'?'selected':''}>Pendiente</option></select></div></div>
-    <div class="form-field"><label>Descripción</label><input type="text" id="g-desc" value="${escHtml(g.descripcion||'')}"></div>`,
+  const cats=DB.config.categoriasGastos||['Alquiler','Servicios','Salarios','Papelería','Mantenimiento','Publicidad','Combustible','Impuestos','Otros'];
+  const supsEmp=(DB.suplidores||[]).filter(s=>s.tipoSuplidor==='empresa');
+  const bcs=DB.config.bancoCuentas||[];
+  const monedaAct=g.moneda||'RD$';
+  const bancosDisp=bcs.filter(b=>(b.cuentas||[]).some(c=>monedaAct==='USD'?(c.tipo.includes('USD')||c.tipo.includes('Dólares')):(!c.tipo.includes('USD')&&!c.tipo.includes('Dólares'))));
+  const bancoAct=g.banco||'';
+  const bancoOpts=bancosDisp.map(b=>`<option value="${escHtml(b.banco)}" ${b.banco===bancoAct?'selected':''}>${escHtml(b.banco)}</option>`).join('')||bcs.map(b=>`<option value="${escHtml(b.banco)}" ${b.banco===bancoAct?'selected':''}>${escHtml(b.banco)}</option>`).join('');
+  const bancoSel=bcs.find(b=>b.banco===bancoAct)||bancosDisp[0]||bcs[0];
+  const cuentasDisp=(bancoSel?.cuentas||[]).filter(c=>monedaAct==='USD'?(c.tipo.includes('USD')||c.tipo.includes('Dólares')):(!c.tipo.includes('USD')&&!c.tipo.includes('Dólares')));
+  const cuentaOpts=cuentasDisp.map(c=>{const v=c.tipo+' — '+c.numero;return`<option value="${escHtml(v)}" ${v===g.cuenta?'selected':''}>${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('')||(bancoSel?.cuentas||[]).map(c=>{const v=c.tipo+' — '+c.numero;return`<option value="${escHtml(v)}" ${v===g.cuenta?'selected':''}>${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('');
+  openModal('✏️ Editar Gasto de Empresa',`
+    <div class="form-row c3">
+      <div class="form-field"><label class="required">Fecha</label><input type="date" id="g-fecha" value="${g.fecha||today()}"></div>
+      <div class="form-field"><label class="required">Categoría</label>
+        <div style="display:flex;gap:6px">
+          <select id="g-cat" style="flex:1">${cats.map(cat=>`<option ${cat===g.categoria?'selected':''}>${escHtml(cat)}</option>`).join('')}</select>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="agregarCatGasto()" title="Nueva categoría">➕</button>
+        </div>
+      </div>
+      <div class="form-field"><label>Estado</label>
+        <select id="g-status">
+          <option value="PENDIENTE" ${g.statusGasto==='PENDIENTE'?'selected':''}>Pendiente</option>
+          <option value="ABONADO" ${g.statusGasto==='ABONADO'?'selected':''}>Abonado</option>
+          <option value="SALDADO" ${(g.statusGasto||'SALDADO')==='SALDADO'?'selected':''}>Pagado</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row c2">
+      <div class="form-field"><label>Suplidor (Empresa)</label>
+        <select id="g-sup">
+          <option value="">-- Sin suplidor --</option>
+          ${supsEmp.map(s=>`<option value="${escHtml(s.empresa||s.nombre)}" ${(s.empresa||s.nombre)===g.suplidor?'selected':''}>${escHtml(s.empresa||s.nombre)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-field"><label class="required">Descripción</label>
+        <input type="text" id="g-desc" value="${escHtml(g.descripcion||'')}" placeholder="Descripción del gasto">
+      </div>
+    </div>
+    <div class="form-row c3">
+      <div class="form-field"><label>Moneda</label>
+        <select id="g-moneda" onchange="filtrarBancosPorMoneda('g')">
+          <option value="RD$" ${monedaAct==='RD$'?'selected':''}>RD$ — Pesos</option>
+          <option value="USD" ${monedaAct==='USD'?'selected':''}>USD — Dólares</option>
+        </select>
+      </div>
+      <div class="form-field"><label>Banco</label>
+        <select id="g-banco" onchange="filtrarCuentasPorBanco('g')">${bancoOpts}</select>
+      </div>
+      <div class="form-field"><label>Cuenta Bancaria</label>
+        <select id="g-cuenta">${cuentaOpts}</select>
+      </div>
+    </div>
+    <div class="form-row c3">
+      <div class="form-field"><label class="required">Monto Factura</label>
+        <input type="text" id="g-monto-factura" value="${fmtMoneyDisplay(g.montoFactura||g.monto||0)}" oninput="fmtMoneyInput(this);calcPendienteGasto()" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
+      </div>
+      <div class="form-field"><label>Monto Abonado</label>
+        <input type="text" id="g-monto-abonado" value="${fmtMoneyDisplay(g.montoAbonado||g.monto||0)}" oninput="fmtMoneyInput(this);calcPendienteGasto()" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
+      </div>
+      <div class="form-field"><label>Pendiente</label>
+        <input type="text" id="g-monto-pendiente" value="${fmtMoneyDisplay(g.montoPendiente||0)}" readonly style="background:var(--gray2)">
+      </div>
+    </div>
+    <div class="form-row c2">
+      <div class="form-field"><label>Forma de Pago</label>
+        <select id="g-forma">
+          <option value="CONTADO" ${(g.formaPago||'CONTADO')==='CONTADO'?'selected':''}>Contado</option>
+          <option value="CREDITO" ${g.formaPago==='CREDITO'?'selected':''}>Crédito</option>
+        </select>
+      </div>
+      <div class="form-field"><label>Límite de Pago</label>
+        <input type="date" id="g-fecha-limite" value="${g.fechaLimite||''}">
+      </div>
+    </div>`,
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="guardarEditGasto(${i})">💾 Guardar</button>`);
 }
 function guardarEditGasto(i){
+  const g=DB.gastos[i];
+  const montoFactura=parseFloat((document.getElementById('g-monto-factura').value||'0').replace(/,/g,''));
+  const montoAbonado=parseFloat((document.getElementById('g-monto-abonado').value||'0').replace(/,/g,''));
+  const montoPendiente=Math.max(0,montoFactura-montoAbonado);
+  const banco=document.getElementById('g-banco')?.value||g.banco||'';
+  const cuenta=document.getElementById('g-cuenta')?.value||g.cuenta||'';
+  const moneda=document.getElementById('g-moneda')?.value||g.moneda||'RD$';
+  const formaPago=document.getElementById('g-forma')?.value||g.formaPago||'CONTADO';
+  const desc=document.getElementById('g-desc').value;
+  // Detectar si el abonado aumentó para registrar la diferencia en caja
+  const abonadoAnterior=parseFloat(g.montoAbonado||0);
+  const diferencia=montoAbonado-abonadoAnterior;
   DB.gastos[i].fecha=document.getElementById('g-fecha').value;
   DB.gastos[i].categoria=document.getElementById('g-cat').value;
   DB.gastos[i].suplidor=document.getElementById('g-sup').value;
-  DB.gastos[i].monto=parseFloat((document.getElementById('g-monto').value||'0').replace(/,/g,''));
-  DB.gastos[i].formaPago=document.getElementById('g-forma').value;
+  DB.gastos[i].descripcion=desc;
+  DB.gastos[i].formaPago=formaPago;
   DB.gastos[i].statusGasto=document.getElementById('g-status').value;
-  DB.gastos[i].descripcion=document.getElementById('g-desc').value;
+  DB.gastos[i].monto=montoFactura;
+  DB.gastos[i].montoFactura=montoFactura;
+  DB.gastos[i].montoAbonado=montoAbonado;
+  DB.gastos[i].montoPendiente=montoPendiente;
+  DB.gastos[i].banco=banco;
+  DB.gastos[i].cuenta=cuenta;
+  DB.gastos[i].moneda=moneda;
+  DB.gastos[i].fechaLimite=document.getElementById('g-fecha-limite')?.value||g.fechaLimite||'';
+  // Registrar en caja si hay monto abonado (CONTADO) o si el abonado aumentó
+  if(formaPago==='CONTADO'&&diferencia>0){
+    DB.caja.push({id:uid(),fecha:DB.gastos[i].fecha,tipo:'SALIDA',categoria:'Gasto de Empresa',
+      descripcion:'Gasto: '+desc,monto:diferencia,moneda,banco,cuenta,
+      referencia:banco&&cuenta?banco+' / '+cuenta:cuenta,responsable:currentUser?.nombre||''});
+    sDB('caja');
+  } else if(formaPago==='CONTADO'&&abonadoAnterior===0&&montoAbonado>0){
+    DB.caja.push({id:uid(),fecha:DB.gastos[i].fecha,tipo:'SALIDA',categoria:'Gasto de Empresa',
+      descripcion:'Gasto: '+desc,monto:montoAbonado,moneda,banco,cuenta,
+      referencia:banco&&cuenta?banco+' / '+cuenta:cuenta,responsable:currentUser?.nombre||''});
+    sDB('caja');
+  }
   logBit('gastos','Editó gasto empresa','');sDB('gastos');closeModal();toast('Gasto actualizado ✓','success');renderGastos();
 }
 function imprimirGastos(){
