@@ -585,6 +585,20 @@ function filtrarBancosPorMoneda(prefix){
   filtrarCuentasPorBanco(prefix);
 }
 function filtrarCuentasPorBanco(prefix){
+  // Handle np2-ent special case (banco selector is np2-banco-ent, cuenta is np2-ent-cuenta)
+  if(prefix==='np2-ent'){
+    const banco=document.getElementById('np2-banco-ent')?.value;
+    const cuentaEl=document.getElementById('np2-ent-cuenta');
+    if(!cuentaEl)return;
+    const bcs=DB.config.bancoCuentas||[];
+    const b=bcs.find(x=>x.banco===banco);
+    const moneda=document.getElementById('np2-moneda')?.value||'RD$';
+    const cuentas=(b?b.cuentas:[]).filter(c=>moneda==='USD'?c.tipo.includes('USD'):!c.tipo.includes('USD'));
+    cuentaEl.innerHTML=cuentas.map(c=>{const v=c.tipo+' — '+c.numero;return`<option value="${escHtml(v)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('')||'<option value="">Sin cuentas</option>';
+    return;
+  }
+  // original function continues below
+
   const moneda=document.getElementById(prefix+'-moneda')?.value||'RD$';
   const banco=document.getElementById(prefix+'-banco')?.value;
   const cuentaEl=document.getElementById(prefix+'-cuenta');
@@ -4350,6 +4364,15 @@ function nuevoPrestamo(){
     </div>
     <div class="form-field"><label>Notas / Referencia</label>
       <input type="text" id="np2-notas" placeholder="Número de contrato, propósito del préstamo...">
+    </div>
+    <div class="form-row c3">
+      <div class="form-field"><label class="required">Cuenta de Entrada</label>
+        <div style="font-size:11px;color:var(--gray);margin-bottom:4px">¿En qué cuenta se recibió el dinero?</div>
+        <select id="np2-banco-ent" onchange="filtrarCuentasPorBanco('np2-ent')">${(DB.config.bancoCuentas||[]).map(b=>`<option value="${escHtml(b.banco)}">${escHtml(b.banco)}</option>`).join('')||'<option>Sin bancos</option>'}</select>
+      </div>
+      <div class="form-field"><label>&nbsp;</label>
+        <select id="np2-ent-cuenta">${(()=>{const b=(DB.config.bancoCuentas||[])[0];return(b?b.cuentas:[]).map(c=>{const v=c.tipo+' — '+c.numero;return`<option value="${escHtml(v)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('')||'<option>Sin cuentas</option>';})()}</select>
+      </div>
     </div>`,
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
      <button class="btn btn-primary" onclick="guardarNuevoPrestamo()">💾 Guardar Préstamo</button>`);
@@ -4427,6 +4450,18 @@ function guardarNuevoPrestamo(){
   const p={id:uid(),acreedor,tipo,moneda,montoOriginal:monto,saldoPendiente:monto,tasaAnual:tasa,plazoMeses:plazo,cuotaMensual,fecha,notas:document.getElementById('np2-notas')?.value||'',pagos:[],tablaAmortizacion:tabla,cuotaActual:0};
   if(!DB.prestamos)DB.prestamos=[];
   DB.prestamos.push(p);sDB('prestamos');
+  // Registrar entrada en caja (dinero recibido del banco)
+  const np2BancoEnt=normalizarBancoGlobal(document.getElementById('np2-banco-ent')?.value||'');
+  const np2CuentaEnt=limpiarCuenta(document.getElementById('np2-ent-cuenta')?.value||'');
+  if(np2BancoEnt&&np2CuentaEnt){
+    DB.caja.push({id:uid(),fecha,tipo:'ENTRADA',categoria:'Capital Préstamo Recibido',
+      descripcion:`Préstamo recibido: ${acreedor}`,
+      monto,moneda,banco:np2BancoEnt,cuenta:np2CuentaEnt,
+      referencia:np2BancoEnt+' / '+np2CuentaEnt,
+      responsable:currentUser?.nombre||''});
+    sDB('caja');
+    refreshCajaIfActive();
+  }
   closeModal();toast('Préstamo registrado ✓','success');renderPrestamos();
 }
 function proximaCuota(p){
@@ -6729,6 +6764,18 @@ function guardarNuevoGastoVeh(){
     DB.vehiculos[iv].costo=totalGastos;
     sDB('vehiculos');
   }
+  // Registrar en caja si hay abono (pago inmediato)
+  if(abono>0){
+    const bancoCajaGV=normalizarBancoGlobal(bancoVal||'');
+    const cuentaCajaGV=limpiarCuenta(cuentaVal||'');
+    DB.caja.push({id:uid(),fecha:g.fecha,tipo:'SALIDA',categoria:'Gasto de Vehículo',
+      descripcion:`Gasto [${g.codigo||g.vehiculoId}]: ${tipo} — ${sup}`,
+      monto:abono,moneda:g.moneda||'RD$',banco:bancoCajaGV,cuenta:cuentaCajaGV,
+      referencia:bancoCajaGV&&cuentaCajaGV?bancoCajaGV+' / '+cuentaCajaGV:cuentaCajaGV,
+      responsable:currentUser?.nombre||''});
+    sDB('caja');
+    refreshCajaIfActive();
+  }
   sDB('gastosVehiculos');
   logBit('gastosVeh','Registró gasto',tipo+' — '+sup+' '+fmtMoneyDisplay(factura));toast('Gasto registrado ✓','success');
   renderGastosVeh();
@@ -6794,7 +6841,19 @@ function confirmarAbonoGastoVeh(i){
   } else {
     DB.gastosVehiculos[i].statusGasto='ABONADO';
   }
+  // Registrar en caja
+  const bancoCajaAbGV=normalizarBancoGlobal(document.getElementById('abgv-banco')?.value||'');
+  const cuentaCajaAbGV=limpiarCuenta(document.getElementById('abgv-cuenta')?.value||'');
+  const monedaCajaAbGV=document.getElementById('abgv-moneda')?.value||g.moneda||'RD$';
+  const fechaCajaAbGV=document.getElementById('abgv-fecha')?.value||today();
+  DB.caja.push({id:uid(),fecha:fechaCajaAbGV,tipo:'SALIDA',categoria:'Gasto de Vehículo',
+    descripcion:`Abono GV [${g.vehiculo||g.vehiculoId}]: ${g.tipo||''} — ${g.suplidor||''}`,
+    monto,moneda:monedaCajaAbGV,banco:bancoCajaAbGV,cuenta:cuentaCajaAbGV,
+    referencia:bancoCajaAbGV&&cuentaCajaAbGV?bancoCajaAbGV+' / '+cuentaCajaAbGV:cuentaCajaAbGV,
+    responsable:currentUser?.nombre||''});
   sDB('gastosVehiculos');
+  sDB('caja');
+  refreshCajaIfActive();
   closeModal();
   logBit('gastosVeh','Registró pago/abono','');toast('Pago registrado ✓','success');
   renderGastosVeh();
@@ -13170,8 +13229,23 @@ function guardarEditFacturaExterna(id){
   const d=_leerCamposFE();
   if(!d.vehiculo){toast('Ingresa los datos del vehículo','error');return;}
   if(!d.monto){toast('Ingresa el monto','error');return;}
+  const abonadoAnteriorFE=parseFloat(DB.facturasExternas[idx].abono||0);
   DB.facturasExternas[idx]={...DB.facturasExternas[idx],...d,pendiente:Math.max(0,d.monto-d.abono)};
-  sDB('facturasExternas');closeModal();toast('Factura actualizada ✓','success');renderFacturaExterna();
+  sDB('facturasExternas');
+  // Sync caja: remove old, add new if abono changed
+  const diferencia=d.abono-abonadoAnteriorFE;
+  if(diferencia>0){
+    const bancoCajaFEE=normalizarBancoGlobal(d.banco||'');
+    const cuentaCajaFEE=limpiarCuenta(d.cuenta||'');
+    DB.caja.push({id:uid(),fecha:d.fecha||today(),tipo:'ENTRADA',categoria:'Factura Externa',
+      descripcion:`Abono FE: ${d.vehiculo||''} — ${d.cliente||''}`,
+      monto:diferencia,moneda:d.moneda||'RD$',banco:bancoCajaFEE,cuenta:cuentaCajaFEE,
+      referencia:bancoCajaFEE&&cuentaCajaFEE?bancoCajaFEE+' / '+cuentaCajaFEE:cuentaCajaFEE,
+      responsable:currentUser?.nombre||''});
+    sDB('caja');
+    refreshCajaIfActive();
+  }
+  closeModal();toast('Factura actualizada ✓','success');renderFacturaExterna();
 }
 function calcPendFE(){
   const m=parseFloat((document.getElementById('fe-monto')?.value||'0').replace(/,/g,''));
@@ -13186,7 +13260,20 @@ function guardarFacturaExterna(nFact,imprimir){
   const f={id:uid(),numero:nFact,...d,pendiente:Math.max(0,d.monto-d.abono)};
   if(!DB.facturasExternas)DB.facturasExternas=[];
   DB.facturasExternas.push(f);
-  sDB('facturasExternas');closeModal();
+  sDB('facturasExternas');
+  // Registrar en caja si hay abono
+  if(d.abono>0){
+    const bancoCajaFE=normalizarBancoGlobal(d.banco||'');
+    const cuentaCajaFE=limpiarCuenta(d.cuenta||'');
+    DB.caja.push({id:uid(),fecha:d.fecha||today(),tipo:'ENTRADA',categoria:'Factura Externa',
+      descripcion:`Cobro FE: ${d.vehiculo||''} — ${d.cliente||''}`,
+      monto:d.abono,moneda:d.moneda||'RD$',banco:bancoCajaFE,cuenta:cuentaCajaFE,
+      referencia:bancoCajaFE&&cuentaCajaFE?bancoCajaFE+' / '+cuentaCajaFE:cuentaCajaFE,
+      responsable:currentUser?.nombre||''});
+    sDB('caja');
+    refreshCajaIfActive();
+  }
+  closeModal();
   if(imprimir)imprimirFacturaExterna(f.id,true);
   toast('Factura externa guardada ✓','success');renderFacturaExterna();
 }
