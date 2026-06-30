@@ -11490,6 +11490,27 @@ function imprimirReciboCobro(cxc, pago){
   win.document.close();
 }
 
+// Si una CxC tiene "abonado" pero no tiene el detalle individual en pagos[] (dato histórico
+// cargado antes de existir este detalle), se reconstruye un único pago a partir del total
+// abonado para que sea visible y se pueda editar/eliminar (revertir) como cualquier otro.
+function asegurarPagosCXC(x){
+  if((!x.pagos||x.pagos.length===0)&&parseFloat(x.abonado||0)>0){
+    const monto=parseFloat(x.abonado||0);
+    const ci=DB.caja.findIndex(c=>
+      Math.abs(parseFloat(c.monto||0)-monto)<0.5&&
+      (c.descripcion||'').toUpperCase().includes((x.cliente||'').toUpperCase())&&
+      (c.categoria||'').toLowerCase().includes('cxc')
+    );
+    let cajaId=null;
+    if(ci>=0){
+      if(!DB.caja[ci].id)DB.caja[ci].id=uid();
+      cajaId=DB.caja[ci].id;
+    }
+    x.pagos=[{id:uid(),fecha:x.fecha||today(),monto,banco:x.banco||'',cuenta:x.cuenta||'Caja General',nota:'Abono histórico (sin detalle individual original)',saldado:x.status==='SALDADO',cajaId,legacy:true}];
+    sDB('cxc');
+  }
+  return x.pagos||[];
+}
 function verAbonosCXC(id){
   const x=DB.cxc.find(c=>c.id===id);if(!x)return;
   const ventaRel=DB.ventas.find(v=>v.id===x.ventaId);
@@ -11498,17 +11519,18 @@ function verAbonosCXC(id){
   const fV=(n)=>esUSD?'$'+parseFloat(n||0).toLocaleString('en-US',{minimumFractionDigits:2})+' USD':fmt(n);
   const puedeEditarPago=currentUser?.role==='admin'||canDo('editar')||(currentUser?.permisos?.editarCobros);
   const puedeBorrarPago=currentUser?.role==='admin'||canDo('eliminar')||(currentUser?.permisos?.borrarCobros);
-  const rows=(x.pagos||[]).map((p,pi)=>`<tr>
+  const pagosX=asegurarPagosCXC(x);
+  const rows=pagosX.map((p,pi)=>`<tr>
     <td>${fmtDate(p.fecha)}</td>
     <td style="font-weight:700;color:var(--green)">${fV(p.monto)}</td>
     <td>${escHtml(p.cuenta||'—')}</td>
     <td>${escHtml(p.nota||'—')}</td>
-    <td><span class="badge ${x.status==='SALDADO'&&pi===(x.pagos||[]).length-1?'badge-green':'badge-amber'}">${x.status==='SALDADO'&&pi===(x.pagos||[]).length-1?'SALDADO':'ABONO'}</span></td>
+    <td><span class="badge ${x.status==='SALDADO'&&pi===pagosX.length-1?'badge-green':'badge-amber'}">${x.status==='SALDADO'&&pi===pagosX.length-1?'SALDADO':'ABONO'}</span></td>
     <td style="display:flex;gap:4px">
       <button class="btn btn-secondary btn-sm" title="Imprimir recibo" onclick="${x.esPrestamo&&x.prestamoId?`imprimirReciboPago('prestamo_otorgado','${x.id}','${x.prestamoId||''}','${p.id||pi}')`:
-      `imprimirReciboCobro(DB.cxc.find(c=>c.id==='${x.id}'),{fecha:'${p.fecha}',monto:${p.monto},cuenta:'${escHtml(p.cuenta||'')}',nota:'${escHtml(p.nota||'')}',saldado:${x.status==='SALDADO'&&pi===(x.pagos||[]).length-1}})`}">🖨️</button>
+      `imprimirReciboCobro(DB.cxc.find(c=>c.id==='${x.id}'),{fecha:'${p.fecha}',monto:${p.monto},cuenta:'${escHtml(p.cuenta||'')}',nota:'${escHtml(p.nota||'')}',saldado:${x.status==='SALDADO'&&pi===pagosX.length-1}})`}">🖨️</button>
       ${puedeEditarPago?`<button class="btn btn-secondary btn-sm" title="Editar pago" onclick="editarPagoCXC('${x.id}',${pi})">✏️</button>`:''}
-      ${puedeBorrarPago?`<button class="btn btn-red btn-sm" title="Eliminar pago" onclick="eliminarPagoCXC('${x.id}',${pi})">🗑</button>`:''}
+      ${puedeBorrarPago?`<button class="btn btn-red btn-sm" title="Eliminar / Revertir pago" onclick="eliminarPagoCXC('${x.id}',${pi})">🗑</button>`:''}
     </td>
   </tr>`).join('');
   openModal('📋 Historial de Cobros — '+escHtml(x.cliente),`
@@ -11609,8 +11631,10 @@ function guardarEditPagoCXC(){
 
   // Sincronizar el movimiento de Caja vinculado
   let ci=buscarCajaDePagoCXC(x,p);
-  if(ci<0&&p.cajaId){ // el movimiento fue borrado manualmente de Caja → recrearlo
-    DB.caja.push({id:p.cajaId,fecha:fechaNueva,tipo:'ENTRADA',categoria:'Cobro CxC',descripcion:`Cobro CxC: ${x.cliente} — ${x.factura}`,monto:montoNuevo,moneda:x.moneda||'RD$',banco:normalizarBancoGlobal(bancoNuevo),cuenta:limpiarCuenta(cuentaNueva),referencia:bancoNuevo?(bancoNuevo+' / '+cuentaNueva):cuentaNueva,responsable:currentUser?.nombre||''});
+  if(ci<0){ // no existe movimiento vinculado (fue borrado manualmente, o es un pago histórico sin caja) → crearlo
+    const nuevoCajaId=p.cajaId||uid();
+    DB.caja.push({id:nuevoCajaId,fecha:fechaNueva,tipo:'ENTRADA',categoria:'Cobro CxC',descripcion:`Cobro CxC: ${x.cliente} — ${x.factura}`,monto:montoNuevo,moneda:x.moneda||'RD$',banco:normalizarBancoGlobal(bancoNuevo),cuenta:limpiarCuenta(cuentaNueva),referencia:bancoNuevo?(bancoNuevo+' / '+cuentaNueva):cuentaNueva,responsable:currentUser?.nombre||''});
+    p.cajaId=nuevoCajaId;
   } else if(ci>=0){
     DB.caja[ci].fecha=fechaNueva;
     DB.caja[ci].monto=montoNuevo;
