@@ -11496,8 +11496,8 @@ function verAbonosCXC(id){
 
   const esUSD=(x.moneda||ventaRel?.moneda||'RD$')==='USD';
   const fV=(n)=>esUSD?'$'+parseFloat(n||0).toLocaleString('en-US',{minimumFractionDigits:2})+' USD':fmt(n);
-  const puedeEditarPago=currentUser?.role==='admin'||canDo('editar');
-  const puedeBorrarPago=currentUser?.role==='admin'||canDo('eliminar');
+  const puedeEditarPago=currentUser?.role==='admin'||canDo('editar')||(currentUser?.permisos?.editarCobros);
+  const puedeBorrarPago=currentUser?.role==='admin'||canDo('eliminar')||(currentUser?.permisos?.borrarCobros);
   const rows=(x.pagos||[]).map((p,pi)=>`<tr>
     <td>${fmtDate(p.fecha)}</td>
     <td style="font-weight:700;color:var(--green)">${fV(p.monto)}</td>
@@ -11629,7 +11629,7 @@ function guardarEditPagoCXC(){
 }
 
 function eliminarPagoCXC(cxcId,pagoIndex){
-  if(currentUser?.role!=='admin'&&!canDo('eliminar')){toast('No tienes permiso para eliminar pagos','error');return;}
+  if(currentUser?.role!=='admin'&&!canDo('eliminar')&&!currentUser?.permisos?.borrarCobros){toast('No tienes permiso para eliminar pagos','error');return;}
   const idx=DB.cxc.findIndex(c=>c.id===cxcId);if(idx<0)return;
   const x=DB.cxc[idx];
   const p=(x.pagos||[])[pagoIndex];if(!p)return;
