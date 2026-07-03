@@ -395,6 +395,16 @@ async function publicarNuevaVersion(silencioso){
     <div class="modal-footer" id="modal-footer"></div>
   </div>
 </div>
+<div class="modal-overlay" id="cheque-modal-overlay" style="z-index:600">
+  <div class="modal" id="cheque-modal" style="max-width:380px">
+    <div class="modal-title">🖊️ Datos del Cheque</div>
+    <div id="cheque-modal-body"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="cancelarModalCheque()">Cancelar</button>
+      <button class="btn btn-primary" onclick="confirmarModalCheque()">✓ Confirmar</button>
+    </div>
+  </div>
+</div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -686,6 +696,74 @@ function ejecutarResetDatos(){
 function filterTable(id,q){const tbl=document.getElementById(id);if(!tbl)return;const sq=q.toLowerCase();tbl.querySelectorAll('tbody tr').forEach(tr=>{tr.style.display=tr.textContent.toLowerCase().includes(sq)?'':'none';});}
 function openModal(title,body,footer){document.getElementById('modal-title').textContent=title;document.getElementById('modal-body').innerHTML=body;document.getElementById('modal-footer').innerHTML=footer||'<button class="btn btn-secondary" onclick="closeModal()">Cerrar</button>';document.getElementById('modal-overlay').classList.add('open');}
 function closeModal(){document.getElementById('modal-overlay').classList.remove('open');}
+
+// ══ MODAL DE CHEQUE (reutilizable en todos los módulos de pago) ══
+// Genera los campos ocultos + badge informativo que se insertan junto al select "Forma de Pago"
+function chequeHiddenFields(prefix,conNombre,numero,nombre){
+  numero=numero||'';nombre=nombre||'';
+  const visible=numero?'block':'none';
+  const label=numero?('🖊️ Cheque #'+escHtml(numero)+(conNombre&&nombre?' — '+escHtml(nombre):'')+' <span style="text-decoration:underline">(clic para editar)</span>'):'';
+  return `<input type="hidden" id="${prefix}-numcheque" value="${escHtml(numero)}">${conNombre?`<input type="hidden" id="${prefix}-nombrecheque" value="${escHtml(nombre)}">`:''}<div id="${prefix}-cheque-info" style="display:${visible};font-size:11px;color:var(--blue);margin-top:4px;cursor:pointer;font-weight:600" onclick="abrirModalCheque('${prefix}',${conNombre})">${label}</div>`;
+}
+// Se llama desde el onchange del select "Forma de Pago" de cada módulo
+let _chequeCtx={prefix:null,conNombre:false,selectEl:null};
+function onFormaPagoChange(sel,prefix,conNombre){
+  if(sel.value==='CHEQUE'){
+    abrirModalCheque(prefix,conNombre,sel);
+  } else {
+    sel.setAttribute('data-prev',sel.value);
+    const nc=document.getElementById(prefix+'-numcheque');if(nc)nc.value='';
+    const nn=document.getElementById(prefix+'-nombrecheque');if(nn)nn.value='';
+    const info=document.getElementById(prefix+'-cheque-info');if(info){info.style.display='none';info.textContent='';}
+  }
+}
+function abrirModalCheque(prefix,conNombre,selectEl){
+  selectEl=selectEl||document.getElementById(prefix+'-forma');
+  _chequeCtx={prefix,conNombre,selectEl};
+  const numActual=document.getElementById(prefix+'-numcheque')?.value||'';
+  const nombreActual=document.getElementById(prefix+'-nombrecheque')?.value||'';
+  document.getElementById('cheque-modal-body').innerHTML=`
+    <div class="form-field"><label class="required"># Cheque</label><input type="text" id="chq-numero" value="${escHtml(numActual)}" placeholder="Ej: 001234"></div>
+    ${conNombre?`<div class="form-field"><label class="required">Nombre de quien se hizo el cheque</label><input type="text" id="chq-nombre" value="${escHtml(nombreActual)}" placeholder="Nombre del beneficiario"></div>`:''}`;
+  document.getElementById('cheque-modal-overlay').classList.add('open');
+  setTimeout(()=>document.getElementById('chq-numero')?.focus(),50);
+}
+function cancelarModalCheque(){
+  const ctx=_chequeCtx;
+  const yaTieneNumero=document.getElementById(ctx.prefix+'-numcheque')?.value;
+  if(!yaTieneNumero&&ctx.selectEl){
+    ctx.selectEl.value=ctx.selectEl.getAttribute('data-prev')||'EFECTIVO';
+  }
+  document.getElementById('cheque-modal-overlay').classList.remove('open');
+}
+function confirmarModalCheque(){
+  const ctx=_chequeCtx;
+  const numero=document.getElementById('chq-numero')?.value.trim()||'';
+  if(!numero){toast('El número de cheque es requerido','error');return;}
+  let nombre='';
+  if(ctx.conNombre){
+    nombre=document.getElementById('chq-nombre')?.value.trim()||'';
+    if(!nombre){toast('El nombre de quien se hizo el cheque es requerido','error');return;}
+  }
+  const nc=document.getElementById(ctx.prefix+'-numcheque');if(nc)nc.value=numero;
+  if(ctx.conNombre){const nn=document.getElementById(ctx.prefix+'-nombrecheque');if(nn)nn.value=nombre;}
+  const info=document.getElementById(ctx.prefix+'-cheque-info');
+  if(info){info.style.display='block';info.innerHTML='🖊️ Cheque #'+escHtml(numero)+(ctx.conNombre?' — '+escHtml(nombre):'')+' <span style="text-decoration:underline">(clic para editar)</span>';}
+  if(ctx.selectEl)ctx.selectEl.setAttribute('data-prev','CHEQUE');
+  document.getElementById('cheque-modal-overlay').classList.remove('open');
+}
+// Valida antes de guardar: si formaPago=CHEQUE exige que ya se haya capturado el # de cheque (y nombre si aplica)
+function validarChequeAntesDeGuardar(prefix,conNombre){
+  const formaEl=document.getElementById(prefix+'-forma');
+  if(!formaEl||formaEl.value!=='CHEQUE')return true;
+  const numero=document.getElementById(prefix+'-numcheque')?.value||'';
+  if(!numero){toast('Debes indicar el # de Cheque','error');abrirModalCheque(prefix,conNombre,formaEl);return false;}
+  if(conNombre){
+    const nombre=document.getElementById(prefix+'-nombrecheque')?.value||'';
+    if(!nombre){toast('Debes indicar el nombre de quien se hizo el cheque','error');abrirModalCheque(prefix,conNombre,formaEl);return false;}
+  }
+  return true;
+}
 function preguntarCerrar(onSiCode){
   openModal('¿Desea cerrar esta ventana?',
     '<p style="font-size:15px;text-align:center;padding:16px 0">¿Desea cerrar el formulario o continuar trabajando?</p>',
@@ -2239,7 +2317,8 @@ function gastosVehiculo(vid){
         <div class="form-field" style="margin:0"><label style="font-size:10px">Monto (RD$)</label><input type="text" id="gv-monto" placeholder="0.00" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)"></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px">
-        <div class="form-field" style="margin:0"><label style="font-size:10px">Forma de Pago</label><select id="gv-forma"><option value="CONTADO">Contado</option><option value="CREDITO">Crédito</option></select></div>
+        <div class="form-field" style="margin:0"><label style="font-size:10px">Forma de Pago</label><select id="gv-forma" onchange="document.getElementById('gv-metodo-wrap').style.display=this.value==='CONTADO'?'block':'none'"><option value="CONTADO">Contado</option><option value="CREDITO">Crédito</option></select></div>
+        <div class="form-field" style="margin:0" id="gv-metodo-wrap"><label style="font-size:10px">Método de Pago</label><select id="gvm-forma" data-prev="EFECTIVO" onchange="onFormaPagoChange(this,'gvm',false)"><option value="EFECTIVO">Efectivo</option><option value="TRANSFERENCIA">Transferencia</option><option value="DEPOSITO">Depósito</option><option value="CHEQUE">Cheque</option></select>${chequeHiddenFields('gvm',false)}</div>
         <div class="form-field" style="margin:0"><label style="font-size:10px">Moneda</label><select id="gv-moneda" onchange="filtrarBancosPorMoneda('gv')"><option value="RD$">RD$</option><option value="USD">USD</option></select></div>
         <div class="form-field" style="margin:0"><label style="font-size:10px">Banco</label><select id="gv-banco" onchange="filtrarCuentasPorBanco('gv')">${(DB.config.bancoCuentas||[]).map(b=>`<option value="${escHtml(b.banco)}">${escHtml(b.banco)}</option>`).join('')}</select></div>
         <div class="form-field" style="margin:0"><label style="font-size:10px">Cuenta</label><select id="gv-cuenta">${(()=>{const bcs=DB.config.bancoCuentas||[];const b=bcs.find(x=>(x.cuentas||[]).some(c=>!c.tipo.includes('USD')&&!c.tipo.includes('Dólares')))||bcs[0];return(b?b.cuentas:[]).filter(c=>!c.tipo.includes('USD')&&!c.tipo.includes('Dólares')).map(c=>{const v=c.tipo+' — '+c.numero;return`<option value="${escHtml(v)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('')||'<option value="">Sin cuentas</option>';})()}</select></div>
@@ -2269,6 +2348,9 @@ function agregarGastoVeh(vid){
   if(!monto){toast('Ingresa el monto','error');return;}
   const formaPago=document.getElementById('gv-forma').value;
   const esCredito=formaPago==='CREDITO';
+  if(!esCredito&&!validarChequeAntesDeGuardar('gvm',false))return;
+  const metodoPago=document.getElementById('gvm-forma')?.value||'EFECTIVO';
+  const numeroCheque=document.getElementById('gvm-numcheque')?.value||'';
   if(!DB.gastosVehiculos)DB.gastosVehiculos=[];
   const gvBanco=normalizarBancoGlobal(document.getElementById('gv-banco')?.value||'');
   const gvCuentaRaw=document.getElementById('gv-cuenta')?.value||'';
@@ -2288,11 +2370,13 @@ function agregarGastoVeh(vid){
     montoPagado:esCredito?0:monto,
     montoPendiente:esCredito?monto:0,
     formaPago,
+    metodoPago:esCredito?'':metodoPago,
+    numeroCheque:esCredito?'':numeroCheque,
     responsable:currentUser?.nombre||''
   };
   DB.gastosVehiculos.push(g);
   if(!esCredito){
-    DB.caja.push({id:uid(),fecha:g.fecha,tipo:'SALIDA',categoria:'Gasto de Vehículo',descripcion:`Gasto [${DB.vehiculos.find(v=>v.id===vid)?.codigo||vid}]: ${g.tipo} — ${g.descripcion}`,monto,moneda:g.moneda||'RD$',banco:normalizarBancoGlobal(g.banco||''),cuenta:limpiarCuenta(g.cuenta||''),referencia:g.banco&&g.cuenta?g.banco+' / '+g.cuenta:limpiarCuenta(g.cuenta||''),responsable:currentUser?.nombre||''});
+    DB.caja.push({id:uid(),fecha:g.fecha,tipo:'SALIDA',categoria:'Gasto de Vehículo',descripcion:`Gasto [${DB.vehiculos.find(v=>v.id===vid)?.codigo||vid}]: ${g.tipo} — ${g.descripcion}`+(numeroCheque?` (Cheque #${numeroCheque})`:''),monto,moneda:g.moneda||'RD$',banco:normalizarBancoGlobal(g.banco||''),cuenta:limpiarCuenta(g.cuenta||''),referencia:g.banco&&g.cuenta?g.banco+' / '+g.cuenta:limpiarCuenta(g.cuenta||''),formaPago:metodoPago,numeroCheque,responsable:currentUser?.nombre||''});
     sDB('caja');
     refreshCajaIfActive();
   }
@@ -2726,7 +2810,7 @@ function renderCaja(){
           <td>${fmtDate(c.fecha)}</td>
           <td><span class="badge ${c.tipo==='ENTRADA'?'badge-green':'badge-red'}">${c.tipo==='ENTRADA'?'📥 Entrada':'📤 Salida'}</span></td>
           <td><span class="badge badge-gray" style="font-size:11px">${escHtml(c.categoria||'—')}</span></td>
-          <td>${escHtml(c.descripcion||'—')}</td>
+          <td>${escHtml(c.descripcion||'—')}${c.formaPago==='CHEQUE'&&c.numeroCheque?`<div style="font-size:10px;color:var(--blue);font-weight:600;margin-top:2px">🖊️ Cheque #${escHtml(c.numeroCheque)}${c.nombreCheque?' — '+escHtml(c.nombreCheque):''}</div>`:''}</td>
           <td style="font-weight:700;color:${c.tipo==='ENTRADA'?'var(--green)':'var(--red)'}">${fmt(c.monto)}</td>
           <td style="font-size:12px;color:var(--gray)">${escHtml(c.referencia||'—')}</td>
           <td style="font-size:12px">${escHtml(c.responsable||'—')}</td>
@@ -2767,6 +2851,15 @@ function editarCaja(i){
       <div class="form-field"><label>Banco</label><select id="ec-banco" onchange="actualizarCuentasCajaEdit()">${bancoOpts}</select></div>
       <div class="form-field"><label>Cuenta</label><select id="ec-cuenta">${cuentaOpts}</select></div>
     </div>
+    <div class="form-field"><label>Forma de Pago</label>
+      <select id="ec-forma" data-prev="${c.formaPago&&c.formaPago!=='CHEQUE'?c.formaPago:'EFECTIVO'}" onchange="onFormaPagoChange(this,'ec',true)">
+        <option value="EFECTIVO" ${(c.formaPago||'EFECTIVO')==='EFECTIVO'?'selected':''}>Efectivo</option>
+        <option value="TRANSFERENCIA" ${c.formaPago==='TRANSFERENCIA'?'selected':''}>Transferencia</option>
+        <option value="DEPOSITO" ${c.formaPago==='DEPOSITO'?'selected':''}>Depósito</option>
+        <option value="CHEQUE" ${c.formaPago==='CHEQUE'?'selected':''}>Cheque</option>
+      </select>
+      ${chequeHiddenFields('ec',true,c.numeroCheque,c.nombreCheque)}
+    </div>
   `,`<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
      <button class="btn btn-primary" onclick="guardarEditCaja(${i})">💾 Guardar</button>`);
 }
@@ -2779,6 +2872,7 @@ function actualizarCuentasCajaEdit(){
   sel.innerHTML=(b?b.cuentas:[]).map(c=>`<option value="${escHtml(c.tipo+' — '+c.numero)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`).join('')||'<option value="">Sin cuentas</option>';
 }
 function guardarEditCaja(i){
+  if(!validarChequeAntesDeGuardar('ec',true))return;
   const c=DB.caja[i];if(!c)return;
   const fecha=document.getElementById('ec-fecha').value;
   const tipo=document.getElementById('ec-tipo').value;
@@ -2787,9 +2881,12 @@ function guardarEditCaja(i){
   const desc=document.getElementById('ec-desc').value.trim();
   const banco=document.getElementById('ec-banco').value;
   const cuenta=document.getElementById('ec-cuenta').value;
+  const formaPago=document.getElementById('ec-forma')?.value||'EFECTIVO';
+  const numeroCheque=document.getElementById('ec-numcheque')?.value||'';
+  const nombreCheque=document.getElementById('ec-nombrecheque')?.value||'';
   if(!fecha||!monto){toast('Fecha y monto son requeridos','error');return;}
   logBit('caja','Editó registro de caja',c.descripcion||'');
-  DB.caja[i]={...c,fecha,tipo,categoria:cat,monto,descripcion:desc,banco,cuenta,referencia:cuenta?banco+' / '+cuenta:c.referencia||''};
+  DB.caja[i]={...c,fecha,tipo,categoria:cat,monto,descripcion:desc,banco,cuenta,referencia:cuenta?banco+' / '+cuenta:c.referencia||'',formaPago,numeroCheque,nombreCheque};
   sDB('caja');closeModal();toast('Movimiento actualizado ✓','success');renderCaja();
 }
 function exportarCajaPDF(){
@@ -3060,6 +3157,15 @@ function nuevoCajaMov(tipo){
       </div>
     </div>
     ${htmlMonedaBancoCuenta('cj','RD$')}
+    <div class="form-field"><label>Forma de Pago</label>
+      <select id="cj-forma" data-prev="EFECTIVO" onchange="onFormaPagoChange(this,'cj',true)">
+        <option value="EFECTIVO">Efectivo</option>
+        <option value="TRANSFERENCIA">Transferencia</option>
+        <option value="DEPOSITO">Depósito</option>
+        <option value="CHEQUE">Cheque</option>
+      </select>
+      ${chequeHiddenFields('cj',true)}
+    </div>
     <div class="form-field"><label>Responsable</label><input type="text" id="cj-resp" value="${currentUser?.nombre||''}"></div>`,
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
      <button class="btn ${tipo==='ENTRADA'?'btn-green':'btn-red'}" onclick="guardarCajaMov('${tipo}')">💾 Guardar</button>`);
@@ -3082,16 +3188,21 @@ function agregarCatCaja(tipo){
   toast('Categoría agregada ✓','success');
 }
 function guardarCajaMov(tipo){
+  if(!validarChequeAntesDeGuardar('cj',true))return;
   const monto=parseFloat((document.getElementById('cj-monto')?.value||'0').replace(/,/g,''));
   const desc=document.getElementById('cj-desc').value.trim();
   if(!monto||!desc){toast('Monto y descripción son requeridos','error');return;}
   const banco=document.getElementById('cj-banco')?.value||'';
   const cuenta=document.getElementById('cj-cuenta')?.value||'';
   const moneda=document.getElementById('cj-moneda')?.value||'RD$';
+  const formaPago=document.getElementById('cj-forma')?.value||'EFECTIVO';
+  const numeroCheque=document.getElementById('cj-numcheque')?.value||'';
+  const nombreCheque=document.getElementById('cj-nombrecheque')?.value||'';
   DB.caja.push({id:uid(),fecha:document.getElementById('cj-fecha').value,tipo,
     categoria:document.getElementById('cj-cat')?.value||'',
     descripcion:desc,monto,moneda,banco,cuenta,
     referencia:banco+(cuenta?' / '+cuenta:''),
+    formaPago,numeroCheque,nombreCheque,
     responsable:document.getElementById('cj-resp').value});
   logBit('caja','Registro manual de caja','');sDB('caja');closeModal();toast('Registro guardado ✓','success');renderCaja();
 }
@@ -3220,12 +3331,13 @@ function editarGasto(i){
     </div>
     <div class="form-row c2">
       <div class="form-field"><label>Forma de Pago</label>
-        <select id="g-forma">
+        <select id="g-forma" data-prev="${g.formaPago&&g.formaPago!=='CHEQUE'?g.formaPago:'EFECTIVO'}" onchange="onFormaPagoChange(this,'g',false)">
           <option value="EFECTIVO" ${(g.formaPago||'EFECTIVO')==='EFECTIVO'||g.formaPago==='CONTADO'?'selected':''}>Efectivo</option>
           <option value="TRANSFERENCIA" ${g.formaPago==='TRANSFERENCIA'?'selected':''}>Transferencia</option>
           <option value="DEPOSITO" ${g.formaPago==='DEPOSITO'?'selected':''}>Depósito</option>
           <option value="CHEQUE" ${g.formaPago==='CHEQUE'?'selected':''}>Cheque</option>
         </select>
+        ${chequeHiddenFields('g',false,g.numeroCheque,g.nombreCheque)}
       </div>
       <div class="form-field"><label>Límite de Pago</label>
         <input type="date" id="g-fecha-limite" value="${g.fechaLimite||''}">
@@ -3234,6 +3346,7 @@ function editarGasto(i){
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="guardarEditGasto(${i})">💾 Guardar</button>`);
 }
 function guardarEditGasto(i){
+  if(!validarChequeAntesDeGuardar('g',false))return;
   const g=DB.gastos[i];
   const montoFactura=parseFloat((document.getElementById('g-monto-factura').value||'0').replace(/,/g,''));
   const banco=document.getElementById('g-banco')?.value||g.banco||'';
@@ -3264,6 +3377,7 @@ function guardarEditGasto(i){
   DB.gastos[i].cuenta=cuenta;
   DB.gastos[i].moneda=moneda;
   DB.gastos[i].fechaLimite=document.getElementById('g-fecha-limite')?.value||g.fechaLimite||'';
+  DB.gastos[i].numeroCheque=document.getElementById('g-numcheque')?.value||'';
   // Sincronizar caja por id exacto (cajaId). Si el registro es antiguo y no tiene cajaId,
   // se busca una sola vez por aproximación y se vincula para el futuro.
   const esPagoInm=['CONTADO','EFECTIVO','TRANSFERENCIA','DEPOSITO','CHEQUE'].includes(formaPago);
@@ -3377,12 +3491,13 @@ function nuevoGasto(){
     </div>
     <div class="form-row c2">
       <div class="form-field"><label>Forma de Pago</label>
-        <select id="g-forma">
+        <select id="g-forma" data-prev="EFECTIVO" onchange="onFormaPagoChange(this,'g',false)">
           <option value="EFECTIVO">Efectivo</option>
           <option value="TRANSFERENCIA">Transferencia</option>
           <option value="DEPOSITO">Depósito</option>
           <option value="CHEQUE">Cheque</option>
         </select>
+        ${chequeHiddenFields('g',false)}
       </div>
       <div class="form-field"><label>Fecha Límite Pago</label>
         <input type="date" id="g-fecha-limite">
@@ -3425,6 +3540,7 @@ function calcPendienteGasto(){
   }
 }
 function guardarGasto(idx){
+  if(!validarChequeAntesDeGuardar('g',false))return;
   const desc=document.getElementById('g-desc').value.trim();
   const montoFactura=parseFloat((document.getElementById('g-monto-factura')?.value||document.getElementById('g-monto')?.value||'0').replace(/,/g,''));
   if(!montoFactura||!desc){toast('Monto y descripción son requeridos','error');return;}
@@ -3451,6 +3567,7 @@ function guardarGasto(idx){
     cuenta:document.getElementById('g-cuenta')?.value||'',
     moneda:document.getElementById('g-moneda')?.value||'RD$',
     fechaLimite:document.getElementById('g-fecha-limite')?.value||'',
+    numeroCheque:document.getElementById('g-numcheque')?.value||'',
     responsable:currentUser?.nombre||''
   };
   if(idx!==undefined)DB.gastos[idx]=g;
@@ -3619,6 +3736,15 @@ function nomAccion(accion){
           ${[['MEN','Mensual'],['1Q','1ra Quincena'],['2Q','2da Quincena'],['SEM','Semanal'],['COM','Comisión']].map(([v,l])=>`<option value="${v}" ${p.tipo===v?'selected':''}>${l}</option>`).join('')}
         </select></div>
         <div class="form-field"><label>Nota</label><input type="text" id="ep-nota" value="${escHtml(p.nota||'')}"></div>
+      </div>
+      <div class="form-field"><label>Forma de Pago</label>
+        <select id="epn-forma" data-prev="${p.formaPago&&p.formaPago!=='CHEQUE'?p.formaPago:'EFECTIVO'}" onchange="onFormaPagoChange(this,'epn',false)">
+          <option value="EFECTIVO" ${(p.formaPago||'EFECTIVO')==='EFECTIVO'?'selected':''}>Efectivo</option>
+          <option value="TRANSFERENCIA" ${p.formaPago==='TRANSFERENCIA'?'selected':''}>Transferencia</option>
+          <option value="DEPOSITO" ${p.formaPago==='DEPOSITO'?'selected':''}>Depósito</option>
+          <option value="CHEQUE" ${p.formaPago==='CHEQUE'?'selected':''}>Cheque</option>
+        </select>
+        ${chequeHiddenFields('epn',false,p.numeroCheque)}
       </div>`,
       `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
        <button class="btn btn-primary" onclick="guardarEditPagoNomina('${p.id}')">💾 Guardar</button>`);
@@ -3649,6 +3775,7 @@ function nomAccion(accion){
   }
 }
 function guardarEditPagoNomina(pid){
+  if(!validarChequeAntesDeGuardar('epn',false))return;
   const fecha=document.getElementById('ep-fecha')?.value;
   const monto=parseFloat((document.getElementById('ep-monto')?.value||'0').replace(/,/g,''));
   const tipo=document.getElementById('ep-tipo')?.value||'MEN';
@@ -3656,6 +3783,8 @@ function guardarEditPagoNomina(pid){
   const banco=document.getElementById('ep-banco')?.value||'';
   const cuenta=document.getElementById('ep-cuenta')?.value||'';
   const moneda=document.getElementById('ep-moneda')?.value||'RD$';
+  const formaPago=document.getElementById('epn-forma')?.value||'EFECTIVO';
+  const numeroCheque=document.getElementById('epn-numcheque')?.value||'';
   if(!fecha){toast('La fecha es requerida','error');return;}
   if(!monto||monto<=0){toast('El monto debe ser mayor a 0','error');return;}
   const idx=(DB.nominaPagos||[]).findIndex(p=>p.id===pid);
@@ -3671,15 +3800,16 @@ function guardarEditPagoNomina(pid){
     DB.caja[ciNP].fecha=fecha;DB.caja[ciNP].monto=monto;DB.caja[ciNP].moneda=moneda;
     DB.caja[ciNP].banco=banco;DB.caja[ciNP].cuenta=cuenta;
     DB.caja[ciNP].referencia=banco&&cuenta?banco+' / '+cuenta:cuenta;
+    DB.caja[ciNP].formaPago=formaPago;DB.caja[ciNP].numeroCheque=numeroCheque;
   } else {
     const nuevoCajaIdNP=uid();
     DB.caja.push({id:nuevoCajaIdNP,fecha,tipo:'SALIDA',categoria:'Nómina/Salario',
       descripcion:'Pago nómina: '+(pagoAnteriorNom.empleadoNombre||''),
       monto,moneda,banco,cuenta,referencia:banco&&cuenta?banco+' / '+cuenta:cuenta,
-      responsable:currentUser?.nombre||''});
+      formaPago,numeroCheque,responsable:currentUser?.nombre||''});
     pagoAnteriorNom.cajaId=nuevoCajaIdNP;
   }
-  DB.nominaPagos[idx]={...DB.nominaPagos[idx],fecha,monto,tipo,nota,banco,cuenta,moneda,cajaId:pagoAnteriorNom.cajaId};
+  DB.nominaPagos[idx]={...DB.nominaPagos[idx],fecha,monto,tipo,nota,banco,cuenta,moneda,formaPago,numeroCheque,cajaId:pagoAnteriorNom.cajaId};
   sDB('nominaPagos');sDB('caja');closeModal();toast('Pago actualizado ✓','success');renderNomina();
   refreshCajaIfActive();
 }
@@ -3720,7 +3850,16 @@ function registrarPagoNomina(i){
         <select id="np-cuenta">${(()=>{const bcs=DB.config.bancoCuentas||[];const b=bcs.find(x=>(x.cuentas||[]).some(c=>!c.tipo.includes('USD')&&!c.tipo.includes('Dólares')));return(b?b.cuentas:[]).filter(c=>!c.tipo.includes('USD')&&!c.tipo.includes('Dólares')).map(c=>{const v=c.tipo+' — '+c.numero;return`<option value="${escHtml(v)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('')||'<option value="">Sin cuentas</option>';})()}</select>
       </div>
     </div>
-    <div class="form-field"><label>Nota</label><input type="text" id="np-nota" placeholder="Opcional"></div>`,
+    <div class="form-field"><label>Nota</label><input type="text" id="np-nota" placeholder="Opcional"></div>
+    <div class="form-field"><label>Forma de Pago</label>
+      <select id="np-forma" data-prev="EFECTIVO" onchange="onFormaPagoChange(this,'np',false)">
+        <option value="EFECTIVO">Efectivo</option>
+        <option value="TRANSFERENCIA">Transferencia</option>
+        <option value="DEPOSITO">Depósito</option>
+        <option value="CHEQUE">Cheque</option>
+      </select>
+      ${chequeHiddenFields('np',false)}
+    </div>`,
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
      <button class="btn btn-primary" onclick="guardarPagoNomina(${i})">💾 Registrar Pago</button>`);
 }
@@ -3731,6 +3870,7 @@ function calcMontoNomina(salario){
   if(inp)inp.value=fmtMoneyDisplay(m);
 }
 function guardarPagoNomina(i){
+  if(!validarChequeAntesDeGuardar('np',false))return;
   const monto=parseFloat((document.getElementById('np-monto').value||'0').replace(/,/g,''));
   if(!monto){toast('Ingresa el monto','error');return;}
   const _np_banco=document.getElementById('np-banco')?.value||'';
@@ -3743,13 +3883,15 @@ function guardarPagoNomina(i){
   const banco=document.getElementById('np-banco')?.value||'';
   const moneda=document.getElementById('np-moneda')?.value||'RD$';
   const nota=document.getElementById('np-nota')?.value||'';
+  const formaPago=document.getElementById('np-forma')?.value||'EFECTIVO';
+  const numeroCheque=document.getElementById('np-numcheque')?.value||'';
   const tipoLabel={MEN:'Mensual','1Q':'1ra Quincena','2Q':'2da Quincena',SEM:'Semanal',COM:'Comisión'}[tipo]||tipo;
   if(!DB.nominaPagos)DB.nominaPagos=[];
   const cajaIdNP=uid();
-  DB.nominaPagos.push({id:uid(),empleadoId:e.id,empleadoNombre:e.nombre,mes,tipo,monto,banco,cuenta,moneda,fecha:today(),nota,cajaId:cajaIdNP});
+  DB.nominaPagos.push({id:uid(),empleadoId:e.id,empleadoNombre:e.nombre,mes,tipo,monto,banco,cuenta,moneda,fecha:today(),nota,formaPago,numeroCheque,cajaId:cajaIdNP});
   DB.caja.push({id:cajaIdNP,fecha:today(),tipo:'SALIDA',categoria:'Nómina/Salario',
-    descripcion:'Pago nómina: '+e.nombre+' ('+tipoLabel+')',
-    monto,moneda,banco,cuenta,referencia:banco&&cuenta?banco+' / '+cuenta:cuenta,responsable:currentUser.nombre});
+    descripcion:'Pago nómina: '+e.nombre+' ('+tipoLabel+')'+(numeroCheque?` (Cheque #${numeroCheque})`:''),
+    monto,moneda,banco,cuenta,referencia:banco&&cuenta?banco+' / '+cuenta:cuenta,formaPago,numeroCheque,responsable:currentUser.nombre});
   logBit('nomina','Pagó nómina','');sDB('nominaPagos');sDB('caja');closeModal();toast('Pago registrado ✓','success');renderNomina();
   refreshCajaIfActive();
 }
@@ -6876,12 +7018,21 @@ function nuevoGastoVeh(){
         <input type="text" id="ngv-pendiente" value="0.00" readonly style="background:#f8fafc;font-weight:700;color:var(--red)">
       </div>
     </div>
-    <div class="form-row c2">
+    <div class="form-row c3">
       <div class="form-field"><label>Fecha</label>
         <input type="date" id="ngv-fecha" value="${today()}">
       </div>
       <div class="form-field"><label>Fecha de Pago</label>
         <input type="date" id="ngv-fechapago">
+      </div>
+      <div class="form-field"><label>Forma de Pago del Abono</label>
+        <select id="ngv-forma" data-prev="EFECTIVO" onchange="onFormaPagoChange(this,'ngv',false)">
+          <option value="EFECTIVO">Efectivo</option>
+          <option value="TRANSFERENCIA">Transferencia</option>
+          <option value="DEPOSITO">Depósito</option>
+          <option value="CHEQUE">Cheque</option>
+        </select>
+        ${chequeHiddenFields('ngv',false)}
       </div>
     </div>
     <div class="form-field">
@@ -6938,6 +7089,7 @@ function guardarNuevoGastoVeh(){
   const factura=parseFloat((document.getElementById('ngv-factura').value||'0').replace(/,/g,''));
   if(!factura){toast('El monto de factura es requerido','error');return;}
   const abono=parseFloat((document.getElementById('ngv-abono').value||'0').replace(/,/g,''));
+  if(abono>0&&!validarChequeAntesDeGuardar('ngv',false))return;
   const pendiente=factura-abono;
   const moneda=document.getElementById('ngv-moneda').value;
   const tasaRaw=parseFloat(document.getElementById('ngv-tasa')?.value||0);
@@ -6986,13 +7138,16 @@ function guardarNuevoGastoVeh(){
   if(abono>0){
     const bancoCajaGV=normalizarBancoGlobal(bancoVal||'');
     const cuentaCajaGV=limpiarCuenta(cuentaVal||'');
+    const formaPagoAbonoGV=document.getElementById('ngv-forma')?.value||'EFECTIVO';
+    const numeroChequeAbonoGV=document.getElementById('ngv-numcheque')?.value||'';
     const cajaIdGV=uid();
     DB.caja.push({id:cajaIdGV,fecha:g.fecha,tipo:'SALIDA',categoria:'Gasto de Vehículo',
-      descripcion:`Gasto [${g.codigo||g.vehiculoId}]: ${tipo} — ${sup}`,
+      descripcion:`Gasto [${g.codigo||g.vehiculoId}]: ${tipo} — ${sup}`+(numeroChequeAbonoGV?` (Cheque #${numeroChequeAbonoGV})`:''),
       monto:abono,moneda:g.moneda||'RD$',banco:bancoCajaGV,cuenta:cuentaCajaGV,
       referencia:bancoCajaGV&&cuentaCajaGV?bancoCajaGV+' / '+cuentaCajaGV:cuentaCajaGV,
+      formaPago:formaPagoAbonoGV,numeroCheque:numeroChequeAbonoGV,
       responsable:currentUser?.nombre||''});
-    g.pagos.push({id:uid(),fecha:g.fecha,monto:abono,banco:bancoVal,cuenta:cuentaVal,moneda:g.moneda||'RD$',cajaId:cajaIdGV});
+    g.pagos.push({id:uid(),fecha:g.fecha,monto:abono,banco:bancoVal,cuenta:cuentaVal,moneda:g.moneda||'RD$',formaPago:formaPagoAbonoGV,numeroCheque:numeroChequeAbonoGV,cajaId:cajaIdGV});
     sDB('caja');
     refreshCajaIfActive();
   }
@@ -7036,12 +7191,22 @@ function abonarGastoVeh(gid){
       <div class="form-field"><label>Cuenta de Salida</label>
         <select id="abgv-cuenta">${(()=>{const m=g.moneda||'RD$';const bcs=DB.config.bancoCuentas||[];const b=bcs.find(x=>x.banco===g.banco)||bcs.find(x=>(x.cuentas||[]).some(c=>m==='USD'?(c.tipo.includes('USD')||c.tipo.includes('Dólares')):(!c.tipo.includes('USD')&&!c.tipo.includes('Dólares'))));const cts=(b?b.cuentas:[]).filter(c=>m==='USD'?(c.tipo.includes('USD')||c.tipo.includes('Dólares')):(!c.tipo.includes('USD')&&!c.tipo.includes('Dólares')));return cts.map(c=>{const v=c.tipo+' — '+c.numero;return`<option value="${escHtml(v)}" ${v===g.cuenta?'selected':''}>${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('')||'<option value="">Sin cuentas</option>';})()}</select>
       </div>
+    </div>
+    <div class="form-field"><label>Forma de Pago</label>
+      <select id="abgv-forma" data-prev="EFECTIVO" onchange="onFormaPagoChange(this,'abgv',false)">
+        <option value="EFECTIVO">Efectivo</option>
+        <option value="TRANSFERENCIA">Transferencia</option>
+        <option value="DEPOSITO">Depósito</option>
+        <option value="CHEQUE">Cheque</option>
+      </select>
+      ${chequeHiddenFields('abgv',false)}
     </div>`,
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
      <button class="btn btn-green" onclick="confirmarAbonoGastoVeh(${i})">✅ Confirmar Pago</button>`);
 }
 
 function confirmarAbonoGastoVeh(i){
+  if(!validarChequeAntesDeGuardar('abgv',false))return;
   const monto=parseFloat((document.getElementById('abgv-monto').value||'0').replace(/,/g,''));
   if(!monto||monto<=0){toast('Ingresa un monto válido','error');return;}
   const _abgv_banco=document.getElementById('abgv-banco')?.value||'';
@@ -7066,14 +7231,17 @@ function confirmarAbonoGastoVeh(i){
   const cuentaCajaAbGV=limpiarCuenta(document.getElementById('abgv-cuenta')?.value||'');
   const monedaCajaAbGV=document.getElementById('abgv-moneda')?.value||g.moneda||'RD$';
   const fechaCajaAbGV=document.getElementById('abgv-fecha')?.value||today();
+  const formaPagoAbGV=document.getElementById('abgv-forma')?.value||'EFECTIVO';
+  const numeroChequeAbGV=document.getElementById('abgv-numcheque')?.value||'';
   const cajaIdAbGV=uid();
   DB.caja.push({id:cajaIdAbGV,fecha:fechaCajaAbGV,tipo:'SALIDA',categoria:'Gasto de Vehículo',
-    descripcion:`Abono GV [${g.vehiculo||g.vehiculoId}]: ${g.tipo||''} — ${g.suplidor||''}`,
+    descripcion:`Abono GV [${g.vehiculo||g.vehiculoId}]: ${g.tipo||''} — ${g.suplidor||''}`+(numeroChequeAbGV?` (Cheque #${numeroChequeAbGV})`:''),
     monto,moneda:monedaCajaAbGV,banco:bancoCajaAbGV,cuenta:cuentaCajaAbGV,
     referencia:bancoCajaAbGV&&cuentaCajaAbGV?bancoCajaAbGV+' / '+cuentaCajaAbGV:cuentaCajaAbGV,
+    formaPago:formaPagoAbGV,numeroCheque:numeroChequeAbGV,
     responsable:currentUser?.nombre||''});
   if(!DB.gastosVehiculos[i].pagos)DB.gastosVehiculos[i].pagos=asegurarPagosGastoVeh(DB.gastosVehiculos[i]);
-  DB.gastosVehiculos[i].pagos.push({id:uid(),fecha:fechaCajaAbGV,monto,banco:bancoCajaAbGV,cuenta:cuentaCajaAbGV,moneda:monedaCajaAbGV,cajaId:cajaIdAbGV});
+  DB.gastosVehiculos[i].pagos.push({id:uid(),fecha:fechaCajaAbGV,monto,banco:bancoCajaAbGV,cuenta:cuentaCajaAbGV,moneda:monedaCajaAbGV,formaPago:formaPagoAbGV,numeroCheque:numeroChequeAbGV,cajaId:cajaIdAbGV});
   sDB('gastosVehiculos');
   sDB('caja');
   refreshCajaIfActive();
@@ -9996,6 +10164,15 @@ function nuevaCXPManual(){
         <input type="text" id="cxpm-nofactura" placeholder="Ej: FAC-0001">
       </div>
     </div>
+    <div class="form-field"><label>Forma de Pago del Abono</label>
+      <select id="cxpm-forma" data-prev="EFECTIVO" onchange="onFormaPagoChange(this,'cxpm',false)">
+        <option value="EFECTIVO">Efectivo</option>
+        <option value="TRANSFERENCIA">Transferencia</option>
+        <option value="DEPOSITO">Depósito</option>
+        <option value="CHEQUE">Cheque</option>
+      </select>
+      ${chequeHiddenFields('cxpm',false)}
+    </div>
     <div class="form-field">
       <label>Comentario</label>
       <textarea id="cxpm-comentario" rows="2" placeholder="Notas adicionales sobre esta cuenta por pagar..."></textarea>
@@ -10026,6 +10203,9 @@ function guardarCXPManual(){
   const _cxpm_cuenta=document.getElementById('cxpm-cuenta')?.value||'';
   if(!_cxpm_banco||!_cxpm_cuenta){toast('Selecciona banco y cuenta para continuar','error');return;}
   const abono=parseFloat((document.getElementById('cxpm-abono')?.value||'0').replace(/,/g,''));
+  if(abono>0&&!validarChequeAntesDeGuardar('cxpm',false))return;
+  const formaPago=document.getElementById('cxpm-forma')?.value||'EFECTIVO';
+  const numeroCheque=abono>0?(document.getElementById('cxpm-numcheque')?.value||''):'';
   const pendiente=Math.max(0,monto-abono);
   const banco=document.getElementById('cxpm-banco')?.value||'';
   const cuenta=document.getElementById('cxpm-cuenta')?.value||'';
@@ -10041,14 +10221,14 @@ function guardarCXPManual(){
     banco,cuenta,fecha:document.getElementById('cxpm-fecha')?.value||today(),
     fechaLimite:document.getElementById('cxpm-flim')?.value||'',
     statusGasto:pendiente<=0?'PAGADO':abono>0?'ABONADO':'PENDIENTE',
-    pagos:abono>0?[{id:uid(),fecha:document.getElementById('cxpm-fecha')?.value||today(),monto:abono,banco,cuenta,cajaId:_cajaIdCXPM}]:[]
+    pagos:abono>0?[{id:uid(),fecha:document.getElementById('cxpm-fecha')?.value||today(),monto:abono,banco,cuenta,formaPago,numeroCheque,cajaId:_cajaIdCXPM}]:[]
   });
   // Registrar en caja si hay abono inicial, vinculado por id
   if(abono>0){
     DB.caja.push({id:_cajaIdCXPM,fecha:document.getElementById('cxpm-fecha')?.value||today(),tipo:'SALIDA',
-      categoria:'CXP Manual',descripcion:'Pago CXP: '+desc+(sup?' — '+sup:''),
+      categoria:'CXP Manual',descripcion:'Pago CXP: '+desc+(sup?' — '+sup:'')+(numeroCheque?` (Cheque #${numeroCheque})`:''),
       monto:abono,moneda,banco,cuenta,referencia:banco&&cuenta?banco+' / '+cuenta:cuenta,
-      responsable:currentUser?.nombre||''});
+      formaPago,numeroCheque,responsable:currentUser?.nombre||''});
     sDB('caja');
     refreshCajaIfActive();
   }
@@ -10087,6 +10267,15 @@ function abonarCXPManual(gid){
       <div class="form-field"><label>Cuenta de Salida</label>
         <select id="cxpm-pay-cuenta">${bcs[0]?(bcs[0].cuentas||[]).map(c=>`<option value="${escHtml(c.tipo+' \u2014 '+c.numero)}">${escHtml(c.tipo)} \u2014 ${escHtml(c.numero)}</option>`).join(''):'<option value="Caja General">Caja General</option>'}</select>
       </div>
+    </div>
+    <div class="form-field"><label>Forma de Pago</label>
+      <select id="cxpm-pay-forma" data-prev="EFECTIVO" onchange="onFormaPagoChange(this,'cxpm-pay',false)">
+        <option value="EFECTIVO">Efectivo</option>
+        <option value="TRANSFERENCIA">Transferencia</option>
+        <option value="DEPOSITO">Depósito</option>
+        <option value="CHEQUE">Cheque</option>
+      </select>
+      ${chequeHiddenFields('cxpm-pay',false)}
     </div>`,
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
      <button class="btn btn-green" onclick="confirmarPagoCXPManual(${i})">\u2705 Confirmar Pago</button>`);
@@ -10100,6 +10289,7 @@ function actualizarCuentasPagoManual(){
   cuentaEl.innerHTML=(b?b.cuentas:[]).map(c=>`<option value="${escHtml(c.tipo+' \u2014 '+c.numero)}">${escHtml(c.tipo)} \u2014 ${escHtml(c.numero)}</option>`).join('')||'<option value="Caja General">Caja General</option>';
 }
 function confirmarPagoCXPManual(i){
+  if(!validarChequeAntesDeGuardar('cxpm-pay',false))return;
   const monto=parseFloat((document.getElementById('cxpm-pay-monto')?.value||'0').replace(/,/g,''));
   if(!monto||monto<=0){toast('Ingresa un monto v\u00e1lido','error');return;}
   const _cxpm_pay_banco=document.getElementById('cxpm-pay-banco')?.value||'';
@@ -10110,6 +10300,8 @@ function confirmarPagoCXPManual(i){
   const fecha=document.getElementById('cxpm-pay-fecha')?.value||today();
   const cuenta=document.getElementById('cxpm-pay-cuenta')?.value||'';
   const banco=document.getElementById('cxpm-pay-banco')?.value||'';
+  const formaPago=document.getElementById('cxpm-pay-forma')?.value||'EFECTIVO';
+  const numeroCheque=document.getElementById('cxpm-pay-numcheque')?.value||'';
   DB.cxp[i].montoPagado=(parseFloat(g.montoPagado||0)+monto);
   DB.cxp[i].montoPendiente=Math.max(0,parseFloat(g.montoPendiente||0)-monto);
   DB.cxp[i].fechaPago=fecha;
@@ -10117,11 +10309,11 @@ function confirmarPagoCXPManual(i){
   DB.cxp[i].cuenta=cuenta;
   if(!DB.cxp[i].pagos)DB.cxp[i].pagos=[];
   const cajaIdPagoCXPM=uid();
-  DB.cxp[i].pagos.push({id:uid(),fecha,monto,banco,cuenta,responsable:currentUser?.nombre||'',cajaId:cajaIdPagoCXPM});
+  DB.cxp[i].pagos.push({id:uid(),fecha,monto,banco,cuenta,formaPago,numeroCheque,responsable:currentUser?.nombre||'',cajaId:cajaIdPagoCXPM});
   DB.cxp[i].statusGasto=DB.cxp[i].montoPendiente<=0?'PAGADO':'ABONADO';
   DB.caja.push({id:cajaIdPagoCXPM,fecha,tipo:'SALIDA',categoria:'CXP Manual',
-    descripcion:'Pago CXP: '+g.descripcion+(g.suplidor?' \u2014 '+g.suplidor:''),
-    monto,moneda:g.moneda||'RD$',banco,cuenta,referencia:banco&&cuenta?banco+' / '+cuenta:cuenta,responsable:currentUser?.nombre||''});
+    descripcion:'Pago CXP: '+g.descripcion+(g.suplidor?' \u2014 '+g.suplidor:'')+(numeroCheque?` (Cheque #${numeroCheque})`:''),
+    monto,moneda:g.moneda||'RD$',banco,cuenta,referencia:banco&&cuenta?banco+' / '+cuenta:cuenta,formaPago,numeroCheque,responsable:currentUser?.nombre||''});
   sDB('cxp');sDB('caja');
   refreshCajaIfActive();
   closeModal();toast('Pago registrado \u2713','success');renderCXP();
@@ -10188,12 +10380,22 @@ function abonarDesdeCXP(gid){
       <div class="form-field"><label>Nota</label>
         <input type="text" id="cxpp-nota" placeholder="Descripción del pago">
       </div>
+    </div>
+    <div class="form-field"><label>Forma de Pago</label>
+      <select id="cxpp-forma" data-prev="EFECTIVO" onchange="onFormaPagoChange(this,'cxpp',false)">
+        <option value="EFECTIVO">Efectivo</option>
+        <option value="TRANSFERENCIA">Transferencia</option>
+        <option value="DEPOSITO">Depósito</option>
+        <option value="CHEQUE">Cheque</option>
+      </select>
+      ${chequeHiddenFields('cxpp',false)}
     </div>`,
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
      <button class="btn btn-green" onclick="confirmarPagoCXP(${i})">✅ Confirmar Pago</button>`);
 }
 
 function confirmarPagoCXP(i){
+  if(!validarChequeAntesDeGuardar('cxpp',false))return;
   const monto=parseFloat((document.getElementById('cxpp-monto').value||'0').replace(/,/g,''));
   if(!monto||monto<=0){toast('Ingresa un monto válido','error');return;}
   const _cxpp_banco=document.getElementById('cxpp-banco')?.value||'';
@@ -10207,6 +10409,8 @@ function confirmarPagoCXP(i){
   const fechaPago=document.getElementById('cxpp-fecha').value;
   const cuentaPago=document.getElementById('cxpp-cuenta').value;
   const notaPago=document.getElementById('cxpp-nota')?.value||'';
+  const formaPagoCXPP=document.getElementById('cxpp-forma')?.value||'EFECTIVO';
+  const numeroChequeCXPP=document.getElementById('cxpp-numcheque')?.value||'';
   const equivRD=esUSD?monto*tasa:null;
   DB.gastosVehiculos[i].montoPagado=(parseFloat(g.montoPagado||0)+monto);
   DB.gastosVehiculos[i].montoPendiente=(parseFloat(g.montoPendiente||0)-monto);
@@ -10217,23 +10421,23 @@ function confirmarPagoCXP(i){
   else DB.gastosVehiculos[i].statusGasto='ABONADO';
   if(!DB.gastosVehiculos[i].pagos)DB.gastosVehiculos[i].pagos=[];
   const cajaIdCXPP=uid();
-  DB.gastosVehiculos[i].pagos.push({id:uid(),fecha:fechaPago,monto,cuenta:cuentaPago,nota:notaPago,saldado,cajaId:cajaIdCXPP,
+  DB.gastosVehiculos[i].pagos.push({id:uid(),fecha:fechaPago,monto,cuenta:cuentaPago,nota:notaPago,saldado,cajaId:cajaIdCXPP,formaPago:formaPagoCXPP,numeroCheque:numeroChequeCXPP,
     ...(esUSD&&tasa?{tasa,equivRD,moneda:'USD'}:{})
   });
   // Registrar en caja — RD$ o USD
   const bancoPagoCXP=document.getElementById('cxpp-banco')?.value||'';
   if(esUSD&&tasa){
     DB.caja.push({id:cajaIdCXPP,fecha:fechaPago,tipo:'SALIDA',categoria:'CXP USD',
-      descripcion:'Pago CXP USD: '+g.descripcion+(g.suplidor?' — '+g.suplidor:'')+' (Tasa: '+tasa.toFixed(2)+')',
+      descripcion:'Pago CXP USD: '+g.descripcion+(g.suplidor?' — '+g.suplidor:'')+' (Tasa: '+tasa.toFixed(2)+')'+(numeroChequeCXPP?` (Cheque #${numeroChequeCXPP})`:''),
       monto:equivRD,moneda:'USD',banco:bancoPagoCXP,cuenta:cuentaPago,
       referencia:bancoPagoCXP&&cuentaPago?bancoPagoCXP+' / '+cuentaPago:cuentaPago,
-      responsable:currentUser?.nombre||''});
+      formaPago:formaPagoCXPP,numeroCheque:numeroChequeCXPP,responsable:currentUser?.nombre||''});
   } else {
     DB.caja.push({id:cajaIdCXPP,fecha:fechaPago,tipo:'SALIDA',categoria:'CXP Manual',
-      descripcion:'Pago GV: '+g.tipo+' — '+(g.vehiculo||g.descripcion||'')+(g.suplidor?' — '+g.suplidor:''),
+      descripcion:'Pago GV: '+g.tipo+' — '+(g.vehiculo||g.descripcion||'')+(g.suplidor?' — '+g.suplidor:'')+(numeroChequeCXPP?` (Cheque #${numeroChequeCXPP})`:''),
       monto,moneda:g.moneda||'RD$',banco:bancoPagoCXP,cuenta:cuentaPago,
       referencia:bancoPagoCXP&&cuentaPago?bancoPagoCXP+' / '+cuentaPago:cuentaPago,
-      responsable:currentUser?.nombre||''});
+      formaPago:formaPagoCXPP,numeroCheque:numeroChequeCXPP,responsable:currentUser?.nombre||''});
   }
   sDB('caja');
   refreshCajaIfActive();
@@ -13410,7 +13614,16 @@ function abonarSeguro(id){
         <select id="sgp-cuenta">${(()=>{const bcs=DB.config.bancoCuentas||[];const b=bcs.find(x=>x.banco===s.banco)||bcs.find(x=>(x.cuentas||[]).some(c=>!c.tipo.includes('USD')&&!c.tipo.includes('Dólares')));const cts=(b?b.cuentas:[]).filter(c=>!c.tipo.includes('USD')&&!c.tipo.includes('Dólares'));return cts.map(c=>{const v=c.tipo+' — '+c.numero;return`<option value="${escHtml(v)}" ${v===s.cuenta?'selected':''}>${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('')||'<option value="">Sin cuentas</option>';})()}</select>
       </div>
     </div>
-    <div class="form-field"><label>Fecha de Pago</label><input type="date" id="sgp-fecha" value="${today()}"></div>`,
+    <div class="form-field"><label>Fecha de Pago</label><input type="date" id="sgp-fecha" value="${today()}"></div>
+    <div class="form-field"><label>Forma de Pago</label>
+      <select id="sgp-forma" data-prev="EFECTIVO" onchange="onFormaPagoChange(this,'sgp',false)">
+        <option value="EFECTIVO">Efectivo</option>
+        <option value="TRANSFERENCIA">Transferencia</option>
+        <option value="DEPOSITO">Depósito</option>
+        <option value="CHEQUE">Cheque</option>
+      </select>
+      ${chequeHiddenFields('sgp',false)}
+    </div>`,
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
      <button class="btn btn-green" onclick="confirmarAbonoSeguro('${id}')">✅ Confirmar Pago</button>`);
 }
@@ -13446,7 +13659,16 @@ function pagarCuotaSeguro(segId, cuotaIdx){
         <select id="sgpc-cuenta">${(()=>{const bcs=DB.config.bancoCuentas||[];const b=bcs.find(x=>x.banco===s.banco)||bcs[0];return(b?b.cuentas:[]).map(c=>{const v=c.tipo+' — '+c.numero;return`<option value="${escHtml(v)}" ${v===s.cuenta?'selected':''}>${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('')||'<option value="">Sin cuentas</option>';})()}</select>
       </div>
     </div>
-    <div class="form-field"><label>Fecha de Pago</label><input type="date" id="sgpc-fecha" value="${today()}"></div>`,
+    <div class="form-field"><label>Fecha de Pago</label><input type="date" id="sgpc-fecha" value="${today()}"></div>
+    <div class="form-field"><label>Forma de Pago</label>
+      <select id="sgpc-forma" data-prev="EFECTIVO" onchange="onFormaPagoChange(this,'sgpc',false)">
+        <option value="EFECTIVO">Efectivo</option>
+        <option value="TRANSFERENCIA">Transferencia</option>
+        <option value="DEPOSITO">Depósito</option>
+        <option value="CHEQUE">Cheque</option>
+      </select>
+      ${chequeHiddenFields('sgpc',false)}
+    </div>`,
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
      <button class="btn btn-green" onclick="confirmarPagoCuotaSeguro('${segId}',${cuotaIdx})">✅ Confirmar Pago</button>`);
 }
@@ -13459,6 +13681,9 @@ function confirmarPagoCuotaSeguro(segId,cuotaIdx){
   const cuenta=document.getElementById('sgpc-cuenta')?.value||'';
   const fecha=document.getElementById('sgpc-fecha')?.value||today();
   const quien=document.getElementById('sgpc-quien')?.value||'empresa';
+  if(quien==='empresa'&&!validarChequeAntesDeGuardar('sgpc',false))return;
+  const formaPago=document.getElementById('sgpc-forma')?.value||'EFECTIVO';
+  const numeroCheque=quien==='empresa'?(document.getElementById('sgpc-numcheque')?.value||''):'';
   if(!banco||!cuenta){toast('Selecciona banco y cuenta','error');return;}
   // Marcar cuota como pagada
   DB.seguros[si].cuotas[cuotaIdx].pagada=true;
@@ -13471,15 +13696,15 @@ function confirmarPagoCuotaSeguro(segId,cuotaIdx){
   DB.seguros[si].status=DB.seguros[si].pendiente<=0?'PAGADO':'ABONADO';
   if(!DB.seguros[si].pagos)DB.seguros[si].pagos=[];
   const cajaIdCuotaSeg=uid();
-  DB.seguros[si].pagos.push({id:uid(),fecha,monto:cuota.monto,cuenta,responsable:currentUser?.nombre||'',cuota:cuota.num,cajaId:cajaIdCuotaSeg});
+  DB.seguros[si].pagos.push({id:uid(),fecha,monto:cuota.monto,cuenta,formaPago,numeroCheque,responsable:currentUser?.nombre||'',cuota:cuota.num,cajaId:cajaIdCuotaSeg});
   // Registrar en caja
   const tipoCaja=quien==='cliente'?'ENTRADA':'SALIDA';
   const catCaja=quien==='cliente'?'Seguro Cobrado a Cliente':'Seguro Vehículo';
   DB.caja.push({id:cajaIdCuotaSeg,fecha,tipo:tipoCaja,categoria:catCaja,
-    descripcion:`Cuota ${cuota.num}/${s.cuotas.length} seguro: ${s.compania} — ${s.cliente}${s.poliza?' — Póliza: '+s.poliza:''}`,
+    descripcion:`Cuota ${cuota.num}/${s.cuotas.length} seguro: ${s.compania} — ${s.cliente}${s.poliza?' — Póliza: '+s.poliza:''}`+(numeroCheque?` (Cheque #${numeroCheque})`:''),
     monto:cuota.monto,moneda:s.moneda||'RD$',banco,cuenta,
     referencia:banco&&cuenta?banco+' / '+cuenta:cuenta,
-    responsable:currentUser?.nombre||''});
+    formaPago,numeroCheque,responsable:currentUser?.nombre||''});
   sDB('seguros');sDB('caja');
   refreshCajaIfActive();
   closeModal();
@@ -13492,6 +13717,8 @@ function confirmarPagoSeguro(id){confirmarAbonoSeguro(id);}
 
 function confirmarAbonoSeguro(id){
   const i=DB.seguros.findIndex(x=>x.id===id);if(i<0)return;
+  const quien=document.getElementById('sgp-quien')?.value||'empresa';
+  if(quien==='empresa'&&!validarChequeAntesDeGuardar('sgp',false))return;
   const monto=parseFloat((document.getElementById('sgp-monto').value||'0').replace(/,/g,''));
   if(!monto||monto<=0){toast('Ingresa un monto válido','error');return;}
   const banco=document.getElementById('sgp-banco')?.value||'';
@@ -13499,7 +13726,8 @@ function confirmarAbonoSeguro(id){
   if(!banco||!cuenta){toast('Selecciona banco y cuenta','error');return;}
   const moneda=document.getElementById('sgp-moneda')?.value||'RD$';
   const fecha=document.getElementById('sgp-fecha')?.value||today();
-  const quien=document.getElementById('sgp-quien')?.value||'empresa';
+  const formaPago=document.getElementById('sgp-forma')?.value||'EFECTIVO';
+  const numeroCheque=quien==='empresa'?(document.getElementById('sgp-numcheque')?.value||''):'';
   const pendienteActual=parseFloat(DB.seguros[i].pendiente||0);
   if(monto>pendienteActual){toast('El monto no puede superar el pendiente ('+fmt(pendienteActual)+')','error');return;}
   DB.seguros[i].abonado=(parseFloat(DB.seguros[i].abonado||0)+monto);
@@ -13508,13 +13736,13 @@ function confirmarAbonoSeguro(id){
   DB.seguros[i].cuenta=cuenta;
   if(!DB.seguros[i].pagos)DB.seguros[i].pagos=[];
   const cajaIdAbonoSeg=uid();
-  DB.seguros[i].pagos.push({id:uid(),fecha,monto,cuenta,responsable:currentUser?.nombre||'',cajaId:cajaIdAbonoSeg});
+  DB.seguros[i].pagos.push({id:uid(),fecha,monto,cuenta,formaPago,numeroCheque,responsable:currentUser?.nombre||'',cajaId:cajaIdAbonoSeg});
   const tipoCaja=quien==='cliente'?'ENTRADA':'SALIDA';
   const catCaja=quien==='cliente'?'Seguro Cobrado a Cliente':'Seguro Vehículo';
   DB.caja.push({id:cajaIdAbonoSeg,fecha,tipo:tipoCaja,categoria:catCaja,
-    descripcion:'Pago seguro: '+DB.seguros[i].compania+' — '+escHtml(DB.seguros[i].cliente||'')+(DB.seguros[i].poliza?' — Póliza: '+DB.seguros[i].poliza:''),
+    descripcion:'Pago seguro: '+DB.seguros[i].compania+' — '+escHtml(DB.seguros[i].cliente||'')+(DB.seguros[i].poliza?' — Póliza: '+DB.seguros[i].poliza:'')+(numeroCheque?` (Cheque #${numeroCheque})`:''),
     monto,moneda,banco,cuenta,referencia:banco&&cuenta?banco+' / '+cuenta:cuenta,
-    responsable:currentUser?.nombre||''});
+    formaPago,numeroCheque,responsable:currentUser?.nombre||''});
   sDB('seguros');sDB('caja');
   refreshCajaIfActive();
   closeModal();
