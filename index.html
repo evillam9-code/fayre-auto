@@ -2993,7 +2993,10 @@ function renderConsultaCuentas(){
   document.getElementById('page-consultaCuentas').innerHTML=`
     <div class="page-header">
       <div><h1>🧾 Consulta de Cuentas</h1><p>Estado de cuenta consolidado — incluye movimientos de todos los módulos del sistema</p></div>
-      <button class="btn btn-primary" ${movs.length?'':'disabled'} onclick="exportarConsultaCuentasPDF()">🖨️ Imprimir / Exportar PDF</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-secondary" onclick="exportarResumenTodasCuentas()">📊 Resumen de Todas las Cuentas</button>
+        <button class="btn btn-primary" ${movs.length?'':'disabled'} onclick="exportarConsultaCuentasPDF()">🖨️ Imprimir / Exportar PDF</button>
+      </div>
     </div>
     <div class="card" style="margin-bottom:14px">
       <div class="form-row" style="grid-template-columns:repeat(4,1fr)">
@@ -3086,6 +3089,83 @@ function exportarConsultaCuentasPDF(){
     <td class="${m.tipo==='ENTRADA'?'ent':'sal'}">${fV(m.monto)}</td>
   </tr>`).join('')||'<tr><td colspan="5" style="text-align:center;padding:16px;color:#6b7280">Sin movimientos en este período</td></tr>'}</tbody></table>
   <div style="margin-top:20px;text-align:center"><button onclick="window.print()" style="padding:10px 24px;background:#0f172a;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px">🖨️ Imprimir / Guardar PDF</button></div>
+  </body></html>`);
+  win.document.close();
+}
+function exportarResumenTodasCuentas(){
+  const bcs=DB.config.bancoCuentas||[];
+  const desde=document.getElementById('cc-desde')?.value||'';
+  const hasta=document.getElementById('cc-hasta')?.value||'';
+  const periodoLabel=desde||hasta?`${desde?fmtDate(desde):'Inicio'} al ${hasta?fmtDate(hasta):'Hoy'}`:'Todo el historial';
+  const empresa=DB.config.empresa||'DealerSystem';
+
+  // Calcular entradas/salidas/saldo de cada cuenta configurada
+  const filas=[];
+  bcs.forEach(b=>{
+    (b.cuentas||[]).forEach(c=>{
+      const cuentaLabel=c.tipo+' — '+c.numero;
+      const esUSD=c.tipo.includes('USD')||c.tipo.includes('Dólares');
+      let movs=DB.caja.filter(m=>normalizarBancoGlobal(m.banco)===normalizarBancoGlobal(b.banco)&&limpiarCuenta(m.cuenta||'')===limpiarCuenta(cuentaLabel));
+      if(desde)movs=movs.filter(m=>m.fecha&&m.fecha>=desde);
+      if(hasta)movs=movs.filter(m=>m.fecha&&m.fecha<=hasta);
+      const entradas=movs.filter(m=>m.tipo==='ENTRADA').reduce((a,m)=>a+parseFloat(m.monto||0),0);
+      const salidas=movs.filter(m=>m.tipo==='SALIDA').reduce((a,m)=>a+parseFloat(m.monto||0),0);
+      const saldo=entradas-salidas;
+      filas.push({banco:b.banco,cuenta:cuentaLabel,moneda:esUSD?'USD':'RD$',esUSD,entradas,salidas,saldo,movCount:movs.length});
+    });
+  });
+
+  const fV=(n,esUSD)=>esUSD?'USD '+parseFloat(n||0).toLocaleString('en-US',{minimumFractionDigits:2}):fmt(n);
+
+  const totalEntradasRD=filas.filter(f=>!f.esUSD).reduce((a,f)=>a+f.entradas,0);
+  const totalSalidasRD=filas.filter(f=>!f.esUSD).reduce((a,f)=>a+f.salidas,0);
+  const totalSaldoRD=totalEntradasRD-totalSalidasRD;
+  const totalEntradasUSD=filas.filter(f=>f.esUSD).reduce((a,f)=>a+f.entradas,0);
+  const totalSalidasUSD=filas.filter(f=>f.esUSD).reduce((a,f)=>a+f.salidas,0);
+  const totalSaldoUSD=totalEntradasUSD-totalSalidasUSD;
+
+  const win=window.open('','_blank','width=1000,height=700');
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Resumen de Todas las Cuentas</title>
+  <style>body{font-family:Arial,sans-serif;padding:24px;font-size:12px;color:#0f172a}
+  .hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #2563eb;padding-bottom:12px;margin-bottom:16px}
+  h2{font-size:17px;margin:0}p{margin:4px 0;color:#6b7280;font-size:11px}
+  .resumen{display:flex;gap:16px;margin-bottom:18px;flex-wrap:wrap}
+  .res-box{flex:1;min-width:150px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px;text-align:center}
+  .res-label{font-size:10px;text-transform:uppercase;color:#6b7280;font-weight:700;margin-bottom:4px}
+  .res-val{font-size:16px;font-weight:800}
+  table{width:100%;border-collapse:collapse;margin-bottom:22px}
+  th{background:#0f172a;color:#fff;padding:8px 10px;font-size:10px;text-align:left;text-transform:uppercase}
+  td{padding:7px 10px;border-bottom:1px solid #e2e8f0;font-size:11px}
+  tr:nth-child(even) td{background:#f8fafc}
+  .ent{color:#16a34a;font-weight:700}.sal{color:#dc2626;font-weight:700}
+  .saldo-pos{color:#16a34a;font-weight:800}.saldo-neg{color:#dc2626;font-weight:800}
+  tfoot td{font-weight:800;background:#f1f5f9;border-top:2px solid #0f172a}
+  @media print{button{display:none}}</style></head><body>
+  <div class="hdr">
+    <div>${DB.config.logoData?`<img src="${DB.config.logoData}" style="max-height:46px;margin-bottom:6px;display:block">`:''}<h2>${escHtml(empresa)}</h2><p>Resumen de Todas las Cuentas — Período: ${periodoLabel}</p></div>
+    <div style="text-align:right;font-size:11px;color:#6b7280">Fecha de impresión: ${fmtDate(today())}<br>Total de cuentas: ${filas.length}</div>
+  </div>
+  <div class="resumen">
+    <div class="res-box"><div class="res-label">Total Entradas RD$</div><div class="res-val" style="color:#16a34a">${fmt(totalEntradasRD)}</div></div>
+    <div class="res-box"><div class="res-label">Total Salidas RD$</div><div class="res-val" style="color:#dc2626">${fmt(totalSalidasRD)}</div></div>
+    <div class="res-box"><div class="res-label">Saldo Total RD$</div><div class="res-val" style="color:${totalSaldoRD>=0?'#16a34a':'#dc2626'}">${fmt(totalSaldoRD)}</div></div>
+    <div class="res-box"><div class="res-label">Saldo Total USD</div><div class="res-val" style="color:${totalSaldoUSD>=0?'#16a34a':'#dc2626'}">USD ${totalSaldoUSD.toLocaleString('en-US',{minimumFractionDigits:2})}</div></div>
+  </div>
+  <table><thead><tr><th>Banco</th><th>Cuenta</th><th>Moneda</th><th>Movimientos</th><th>Total Entradas</th><th>Total Salidas</th><th>Saldo</th></tr></thead>
+  <tbody>${filas.length?filas.map(f=>`<tr>
+    <td>${escHtml(f.banco)}</td>
+    <td>${escHtml(f.cuenta)}</td>
+    <td>${f.moneda}</td>
+    <td>${f.movCount}</td>
+    <td class="ent">${fV(f.entradas,f.esUSD)}</td>
+    <td class="sal">${fV(f.salidas,f.esUSD)}</td>
+    <td class="${f.saldo>=0?'saldo-pos':'saldo-neg'}">${fV(f.saldo,f.esUSD)}</td>
+  </tr>`).join(''):'<tr><td colspan="7" style="text-align:center;padding:16px;color:#6b7280">No hay cuentas bancarias configuradas</td></tr>'}</tbody>
+  ${filas.length?`<tfoot>
+    <tr><td colspan="4">Subtotal RD$</td><td class="ent">${fmt(totalEntradasRD)}</td><td class="sal">${fmt(totalSalidasRD)}</td><td class="${totalSaldoRD>=0?'saldo-pos':'saldo-neg'}">${fmt(totalSaldoRD)}</td></tr>
+    <tr><td colspan="4">Subtotal USD</td><td class="ent">USD ${totalEntradasUSD.toLocaleString('en-US',{minimumFractionDigits:2})}</td><td class="sal">USD ${totalSalidasUSD.toLocaleString('en-US',{minimumFractionDigits:2})}</td><td class="${totalSaldoUSD>=0?'saldo-pos':'saldo-neg'}">USD ${totalSaldoUSD.toLocaleString('en-US',{minimumFractionDigits:2})}</td></tr>
+  </tfoot>`:''}</table>
+  <div style="margin-top:8px;text-align:center"><button onclick="window.print()" style="padding:10px 24px;background:#0f172a;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px">🖨️ Imprimir / Guardar PDF</button></div>
   </body></html>`);
   win.document.close();
 }
@@ -8238,10 +8318,8 @@ function selVenta(id,tr){
   const v=DB.ventas.find(x=>x.id===id);
   const actB=(bid,bg,c)=>{const b=document.getElementById(bid);if(b){b.disabled=false;b.style.cssText='background:'+bg+';color:'+c+';cursor:pointer;border:none;';}};
   actB('vta-btn-imprimir','#475569','#fff');
-  if(currentUser?.role==='admin'){
-    actB('vta-btn-editar','#2563eb','#fff');
-    actB('vta-btn-eliminar','#dc2626','#fff');
-  }
+  if(currentUser?.role==='admin'||canDo('editar'))actB('vta-btn-editar','#2563eb','#fff');
+  if(currentUser?.role==='admin'||canDo('eliminar'))actB('vta-btn-eliminar','#dc2626','#fff');
 }
 function ventaAccion(accion){
   if(!ventaSelectedId)return;
