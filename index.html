@@ -2873,6 +2873,7 @@ function editarCaja(i){
       <div class="form-field"><label class="required">Monto</label><input type="number" id="ec-monto" value="${c.monto||0}" min="0" step="0.01"></div>
     </div>
     <div class="form-field"><label>Descripción</label><input type="text" id="ec-desc" value="${escHtml(c.descripcion||'')}"></div>
+    <div class="form-field"><label>Nombre de quien realiza la transacción</label><input type="text" id="ec-resp" value="${escHtml(c.responsable||currentUser?.nombre||'')}"></div>
     <div class="form-row c2">
       <div class="form-field"><label>Banco</label><select id="ec-banco" onchange="actualizarCuentasCajaEdit()">${bancoOpts}</select></div>
       <div class="form-field"><label>Cuenta</label><select id="ec-cuenta">${cuentaOpts}</select></div>
@@ -2910,9 +2911,10 @@ function guardarEditCaja(i){
   const formaPago=document.getElementById('ec-forma')?.value||'EFECTIVO';
   const numeroCheque=document.getElementById('ec-numcheque')?.value||'';
   const nombreCheque=document.getElementById('ec-nombrecheque')?.value||'';
+  const responsable=document.getElementById('ec-resp')?.value||'';
   if(!fecha||!monto){toast('Fecha y monto son requeridos','error');return;}
   logBit('caja','Editó registro de caja',c.descripcion||'');
-  DB.caja[i]={...c,fecha,tipo,categoria:cat,monto,descripcion:desc,banco,cuenta,referencia:cuenta?banco+' / '+cuenta:c.referencia||'',formaPago,numeroCheque,nombreCheque};
+  DB.caja[i]={...c,fecha,tipo,categoria:cat,monto,descripcion:desc,banco,cuenta,referencia:cuenta?banco+' / '+cuenta:c.referencia||'',formaPago,numeroCheque,nombreCheque,responsable};
   sDB('caja');closeModal();toast('Movimiento actualizado ✓','success');renderCaja();
 }
 function exportarCajaPDF(){
@@ -3262,6 +3264,7 @@ function nuevoCajaMov(tipo){
         <input type="text" id="cj-desc" placeholder="Descripción del movimiento">
       </div>
     </div>
+    <div class="form-field"><label>Nombre de quien realiza la transacción</label><input type="text" id="cj-resp" value="${currentUser?.nombre||''}"></div>
     ${htmlMonedaBancoCuenta('cj','RD$')}
     <div class="form-field"><label>Forma de Pago</label>
       <select id="cj-forma" data-prev="EFECTIVO" onchange="onFormaPagoChange(this,'cj',true)">
@@ -3271,8 +3274,7 @@ function nuevoCajaMov(tipo){
         <option value="CHEQUE">Cheque</option>
       </select>
       ${chequeHiddenFields('cj',true)}
-    </div>
-    <div class="form-field"><label>Responsable</label><input type="text" id="cj-resp" value="${currentUser?.nombre||''}"></div>`,
+    </div>`,
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
      <button class="btn ${tipo==='ENTRADA'?'btn-green':'btn-red'}" onclick="guardarCajaMov('${tipo}')">💾 Guardar</button>`);
 }
@@ -12197,7 +12199,7 @@ function confirmarAbonarCXC(id){
   sDB('cxc');sDB('caja');
   refreshCajaIfActive();
   closeModal();
-  imprimirReciboCobro(DB.cxc[i],{id:uid(),fecha:fechaCobro,monto,cuenta:cuentaCobro,nota:notaCobro,saldado});
+  imprimirReciboCobro(DB.cxc[i],{id:uid(),fecha:fechaCobro,monto,cuenta:cuentaCobro,nota:notaCobro,saldado,mora:montoMora});
   toast(saldado?'✅ Cuenta saldada — Generando recibo...':'💵 Abono registrado — Generando recibo...','success');
   renderCXC();
 }
@@ -12361,6 +12363,7 @@ function imprimirReciboCobro(cxc, pago){
     <div class="resumen">
       <div class="resumen-row"><span>Monto Pendiente a Pagar</span><span style="font-weight:700">${fV((cxc.saldo||0)+pago.monto)}</span></div>
       <div class="monto-cobro"><span>${esSaldado?'Pago Final Recibido':'Monto Abonado'}</span><span>${fV(pago.monto)}</span></div>
+      ${pago.mora>0?`<div class="resumen-row"><span>⏰ Mora por Atraso</span><span style="font-weight:700;color:#dc2626">${fV(pago.mora)}</span></div>`:''}
       <div class="saldo-box"><span>${esSaldado?'✅ Cuenta Saldada':'⏳ Saldo Pendiente'}</span><span>${fV(cxc.saldo||0)}</span></div>
       ${!esSaldado&&esUSD?`<div style="font-size:10px;color:#94a3b8;margin-top:4px;text-align:right">Equivalente: RD$ ${fmt((cxc.saldo||0)*tasa)}</div>`:''}
     </div>
