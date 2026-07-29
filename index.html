@@ -557,6 +557,28 @@ function descargarWord(bodyHtml,filename,extraStyle){
   a.click();
   a.remove();
 }
+// Igual que descargarWord, pero incrusta imágenes como partes MIME referenciadas por cid:
+// en vez de data-URI — más confiable para que Word las muestre bajo Vista Protegida.
+// imagenes: [{cid, mime, base64}] (base64 SIN el prefijo "data:...;base64,")
+function descargarWordConImagenes(bodyHtml,filename,extraStyle,imagenes){
+  const boundary='----=_NextPart_FAYRE_'+Date.now();
+  const html='<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="UTF-8"><style>'+(extraStyle||'')+'</style></head><body>'+bodyHtml+'</body></html>';
+  let mime='MIME-Version: 1.0\r\nContent-Type: multipart/related; boundary="'+boundary+'"\r\n\r\n';
+  mime+='--'+boundary+'\r\nContent-Type: text/html; charset="utf-8"\r\nContent-Transfer-Encoding: 8bit\r\n\r\n';
+  mime+=html+'\r\n\r\n';
+  (imagenes||[]).forEach(img=>{
+    mime+='--'+boundary+'\r\nContent-Type: '+img.mime+'\r\nContent-Transfer-Encoding: base64\r\nContent-ID: <'+img.cid+'>\r\nContent-Location: '+img.cid+'\r\n\r\n';
+    mime+=img.base64+'\r\n\r\n';
+  });
+  mime+='--'+boundary+'--\r\n';
+  const blob=new Blob([mime],{type:'application/msword'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
 function genFactura(){const nums=DB.ventas.map(v=>{const m=(v.factura||'').match(/(\d+)$/);return m?parseInt(m[1]):0;});const next=(nums.length?Math.max(...nums):0)+1;return 'FAC-'+String(next).padStart(6,'0');}
 const escHtml=s=>{const d=document.createElement('div');d.textContent=s||'';return d.innerHTML};
 // ══ BANCOS Y CUENTAS HELPER ══
@@ -13866,7 +13888,7 @@ async function exportarInformeWord(){
   const nombreMesPortada=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][am-1];
 
   const html=`<div class="rep-page rep-cover" align="center">
-    ${logoWord?`<p align="center" style="text-align:center;margin:0"><img class="rep-cover-logo" src="${logoWord.src}" width="${logoWord.w}" height="${logoWord.h}"></p>`:''}
+    ${logoWord?`<p align="center" style="text-align:center;margin:0"><img class="rep-cover-logo" src="cid:logoFayre" width="${logoWord.w}" height="${logoWord.h}"></p>`:''}
     <div class="rep-cover-empresa" align="center">${escHtml(empresa)}</div>
     <div class="rep-cover-sub" align="center">${escHtml(DB.config.direccion||'')}${DB.config.rnc?'   ·   RNC '+escHtml(DB.config.rnc):''}</div>
     <div class="rep-cover-title" align="center">Informe mensual</div>
@@ -14067,7 +14089,13 @@ async function exportarInformeWord(){
     <div class="rep-footer">${escHtml(empresa)} — Informe de Cierre · ${mes}</div>
   </div>`;
   const nombreMesArchivo=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][am-1];
-  descargarWord(html,'Informe Mensual '+empresa+' '+nombreMesArchivo+' '+ay+'.doc',INFORME_CIERRE_CSS);
+  const nombreArchivoInforme='Informe Mensual '+empresa+' '+nombreMesArchivo+' '+ay+'.doc';
+  if(logoWord){
+    const logoBase64Puro=logoWord.src.split(',')[1]||'';
+    descargarWordConImagenes(html,nombreArchivoInforme,INFORME_CIERRE_CSS,[{cid:'logoFayre',mime:'image/png',base64:logoBase64Puro}]);
+  } else {
+    descargarWord(html,nombreArchivoInforme,INFORME_CIERRE_CSS);
+  }
 }
 
 // ══ ACTIVOS FIJOS ══
