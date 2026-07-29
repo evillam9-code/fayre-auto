@@ -13651,16 +13651,16 @@ const INFORME_CIERRE_CSS=`
   .rep-footer{margin-top:34px;padding-top:12px;border-top:1px solid #c9ccd3;font-family:Arial,sans-serif;font-size:9.5px;color:#5b6472}
   .rep-subhead{font-family:Arial,sans-serif;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#9a7b3f;margin:18px 0 6px}
   .rep-subhead:first-of-type{margin-top:4px}
-  .rep-cover{text-align:center;padding-top:100px;min-height:820px}
-  .rep-cover-logo{max-height:130px;margin-bottom:22px}
-  .rep-cover-empresa{font-size:26px;font-weight:700;letter-spacing:.4px}
-  .rep-cover-sub{font-family:Arial,sans-serif;font-size:11px;color:#5b6472;margin-top:6px}
-  .rep-cover-title{font-family:Arial,sans-serif;font-size:26pt;font-weight:700;color:#9a7b3f;margin-top:40px}
-  .rep-cover-periodo{font-family:Arial,sans-serif;font-size:14pt;font-weight:700;color:#5b6472;margin-top:8px}
-  .rep-cover-obs{text-align:justify;max-width:560px;margin:50px auto 0;border-top:1px solid #c9ccd3;padding-top:20px}
+  .rep-cover{text-align:center;padding-top:50px}
+  .rep-cover-logo{max-height:240px;margin-bottom:18px}
+  .rep-cover-empresa{font-size:26px;font-weight:700;letter-spacing:.4px;text-align:center}
+  .rep-cover-sub{font-family:Arial,sans-serif;font-size:11px;color:#5b6472;margin-top:6px;text-align:center}
+  .rep-cover-title{font-family:Arial,sans-serif;font-size:26pt;font-weight:700;color:#9a7b3f;margin-top:30px;text-align:center}
+  .rep-cover-periodo{font-family:Arial,sans-serif;font-size:14pt;font-weight:700;color:#5b6472;margin-top:8px;text-align:center}
+  .rep-cover-obs{text-align:justify;max-width:560px;margin:36px auto 0;border-top:1px solid #c9ccd3;padding-top:16px}
   .rep-cover-obs h3{font-family:Arial,sans-serif;font-size:11pt;font-weight:700;margin:0 0 12px;color:#1c2230}
-  .rep-cover-obs ul{margin:0;padding-left:18px;font-family:Arial,sans-serif;font-size:10pt;line-height:1.7;color:#1c2230}
-  .rep-cover-promo{background:#1a2456;color:#fff;padding:14px 24px;margin-top:40px;text-align:center;font-family:Arial,sans-serif;font-weight:700}
+  .rep-cover-obs ul{margin:0;padding-left:18px;font-family:Arial,sans-serif;font-size:10pt;line-height:1.6;color:#1c2230}
+  .rep-cover-promo{background:#1a2456;color:#fff;padding:14px 24px;margin-top:70px;text-align:center;font-family:Arial,sans-serif;font-weight:700}
 `;
 function calcResumenMesFAYRE(mesStr,tasa){
   const vm=DB.ventas.filter(v=>v.fecha?.startsWith(mesStr));
@@ -13858,20 +13858,20 @@ async function exportarInformeWord(){
   }
 
   // El logo original puede pesar mucho en base64; para Word se reduce a un tamaño liviano
-  const logoWord=await _redimensionarLogoParaWord(DB.config.logoCotizacion||DB.config.logoData,300);
+  const logoWord=await _redimensionarLogoParaWord(DB.config.logoCotizacion||DB.config.logoData,520);
   const nombreMesPortada=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][am-1];
 
-  const html=`<div class="rep-page rep-cover">
-    ${logoWord?`<img class="rep-cover-logo" src="${logoWord.src}" width="${logoWord.w}" height="${logoWord.h}">`:''}
-    <div class="rep-cover-empresa">${escHtml(empresa)}</div>
-    <div class="rep-cover-sub">${escHtml(DB.config.direccion||'')}${DB.config.rnc?'   ·   RNC '+escHtml(DB.config.rnc):''}</div>
-    <div class="rep-cover-title">Informe mensual</div>
-    <div class="rep-cover-periodo">Período: ${nombreMesPortada} del ${ay}</div>
+  const html=`<div class="rep-page rep-cover" align="center">
+    ${logoWord?`<p align="center" style="text-align:center;margin:0"><img class="rep-cover-logo" src="${logoWord.src}" width="${logoWord.w}" height="${logoWord.h}"></p>`:''}
+    <div class="rep-cover-empresa" align="center">${escHtml(empresa)}</div>
+    <div class="rep-cover-sub" align="center">${escHtml(DB.config.direccion||'')}${DB.config.rnc?'   ·   RNC '+escHtml(DB.config.rnc):''}</div>
+    <div class="rep-cover-title" align="center">Informe mensual</div>
+    <div class="rep-cover-periodo" align="center">Período: ${nombreMesPortada} del ${ay}</div>
     <div class="rep-cover-obs">
       <h3>Observaciones y recomendaciones del mes</h3>
       <ul>${observaciones.map(o=>`<li>${escHtml(o)}</li>`).join('')}</ul>
     </div>
-    <div class="rep-cover-promo">Tel: 809-747-5614 | Edward Villa | VILLASYS</div>
+    <div class="rep-cover-promo" align="center">Tel: 809-747-5614 | Edward Villa | VILLASYS</div>
   </div>
 
   <br clear="all" style="page-break-before:always">
