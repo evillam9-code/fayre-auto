@@ -13677,21 +13677,25 @@ function calcResumenMesFAYRE(mesStr,tasa){
   const gastos=gastosBase+interesesMes;
   return{beneficio,gastos,nomina,ganNeta:beneficio-gastos-nomina};
 }
-function _redimensionarLogoParaWord(dataUri,maxDim){
+function _redimensionarLogoParaWord(dataUri,targetDisplayPx){
   return new Promise(resolve=>{
     if(!dataUri){resolve(null);return;}
     const img=new Image();
     img.onload=()=>{
-      let w=img.naturalWidth||maxDim,h=img.naturalHeight||maxDim;
-      if(w>maxDim||h>maxDim){
-        const ratio=Math.min(maxDim/w,maxDim/h);
+      // Resolución del archivo: se mantiene liviana (Word falla con imágenes grandes en base64)
+      const RES_MAX=240;
+      let w=img.naturalWidth||RES_MAX,h=img.naturalHeight||RES_MAX;
+      if(w>RES_MAX||h>RES_MAX){
+        const ratio=Math.min(RES_MAX/w,RES_MAX/h);
         w=Math.round(w*ratio);h=Math.round(h*ratio);
       }
       const canvas=document.createElement('canvas');
       canvas.width=w;canvas.height=h;
       const ctx=canvas.getContext('2d');
       ctx.drawImage(img,0,0,w,h);
-      resolve({src:canvas.toDataURL('image/png'),w,h});
+      // Tamaño de despliegue en Word: independiente de la resolución del archivo
+      const dispScale=targetDisplayPx/Math.max(w,h);
+      resolve({src:canvas.toDataURL('image/png'),w:Math.round(w*dispScale),h:Math.round(h*dispScale)});
     };
     img.onerror=()=>resolve(null);
     img.src=dataUri;
