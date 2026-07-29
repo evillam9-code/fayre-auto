@@ -10389,6 +10389,12 @@ function actualizarCuentasCXPP(){
   const b=bcs.find(x=>x.banco===bancoEl.value);
   cuentaEl.innerHTML=(b?b.cuentas:[]).map(c=>`<option value="${escHtml(c.tipo+' — '+c.numero)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`).join('')||'<option value="Caja General">Caja General</option>';
 }
+function calcEquivCXP(){
+  const m=parseFloat((document.getElementById('cxpp-monto')?.value||'0').replace(/,/g,''))||0;
+  const t=parseFloat(document.getElementById('cxpp-tasa')?.value||0)||0;
+  const el=document.getElementById('cxpp-equiv');
+  if(el)el.value=(m>0&&t>0)?fmt(m*t):'';
+}
 function editarCXP(gid, origen){
   const arr = origen==='manual' ? (DB.cxp||[]) : (DB.gastosVehiculos||[]);
   const i = arr.findIndex(g=>g.id===gid);
@@ -10725,16 +10731,11 @@ function abonarCXPManual(gid){
           <input type="text" id="cxpm-pay-equiv" readonly style="background:var(--gray2);color:var(--green);font-weight:700" value="${fmtMoneyDisplay((g.montoPendiente||0)*(DB.config.tasaCambio||60))}">
         </div>
       </div>
-    </div>
-    <script>
-    function calcEquivCXPM(){
-      const m=parseFloat((document.getElementById('cxpm-pay-monto')?.value||'0').replace(/,/g,''))||0;
-      const t=parseFloat(document.getElementById('cxpm-pay-tasa')?.value||0)||0;
-      const el=document.getElementById('cxpm-pay-equiv');
-      if(el)el.value=typeof fmt==='function'?fmt(m*t):'RD$ '+(m*t).toLocaleString('es-DO',{minimumFractionDigits:2});
-    }
-    <\/script>`:''}
-    <div class="form-row c2">
+    </div>`:''}
+    <div class="form-row c3">
+      <div class="form-field"><label>Moneda</label>
+        <input type="text" readonly style="background:var(--gray2)" value="${esUSD?'USD \u2014 D\u00f3lares':'RD$ \u2014 Pesos'}">
+      </div>
       <div class="form-field"><label>Banco</label>
         <select id="cxpm-pay-banco" onchange="actualizarCuentasPagoManual()">${bancoOpts}</select>
       </div>
@@ -10761,6 +10762,12 @@ function actualizarCuentasPagoManual(){
   const bcs=DB.config.bancoCuentas||[];
   const b=bcs.find(x=>x.banco===bancoEl.value);
   cuentaEl.innerHTML=(b?b.cuentas:[]).map(c=>`<option value="${escHtml(c.tipo+' \u2014 '+c.numero)}">${escHtml(c.tipo)} \u2014 ${escHtml(c.numero)}</option>`).join('')||'<option value="Caja General">Caja General</option>';
+}
+function calcEquivCXPM(){
+  const m=parseFloat((document.getElementById('cxpm-pay-monto')?.value||'0').replace(/,/g,''))||0;
+  const t=parseFloat(document.getElementById('cxpm-pay-tasa')?.value||0)||0;
+  const el=document.getElementById('cxpm-pay-equiv');
+  if(el)el.value=(m>0&&t>0)?fmt(m*t):'';
 }
 function confirmarPagoCXPManual(i){
   if(!validarChequeAntesDeGuardar('cxpm-pay',false))return;
@@ -10811,9 +10818,12 @@ function abonarDesdeCXP(gid){
         <div><div style="font-size:10px;color:var(--gray);font-weight:700;text-transform:uppercase">Pendiente</div><div style="font-weight:700;color:var(--red)">${fV(g.montoPendiente||0)}</div></div>
       </div>
     </div>
-    <div class="form-row c2">
+    <div class="form-row c3">
       <div class="form-field"><label class="required">Monto a Pagar (${esUSD?'USD':'RD$'})</label>
         <input type="text" id="cxpp-monto" value="${fmtMoneyDisplay(g.montoPendiente||0)}" oninput="fmtMoneyInput(this);${esUSD?'calcEquivCXP();':''}" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)" placeholder="0.00">
+      </div>
+      <div class="form-field"><label>Moneda</label>
+        <input type="text" readonly style="background:var(--gray2)" value="${esUSD?'USD — Dólares':'RD$ — Pesos'}">
       </div>
       <div class="form-field"><label>Banco</label>
         <select id="cxpp-banco" onchange="actualizarCuentasCXPP()">
@@ -10834,15 +10844,7 @@ function abonarDesdeCXP(gid){
           <input type="text" id="cxpp-equiv" readonly style="background:var(--gray2);color:var(--green);font-weight:700" value="${fmtMoneyDisplay((g.montoPendiente||0)*(DB.config.tasaCambio||60))}">
         </div>
       </div>
-    </div>
-    <script>
-    function calcEquivCXP(){
-      const m=parseFloat((document.getElementById('cxpp-monto')?.value||'0').replace(/,/g,''))||0;
-      const t=parseFloat(document.getElementById('cxpp-tasa')?.value||0)||0;
-      const el=document.getElementById('cxpp-equiv');
-      if(el)el.value=typeof fmt==='function'?fmt(m*t):'RD$ '+(m*t).toLocaleString('es-DO',{minimumFractionDigits:2});
-    }
-    <\/script>`:''}
+    </div>`:''}
     <div class="form-row c2">
       <div class="form-field"><label>Cuenta Bancaria de Salida</label>
         <select id="cxpp-cuenta">
@@ -12215,16 +12217,11 @@ function abonarCXC(id){
           <input type="text" id="cxca-equiv" readonly style="background:var(--gray2);color:var(--green);font-weight:700" value="${fmtMoneyDisplay((x.saldo||0)*(DB.config.tasaCambio||60))}">
         </div>
       </div>
-    </div>
-    <script>
-    function calcEquivCXCA(){
-      const m=parseFloat((document.getElementById('cxca-monto')?.value||'0').replace(/,/g,''))||0;
-      const t=parseFloat(document.getElementById('cxca-tasa')?.value||0)||0;
-      const el=document.getElementById('cxca-equiv');
-      if(el)el.value=typeof fmt==='function'?fmt(m*t):'RD$ '+(m*t).toLocaleString('es-DO',{minimumFractionDigits:2});
-    }
-    <\/script>`:''}
-    <div class="form-row c2">
+    </div>`:''}
+    <div class="form-row c3">
+      <div class="form-field"><label>Moneda</label>
+        <input type="text" readonly style="background:var(--gray2)" value="${esUSD?'USD — Dólares':'RD$ — Pesos'}">
+      </div>
       <div class="form-field"><label>Banco</label>
         <select id="cxca-banco" onchange="actualizarCuentasCXCA()">
           ${(DB.config.bancoCuentas||[]).map(b=>`<option value="${escHtml(b.banco)}">${escHtml(b.banco)}</option>`).join('')||'<option value="Caja General">Caja General</option>'}
@@ -12259,6 +12256,12 @@ function actualizarCuentasCXCA(){
   const bcs=DB.config.bancoCuentas||[];
   const b=bcs.find(x=>x.banco===bancoEl.value);
   cuentaEl.innerHTML=(b?b.cuentas:[]).map(c=>`<option value="${escHtml(c.tipo+' — '+c.numero)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`).join('')||'<option value="Caja General">Caja General</option>';
+}
+function calcEquivCXCA(){
+  const m=parseFloat((document.getElementById('cxca-monto')?.value||'0').replace(/,/g,''))||0;
+  const t=parseFloat(document.getElementById('cxca-tasa')?.value||0)||0;
+  const el=document.getElementById('cxca-equiv');
+  if(el)el.value=(m>0&&t>0)?fmt(m*t):'';
 }
 
 function confirmarAbonarCXC(id){
