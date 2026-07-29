@@ -807,9 +807,9 @@ function resetInactTimer(){
       document.getElementById('login-screen').style.display='flex';
       document.getElementById('li-user').value='';
       document.getElementById('li-pass').value='';
-      alert('Sesión cerrada por inactividad (10 min). Inicie sesión nuevamente.');
+      alert('Sesión cerrada por inactividad (30 min). Inicie sesión nuevamente.');
     }
-  },600000);
+  },1800000);
 }
 ['click','keydown','mousemove','touchstart','scroll'].forEach(ev=>document.addEventListener(ev,resetInactTimer,{passive:true}));
 
@@ -3264,7 +3264,7 @@ function nuevoCajaMov(tipo){
         <input type="text" id="cj-desc" placeholder="Descripción del movimiento">
       </div>
     </div>
-    <div class="form-field"><label>Nombre de quien realiza la transacción</label><input type="text" id="cj-resp" value="${currentUser?.nombre||''}"></div>
+    <div class="form-field"><label>Nombre de quien realiza la transacción</label><input type="text" id="cj-resp" placeholder="Nombre de quien realiza la transacción"></div>
     ${htmlMonedaBancoCuenta('cj','RD$')}
     <div class="form-field"><label>Forma de Pago</label>
       <select id="cj-forma" data-prev="EFECTIVO" onchange="onFormaPagoChange(this,'cj',true)">
@@ -10418,7 +10418,7 @@ function editarCXP(gid, origen){
         <input type="text" id="ecxp-tipo" value="${escHtml(g.descripcion||g.tipo||'')}">
       </div>
       <div class="form-field"><label>Moneda</label>
-        <select id="ecxp-moneda">
+        <select id="ecxp-moneda" onchange="toggleEquivEditCXP()">
           <option value="RD$" ${(g.moneda||'RD$')==='RD$'?'selected':''}>RD$ — Pesos</option>
           <option value="USD" ${g.moneda==='USD'?'selected':''}>USD — Dólares</option>
         </select>
@@ -10426,13 +10426,33 @@ function editarCXP(gid, origen){
     </div>
     <div class="form-row c3">
       <div class="form-field"><label>Monto Factura</label>
-        <input type="text" id="ecxp-factura" value="${fmtMoneyDisplay(g.montoFactura||0)}" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
+        <input type="text" id="ecxp-factura" value="${fmtMoneyDisplay(g.montoFactura||0)}" oninput="fmtMoneyInput(this);calcEquivEditCXP()" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
       </div>
       <div class="form-field"><label>Monto Pagado</label>
         <input type="text" id="ecxp-pagado" value="${fmtMoneyDisplay(g.montoPagado||0)}" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
       </div>
       <div class="form-field"><label>Fecha</label>
         <input type="date" id="ecxp-fecha" value="${g.fecha||today()}">
+      </div>
+    </div>
+    <div class="form-row c2">
+      <div class="form-field"><label>Banco</label>
+        <select id="ecxp-banco" onchange="actualizarCuentasEditCXP()">
+          ${(DB.config.bancoCuentas||[]).map(b=>`<option value="${escHtml(b.banco)}" ${b.banco===g.banco?'selected':''}>${escHtml(b.banco)}</option>`).join('')||'<option value="Caja General">Caja General</option>'}
+        </select>
+      </div>
+      <div class="form-field"><label>Cuenta</label>
+        <select id="ecxp-cuenta">
+          ${(()=>{const bcs=DB.config.bancoCuentas||[];const b=bcs.find(bb=>bb.banco===g.banco)||bcs[0];return b&&b.cuentas&&b.cuentas.length?b.cuentas.map(c=>`<option value="${escHtml(c.tipo+' — '+c.numero)}" ${(c.tipo+' — '+c.numero)===g.cuenta?'selected':''}>${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`).join(''):'<option value="Caja General">Caja General</option>';})()}
+        </select>
+      </div>
+    </div>
+    <div class="form-row c2" id="ecxp-equiv-wrap" style="${g.moneda==='USD'?'':'display:none'}">
+      <div class="form-field"><label>Tasa del día (RD$ por 1 USD)</label>
+        <input type="number" id="ecxp-tasa" value="${DB.config.tasaCambio||60}" step="0.01" placeholder="Ej: 62.50" oninput="calcEquivEditCXP()">
+      </div>
+      <div class="form-field"><label>Equivalente en RD$ <span style="color:var(--green);font-size:11px">(calculado)</span></label>
+        <input type="text" id="ecxp-equiv" readonly style="background:var(--gray2);color:var(--green);font-weight:700" value="${g.moneda==='USD'?fmtMoneyDisplay((g.montoFactura||0)*(DB.config.tasaCambio||60)):''}">
       </div>
     </div>
     <div class="form-row c2">
@@ -10445,6 +10465,27 @@ function editarCXP(gid, origen){
     </div>`,
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
      <button class="btn btn-primary" onclick="guardarEditCXP('${gid}','${origen}')">💾 Actualizar</button>`);
+}
+function actualizarCuentasEditCXP(){
+  const bancoEl=document.getElementById('ecxp-banco');
+  const cuentaEl=document.getElementById('ecxp-cuenta');
+  if(!bancoEl||!cuentaEl)return;
+  const bcs=DB.config.bancoCuentas||[];
+  const b=bcs.find(x=>x.banco===bancoEl.value);
+  cuentaEl.innerHTML=(b&&b.cuentas&&b.cuentas.length)?b.cuentas.map(c=>`<option value="${escHtml(c.tipo+' — '+c.numero)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`).join(''):'<option value="Caja General">Caja General</option>';
+}
+function toggleEquivEditCXP(){
+  const moneda=document.getElementById('ecxp-moneda')?.value;
+  const wrap=document.getElementById('ecxp-equiv-wrap');
+  if(wrap)wrap.style.display=moneda==='USD'?'grid':'none';
+  calcEquivEditCXP();
+}
+function calcEquivEditCXP(){
+  const moneda=document.getElementById('ecxp-moneda')?.value;
+  const factura=parseFloat((document.getElementById('ecxp-factura')?.value||'0').replace(/,/g,''))||0;
+  const tasa=parseFloat(document.getElementById('ecxp-tasa')?.value||0)||0;
+  const el=document.getElementById('ecxp-equiv');
+  if(el)el.value=(moneda==='USD'&&factura>0&&tasa>0)?fmt(factura*tasa):'';
 }
 
 function guardarEditCXP(gid, origen){
@@ -10483,6 +10524,8 @@ function guardarEditCXP(gid, origen){
   const nuevoBancoCXP=document.getElementById('ecxp-banco')?.value||arr[i].banco||'';
   const nuevaCuentaCXP=document.getElementById('ecxp-cuenta')?.value||arr[i].cuenta||'';
   const nuevaMonedaCXP=document.getElementById('ecxp-moneda')?.value||arr[i].moneda||'RD$';
+  arr[i].banco=nuevoBancoCXP;
+  arr[i].cuenta=nuevaCuentaCXP;
   const fechaCXPEdit=arr[i].fechaPago||arr[i].fecha||today();
   const categoriaCajaCXP=origen==='manual'?'CXP Manual':'Gasto de Vehículo';
   const diferenciaCXP=pagado-pagadoAnterior;
@@ -10663,12 +10706,34 @@ function abonarCXPManual(gid){
     </div>
     <div class="form-row c2">
       <div class="form-field"><label class="required">Monto a Pagar</label>
-        <input type="text" id="cxpm-pay-monto" value="${fmtMoneyDisplay(g.montoPendiente||0)}" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
+        <input type="text" id="cxpm-pay-monto" value="${fmtMoneyDisplay(g.montoPendiente||0)}" oninput="fmtMoneyInput(this);${esUSD?'calcEquivCXPM();':''}" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
       </div>
       <div class="form-field"><label>Fecha de Pago</label>
         <input type="date" id="cxpm-pay-fecha" value="${today()}">
       </div>
     </div>
+    ${esUSD?`
+    <div style="background:#eff6ff;border:0.5px solid #bfdbfe;border-radius:8px;padding:10px 14px;margin-bottom:12px">
+      <div style="font-size:11px;font-weight:500;color:#1d4ed8;margin-bottom:8px">\ud83d\udcb1 Tasa de cambio del d\u00eda</div>
+      <div class="form-row c2" style="margin-bottom:0">
+        <div class="form-field" style="margin-bottom:0">
+          <label>Tasa del d\u00eda (RD$ por 1 USD)</label>
+          <input type="number" id="cxpm-pay-tasa" value="${DB.config.tasaCambio||60}" step="0.01" placeholder="Ej: 62.50" oninput="calcEquivCXPM()">
+        </div>
+        <div class="form-field" style="margin-bottom:0">
+          <label>Equivalente en RD$ <span style="color:var(--green);font-size:11px">(calculado)</span></label>
+          <input type="text" id="cxpm-pay-equiv" readonly style="background:var(--gray2);color:var(--green);font-weight:700" value="${fmtMoneyDisplay((g.montoPendiente||0)*(DB.config.tasaCambio||60))}">
+        </div>
+      </div>
+    </div>
+    <script>
+    function calcEquivCXPM(){
+      const m=parseFloat((document.getElementById('cxpm-pay-monto')?.value||'0').replace(/,/g,''))||0;
+      const t=parseFloat(document.getElementById('cxpm-pay-tasa')?.value||0)||0;
+      const el=document.getElementById('cxpm-pay-equiv');
+      if(el)el.value=typeof fmt==='function'?fmt(m*t):'RD$ '+(m*t).toLocaleString('es-DO',{minimumFractionDigits:2});
+    }
+    <\/script>`:''}
     <div class="form-row c2">
       <div class="form-field"><label>Banco</label>
         <select id="cxpm-pay-banco" onchange="actualizarCuentasPagoManual()">${bancoOpts}</select>
@@ -10706,6 +10771,8 @@ function confirmarPagoCXPManual(i){
   if(!_cxpm_pay_banco||!_cxpm_pay_cuenta){toast('Selecciona banco y cuenta para continuar','error');return;}
   const g=DB.cxp[i];
   if(monto>parseFloat(g.montoPendiente||0)){toast('El monto no puede superar el pendiente','error');return;}
+  const esUSDPagoManual=(g.moneda||'RD$')==='USD';
+  if(esUSDPagoManual&&(!parseFloat(document.getElementById('cxpm-pay-tasa')?.value||0))){toast('La tasa del día es obligatoria para pagos en USD','error');document.getElementById('cxpm-pay-tasa')?.focus();return;}
   const fecha=document.getElementById('cxpm-pay-fecha')?.value||today();
   const cuenta=document.getElementById('cxpm-pay-cuenta')?.value||'';
   const banco=document.getElementById('cxpm-pay-banco')?.value||'';
@@ -11983,13 +12050,19 @@ function editarCXC(id){
     </div>
     <div class="form-row c3">
       <div class="form-field"><label>Moneda</label>
-        <select id="ecxc-moneda">
+        <select id="ecxc-moneda" onchange="toggleEquivEditCXC()">
           <option value="RD$" ${(x.moneda||'RD$')==='RD$'?'selected':''}>RD$ — Pesos</option>
           <option value="USD" ${x.moneda==='USD'?'selected':''}>USD — Dólares</option>
         </select>
       </div>
-      <div class="form-field" style="display:none"><input type="hidden" id="ecxc-tasa" value="${DB.config.tasaCambio||60}"></div>
-      <div class="form-field" style="display:none"><input type="hidden" id="ecxc-equiv" value=""></div>
+    </div>
+    <div class="form-row c2" id="ecxc-equiv-wrap" style="${x.moneda==='USD'?'':'display:none'}">
+      <div class="form-field"><label>Tasa del día (RD$ por 1 USD)</label>
+        <input type="number" id="ecxc-tasa" value="${DB.config.tasaCambio||60}" step="0.01" placeholder="Ej: 62.50" oninput="calcEquivEditCXC()">
+      </div>
+      <div class="form-field"><label>Equivalente en RD$ <span style="color:var(--green);font-size:11px">(calculado)</span></label>
+        <input type="text" id="ecxc-equiv" readonly style="background:var(--gray2);color:var(--green);font-weight:700" value="${x.moneda==='USD'?fmtMoneyDisplay((x.total||0)*(DB.config.tasaCambio||60)):''}">
+      </div>
     </div>
     <div class="form-row c2">
       <div class="form-field"><label>Banco</label>
@@ -12013,13 +12086,18 @@ function calcSaldoEditCXC(){
   const saldo=document.getElementById('ecxc-saldo');
   if(saldo)saldo.value=fmtMoneyDisplay(Math.max(0,total-abono));
 }
+function toggleEquivEditCXC(){
+  const moneda=document.getElementById('ecxc-moneda')?.value;
+  const wrap=document.getElementById('ecxc-equiv-wrap');
+  if(wrap)wrap.style.display=moneda==='USD'?'grid':'none';
+  calcEquivEditCXC();
+}
 function calcEquivEditCXC(){
   const moneda=document.getElementById('ecxc-moneda')?.value;
-  const total=parseFloat(document.getElementById('ecxc-total')?.value||0);
-  const tasa=parseFloat(document.getElementById('ecxc-tasa')?.value||DB.config.tasaCambio||60);
+  const total=parseFloat((document.getElementById('ecxc-total')?.value||'0').replace(/,/g,''))||0;
+  const tasa=parseFloat(document.getElementById('ecxc-tasa')?.value||0)||0;
   const equiv=document.getElementById('ecxc-equiv');
-  if(equiv&&moneda==='USD'&&total>0)equiv.value='RD$ '+fmt(total*tasa);
-  else if(equiv)equiv.value='';
+  if(equiv)equiv.value=(moneda==='USD'&&total>0&&tasa>0)?fmt(total*tasa):'';
 }
 function actualizarCuentasEditCXC(){
   const bancoEl=document.getElementById('ecxc-banco');
@@ -12118,12 +12196,34 @@ function abonarCXC(id){
     </div>
     <div class="form-row c2">
       <div class="form-field"><label class="required">Monto a Cobrar (${esUSD?'USD':'RD$'})</label>
-        <input type="text" id="cxca-monto" value="${fmtMoneyDisplay(x.saldo)}" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)" placeholder="0.00">
+        <input type="text" id="cxca-monto" value="${fmtMoneyDisplay(x.saldo)}" oninput="fmtMoneyInput(this);${esUSD?'calcEquivCXCA();':''}" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)" placeholder="0.00">
       </div>
       <div class="form-field"><label>Fecha</label>
         <input type="date" id="cxca-fecha" value="${today()}">
       </div>
     </div>
+    ${esUSD?`
+    <div style="background:#eff6ff;border:0.5px solid #bfdbfe;border-radius:8px;padding:10px 14px;margin-bottom:12px">
+      <div style="font-size:11px;font-weight:500;color:#1d4ed8;margin-bottom:8px">💱 Tasa de cambio del día</div>
+      <div class="form-row c2" style="margin-bottom:0">
+        <div class="form-field" style="margin-bottom:0">
+          <label>Tasa del día (RD$ por 1 USD)</label>
+          <input type="number" id="cxca-tasa" value="${DB.config.tasaCambio||60}" step="0.01" placeholder="Ej: 62.50" oninput="calcEquivCXCA()">
+        </div>
+        <div class="form-field" style="margin-bottom:0">
+          <label>Equivalente en RD$ <span style="color:var(--green);font-size:11px">(calculado)</span></label>
+          <input type="text" id="cxca-equiv" readonly style="background:var(--gray2);color:var(--green);font-weight:700" value="${fmtMoneyDisplay((x.saldo||0)*(DB.config.tasaCambio||60))}">
+        </div>
+      </div>
+    </div>
+    <script>
+    function calcEquivCXCA(){
+      const m=parseFloat((document.getElementById('cxca-monto')?.value||'0').replace(/,/g,''))||0;
+      const t=parseFloat(document.getElementById('cxca-tasa')?.value||0)||0;
+      const el=document.getElementById('cxca-equiv');
+      if(el)el.value=typeof fmt==='function'?fmt(m*t):'RD$ '+(m*t).toLocaleString('es-DO',{minimumFractionDigits:2});
+    }
+    <\/script>`:''}
     <div class="form-row c2">
       <div class="form-field"><label>Banco</label>
         <select id="cxca-banco" onchange="actualizarCuentasCXCA()">
@@ -12169,6 +12269,8 @@ function confirmarAbonarCXC(id){
   if(!_cxca_banco||!_cxca_cuenta){toast('Selecciona banco y cuenta para continuar','error');return;}
   const i=DB.cxc.findIndex(x=>x.id===id);if(i<0)return;
   if(monto>parseFloat(DB.cxc[i].saldo||0)){toast('El monto no puede superar el saldo pendiente','error');return;}
+  const esUSDCobroCXC=(DB.cxc[i].moneda||'RD$')==='USD';
+  if(esUSDCobroCXC&&(!parseFloat(document.getElementById('cxca-tasa')?.value||0))){toast('La tasa del día es obligatoria para cobros en USD','error');document.getElementById('cxca-tasa')?.focus();return;}
   const cobrarMora=document.getElementById('cxca-mora-chk')?.checked||false;
   const montoMora=cobrarMora?parseFloat((document.getElementById('cxca-mora-monto')?.value||'0').replace(/,/g,'')):0;
   if(cobrarMora&&(!montoMora||montoMora<=0)){toast('Ingresa el monto de la mora','error');return;}
