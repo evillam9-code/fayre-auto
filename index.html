@@ -2651,12 +2651,16 @@ function renderCaja(){
   const acumSalUSD=Object.values(cuentasAcum).filter(c=>c.moneda==='USD').reduce((a,c)=>a+c.salidas,0);
   const totalGeneralRD=totalAcumRD+(totalAcumUSD*tasa);
 
+  const buscarTodo=!!document.getElementById('caja-buscar-todo')?.checked;
   let filtrados;
-  if(busqueda){
+  if(busqueda&&buscarTodo){
     const baseBusqueda=tab==='ENTRADAS'?DB.caja.filter(c=>c.tipo==='ENTRADA'):tab==='SALIDAS'?DB.caja.filter(c=>c.tipo==='SALIDA'):DB.caja;
     filtrados=baseBusqueda.filter(c=>[c.descripcion,c.categoria,c.referencia,c.responsable,c.numeroCheque,c.nombreCheque,c.banco,c.cuenta,fmtDate(c.fecha)].filter(Boolean).join(' ').toLowerCase().includes(busqueda));
   } else {
     filtrados=tab==='ENTRADAS'?cajaFilt.filter(c=>c.tipo==='ENTRADA'):tab==='SALIDAS'?cajaFilt.filter(c=>c.tipo==='SALIDA'):cajaFilt;
+    if(busqueda){
+      filtrados=filtrados.filter(c=>[c.descripcion,c.categoria,c.referencia,c.responsable,c.numeroCheque,c.nombreCheque,c.banco,c.cuenta,fmtDate(c.fecha)].filter(Boolean).join(' ').toLowerCase().includes(busqueda));
+    }
   }
   // Más reciente a más antiguo por fecha real (no solo orden de inserción)
   filtrados=filtrados.slice().sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||'')||DB.caja.indexOf(b)-DB.caja.indexOf(a));
@@ -2896,9 +2900,12 @@ function renderCaja(){
         <select id="caja-tab" onchange="renderCaja()" style="padding:7px 12px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
           <option value="TODO">Todos los movimientos</option><option value="ENTRADAS">Solo Entradas</option><option value="SALIDAS">Solo Salidas</option>
         </select>
-        <input class="search-input" id="caja-buscar" value="${escHtml(busqueda)}" placeholder="Buscar en todo el historial..." oninput="renderCaja()" style="flex:1;min-width:200px">
+        <input class="search-input" id="caja-buscar" value="${escHtml(busqueda)}" placeholder="Buscar..." oninput="renderCaja()" style="flex:1;min-width:200px">
+        <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--gray);white-space:nowrap">
+          <input type="checkbox" id="caja-buscar-todo" ${buscarTodo?'checked':''} onchange="renderCaja()"> Buscar en todo el historial
+        </label>
       </div>
-      ${busqueda?`<div style="font-size:12px;color:var(--blue);font-weight:600;margin-bottom:10px">🔎 Buscando en todo el historial de Caja (ignora el filtro de período) — ${filtrados.length} resultado${filtrados.length===1?'':'s'}</div>`:''}
+      ${busqueda?`<div style="font-size:12px;color:var(--blue);font-weight:600;margin-bottom:10px">🔎 ${buscarTodo?'Buscando en todo el historial (ignora el filtro de período)':'Buscando dentro del período filtrado'} — ${filtrados.length} resultado${filtrados.length===1?'':'s'}</div>`:''}
       <div class="table-wrap"><table id="caja-tbl">
         <thead><tr><th>Fecha</th><th>Tipo</th><th>Categoría</th><th>Descripción</th><th>Monto</th><th>Cuenta</th><th>Por</th><th></th></tr></thead>
         <tbody>${filtrados.map(c=>{const i=DB.caja.indexOf(c);return`<tr>
