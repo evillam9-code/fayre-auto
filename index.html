@@ -3532,6 +3532,13 @@ function renderGastos(){
         <button class="btn btn-primary" onclick="nuevoGasto()">➕ Nuevo Gasto</button>
       </div>
     </div>
+    <div style="background:var(--navy);border-radius:10px;padding:14px 18px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+      <div>
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#94a3b8;letter-spacing:.5px">🧮 Total General del rango filtrado — para validar contra el Informe de Cierre</div>
+        <div style="font-size:10px;color:#94a3b8;margin-top:2px">Pon Desde=día 1 y Hasta=último día del mes que quieres comparar; el total coincide con "Gastos" en el Informe de ese mes.</div>
+      </div>
+      <div style="text-align:right"><div style="font-size:10px;color:#94a3b8">RD$</div><div style="font-size:18px;font-weight:800;color:#f87171">${total.toLocaleString('es-DO',{minimumFractionDigits:2})}</div></div>
+    </div>
     <div class="card"><div class="search-wrap"><input class="search-input" placeholder="Buscar..." oninput="filterTable('gas-tbl',this.value)"></div>
       <div class="table-wrap"><table id="gas-tbl"><thead><tr><th style="width:36px"></th><th>Fecha</th><th>Categoría</th><th>Suplidor</th><th>Descripción</th><th>Forma Pago</th><th>Estado</th><th>Monto</th><th>Por</th></tr></thead>
         <tbody>${gastosF.slice().reverse().map((g)=>{return`<tr onclick="selGasto('${g.id}',this)" style="cursor:pointer">
@@ -3969,6 +3976,13 @@ function renderNomina(){
       </table></div>
     </div>
     `:`
+    <div style="background:var(--navy);border-radius:10px;padding:14px 18px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+      <div>
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#94a3b8;letter-spacing:.5px">🧮 Total General del rango filtrado — para validar contra el Informe de Cierre</div>
+        <div style="font-size:10px;color:#94a3b8;margin-top:2px">Selecciona el mismo mes que en el Informe para que "Nómina" coincida.</div>
+      </div>
+      <div style="text-align:right"><div style="font-size:10px;color:#94a3b8">Total Pagado</div><div style="font-size:18px;font-weight:800;color:#4ade80">${fmt(totalPagado)}</div></div>
+    </div>
     <!-- TABLA HISTORIAL PAGOS -->
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
@@ -4949,12 +4963,15 @@ function renderPrestamos(){
   // Cierre. Dejando "Desde" vacío, el total coincide exactamente con el informe. Las acciones
   // de pago siempre usan el saldo real actual (saldoLive), no el histórico mostrado.
   const fechaCorte=filtroHasta||today();
-  let prestamosF=DB.prestamos.filter(p=>!p.fecha||p.fecha<=fechaCorte).map(p=>({...p,saldoLive:p.saldoPendiente,saldoCierre:saldoPrestamoAFecha(p,fechaCorte)}));
-  if(filtroDesde)prestamosF=prestamosF.filter(p=>p.fecha&&p.fecha>=filtroDesde);
+  // Base completa acumulada a fechaCorte (ignora "Desde") — es la que da el Total General.
+  const prestamosF=DB.prestamos.filter(p=>!p.fecha||p.fecha<=fechaCorte).map(p=>({...p,saldoLive:p.saldoPendiente,saldoCierre:saldoPrestamoAFecha(p,fechaCorte)}));
   const total=prestamosF.length;
   const deudaRD=prestamosF.filter(p=>(p.moneda||'RD$')==='RD$').reduce((a,p)=>a+p.saldoCierre,0);
   const deudaUSD=prestamosF.filter(p=>p.moneda==='USD').reduce((a,p)=>a+p.saldoCierre,0);
-  const resumen=`${total} préstamo(s) al ${fmtDate(fechaCorte)} — Deuda: RD$ ${deudaRD.toLocaleString('es-DO',{minimumFractionDigits:2})}${deudaUSD>0?' | USD '+deudaUSD.toLocaleString('en-US',{minimumFractionDigits:2}):''}`;
+  // "Desde" solo filtra qué filas se listan en la tabla, no el total.
+  let prestamosMostrados=prestamosF;
+  if(filtroDesde)prestamosMostrados=prestamosMostrados.filter(p=>p.fecha&&p.fecha>=filtroDesde);
+  const resumen=`${total} préstamo(s) al ${fmtDate(fechaCorte)}`;
   document.getElementById('page-prestamos').innerHTML=`
     <div class="page-header">
       <div><h1>🏦 Préstamos Bancos</h1><p>${resumen}</p></div>
@@ -4963,6 +4980,16 @@ function renderPrestamos(){
         <input type="date" id="pr-filtro-hasta" value="${filtroHasta}" onchange="renderPrestamos()" title="Hasta" style="padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
         ${(filtroDesde||filtroHasta)?`<button class="btn btn-secondary btn-sm" onclick="document.getElementById('pr-filtro-desde').value='';document.getElementById('pr-filtro-hasta').value='';renderPrestamos()" title="Limpiar fechas">🔄</button>`:''}
         <button class="btn btn-primary" onclick="nuevoPrestamo()">➕ Nuevo Préstamo</button>
+      </div>
+    </div>
+    <div style="background:var(--navy);border-radius:10px;padding:14px 18px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+      <div>
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#94a3b8;letter-spacing:.5px">🧮 Total General al ${fmtDate(fechaCorte)} — para validar contra el Informe de Cierre</div>
+        <div style="font-size:10px;color:#94a3b8;margin-top:2px">"Desde" solo filtra la lista de abajo — no afecta este total.</div>
+      </div>
+      <div style="display:flex;gap:20px">
+        <div style="text-align:right"><div style="font-size:10px;color:#94a3b8">RD$</div><div style="font-size:18px;font-weight:800;color:#f87171">${deudaRD.toLocaleString('es-DO',{minimumFractionDigits:2})}</div></div>
+        <div style="text-align:right"><div style="font-size:10px;color:#94a3b8">USD</div><div style="font-size:18px;font-weight:800;color:#60a5fa">$${deudaUSD.toLocaleString('en-US',{minimumFractionDigits:2})}</div></div>
       </div>
     </div>
     ${total===0?`<div class="card" style="text-align:center;padding:48px">
@@ -4979,7 +5006,7 @@ function renderPrestamos(){
           <th>Plazo</th><th>Fecha</th><th>Estado</th><th>Acciones</th>
         </tr></thead>
         <tbody>
-          ${prestamosF.map(p=>{
+          ${prestamosMostrados.map(p=>{
             const m=p.moneda||'RD$';
             const tipoLabel={FRANCESA:'Francesa',CAPITAL_FIJO:'Capital Fijo',SOLO_INT_AMORT:'Solo Interés Amort.',SOLO_INT_FIJO:'Solo Interés Fijo',LINEA:'Línea Crédito'};
             const monedaBadge=m==='USD'
@@ -8142,6 +8169,16 @@ function renderVentas(){
         <button class="btn btn-primary" onclick="nuevaVenta()">➕ Nueva Venta</button>
       </div>
     </div>
+    <div style="background:var(--navy);border-radius:10px;padding:14px 18px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+      <div>
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#94a3b8;letter-spacing:.5px">🧮 Total General del rango filtrado — para validar contra el Informe de Cierre</div>
+        <div style="font-size:10px;color:#94a3b8;margin-top:2px">Pon Desde=día 1 y Hasta=último día del mes para que "Ventas" coincida con el Informe de ese mes. Pendiente es al ${fmtDate(fechaCorteVta)}.</div>
+      </div>
+      <div style="display:flex;gap:20px">
+        <div style="text-align:right"><div style="font-size:10px;color:#94a3b8">Ventas RD$</div><div style="font-size:16px;font-weight:800;color:#4ade80">${totalV.toLocaleString('es-DO',{minimumFractionDigits:2})}</div></div>
+        <div style="text-align:right"><div style="font-size:10px;color:#94a3b8">Pendiente por Cobrar</div><div style="font-size:16px;font-weight:800;color:#f87171">${totalPend.toLocaleString('es-DO',{minimumFractionDigits:2})}</div></div>
+      </div>
+    </div>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:16px">
       <div class="stat-card green">
         <div class="stat-ico">💰</div>
@@ -10451,11 +10488,11 @@ function renderCXP(){
   const filtroHasta=document.getElementById('cxp-filtro-hasta')?.value||'';
 
   // Pendiente/Pagado reconstruidos "a la fecha Hasta" (hoy si no se especifica), igual que el
-  // Informe de Cierre: no restan pagos posteriores a esa fecha. Dejando "Desde" vacío, el total
-  // que se ve aquí coincide exactamente con el Informe para el mismo "Hasta".
+  // Informe de Cierre: no restan pagos posteriores a esa fecha, y SIEMPRE incluyen deudas de
+  // antes de "Desde" que sigan pendientes en "Hasta" (una deuda pendiente no desaparece del
+  // total solo porque su factura es de antes del rango elegido).
   const fechaCorte=filtroHasta||today();
-  const hayFiltroFecha=!!(filtroDesde||filtroHasta);
-  let gastosPend=[
+  const baseCompleta=[
     ...(DB.gastosVehiculos||[]).map(g=>({...g,_origen:'auto'})),
     ...(DB.cxp||[]).map(g=>({...g,_origen:'manual'}))
   ]
@@ -10466,10 +10503,18 @@ function renderCXP(){
       return{...g,montoPendiente,montoPagado,statusGasto:estadoGastoAFecha(montoPendiente,montoPagado)};
     })
     .filter(g=>g.montoPendiente>0.01);
+
+  // Total General: SIN ningún filtro (ni Suplidor/Vehículo/Moneda/Desde) — el número que debe
+  // coincidir 1 a 1 con el "Total pendiente" del Informe de Cierre para el mismo "Hasta".
+  const totalGeneralRD=baseCompleta.filter(g=>(g.moneda||'RD$')==='RD$').reduce((a,g)=>a+g.montoPendiente,0);
+  const totalGeneralUSD=baseCompleta.filter(g=>g.moneda==='USD').reduce((a,g)=>a+g.montoPendiente,0);
+
+  // Suplidor/Vehículo/Moneda sí acotan el total (el usuario los usa para acotar la consulta).
+  // "Desde" NO resta del total — solo filtra qué filas se listan en la tabla (gastosMostrados).
+  let gastosPend=baseCompleta;
   if(filtroSup)gastosPend=gastosPend.filter(g=>g.suplidor===filtroSup);
   if(filtroVeh)gastosPend=gastosPend.filter(g=>g.vehiculoId===filtroVeh||g.vehiculo===filtroVeh);
   if(filtroMoneda)gastosPend=gastosPend.filter(g=>(g.moneda||'RD$')===filtroMoneda);
-  if(filtroDesde)gastosPend=gastosPend.filter(g=>g.fecha>=filtroDesde);
 
   const gRD=gastosPend.filter(g=>(g.moneda||'RD$')==='RD$');
   const gUSD=gastosPend.filter(g=>g.moneda==='USD');
@@ -10482,12 +10527,14 @@ function renderCXP(){
   const totalPend=gastosPend.reduce((a,g)=>a+parseFloat(g.montoPendiente||0),0);
   const totalFactura=gastosPend.reduce((a,g)=>a+parseFloat(g.montoFactura||0),0);
   const totalPagado=gastosPend.reduce((a,g)=>a+parseFloat(g.montoPagado||0),0);
+  let gastosMostrados=gastosPend;
+  if(filtroDesde)gastosMostrados=gastosMostrados.filter(g=>g.fecha>=filtroDesde);
   const tasa=parseFloat(DB.config.tasaCambio||60);
 
   document.getElementById('page-cxp').innerHTML=`
     <div class="page-header">
       <div><h1>📑 Cuentas por Pagar — Vehículos</h1>
-        <p>${gastosPend.length} pendiente(s) al ${fmtDate(fechaCorte)} — RD$: <strong style="color:var(--red)">${totalPendRD.toLocaleString('es-DO',{minimumFractionDigits:2})}</strong> | USD: <strong style="color:var(--blue)">$${totalPendUSD.toLocaleString('en-US',{minimumFractionDigits:2})}</strong></p>
+        <p>${gastosPend.length} pendiente(s) al ${fmtDate(fechaCorte)}</p>
       </div>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
         <button class="btn btn-secondary btn-sm" onclick="imprimirCXP()">📄 Exportar PDF</button>
@@ -10495,9 +10542,20 @@ function renderCXP(){
       </div>
     </div>
 
+    <div style="background:var(--navy);border-radius:10px;padding:14px 18px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+      <div>
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#94a3b8;letter-spacing:.5px">🧮 Total General al ${fmtDate(fechaCorte)} — para validar contra el Informe de Cierre</div>
+        <div style="font-size:10px;color:#94a3b8;margin-top:2px">Sin filtros de suplidor/vehículo/moneda/fecha "Desde" — todo lo pendiente hasta esa fecha.</div>
+      </div>
+      <div style="display:flex;gap:20px">
+        <div style="text-align:right"><div style="font-size:10px;color:#94a3b8">RD$</div><div style="font-size:18px;font-weight:800;color:#f87171">${totalGeneralRD.toLocaleString('es-DO',{minimumFractionDigits:2})}</div></div>
+        <div style="text-align:right"><div style="font-size:10px;color:#94a3b8">USD</div><div style="font-size:18px;font-weight:800;color:#60a5fa">$${totalGeneralUSD.toLocaleString('en-US',{minimumFractionDigits:2})}</div></div>
+      </div>
+    </div>
+
     <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px;color:#1e40af;display:flex;align-items:center;gap:8px">
       <span>ℹ️</span>
-      <span>Las cuentas por pagar se generan automáticamente al registrar gastos de vehículo con saldo pendiente. El pendiente mostrado es "a la fecha Hasta" (no cuenta pagos posteriores) — deja "Desde" vacío para que el total coincida exactamente con el Informe de Cierre de ese mes.</span>
+      <span>Las cuentas por pagar se generan automáticamente al registrar gastos de vehículo con saldo pendiente. El pendiente es "a la fecha Hasta" e incluye deudas anteriores que sigan sin pagarse. "Desde" solo filtra qué filas se listan abajo — no resta del total ni del Total General.</span>
     </div>
     <div class="card" style="margin-bottom:16px">
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;align-items:end">
@@ -10573,7 +10631,7 @@ function renderCXP(){
           <th>Estado</th>
           <th style="width:130px">Acción</th>
         </tr></thead>
-        <tbody>${gastosPend.length?gastosPend.slice().reverse().map(g=>{
+        <tbody>${gastosMostrados.length?gastosMostrados.slice().reverse().map(g=>{
           // Buscar vehículo por id, o por vin/codigo si el id no coincide (datos de otro dispositivo)
           let v=DB.vehiculos.find(x=>x.id===g.vehiculoId);
           if(!v&&g.vehiculoId){
@@ -11427,7 +11485,7 @@ function imprimirCXP(){
   const filtroDesde=document.getElementById('cxp-filtro-desde')?.value||'';
   const filtroHasta=document.getElementById('cxp-filtro-hasta')?.value||'';
   const fechaCorte=filtroHasta||today();
-  let gastosPend=[
+  const baseCompleta=[
     ...(DB.gastosVehiculos||[]).map(g=>({...g,_origen:'auto'})),
     ...(DB.cxp||[]).map(g=>({...g,_origen:'manual'}))
   ]
@@ -11438,6 +11496,9 @@ function imprimirCXP(){
       return{...g,montoPendiente,montoPagado,statusGasto:estadoGastoAFecha(montoPendiente,montoPagado)};
     })
     .filter(g=>g.montoPendiente>0.01);
+  const totalGeneralRD=baseCompleta.filter(g=>(g.moneda||'RD$')==='RD$').reduce((a,g)=>a+g.montoPendiente,0);
+  const totalGeneralUSD=baseCompleta.filter(g=>g.moneda==='USD').reduce((a,g)=>a+g.montoPendiente,0);
+  let gastosPend=baseCompleta;
   if(filtroSup)gastosPend=gastosPend.filter(g=>g.suplidor===filtroSup);
   if(filtroVeh)gastosPend=gastosPend.filter(g=>g.vehiculoId===filtroVeh||g.vehiculo===filtroVeh);
   if(filtroMoneda)gastosPend=gastosPend.filter(g=>(g.moneda||'RD$')===filtroMoneda);
@@ -11445,7 +11506,7 @@ function imprimirCXP(){
   const tasa=parseFloat(DB.config.tasaCambio||60);
   const empresa=DB.config.empresa||'DealerSystem';
   let filtroLabel=(filtroSup?('Suplidor: '+filtroSup):(filtroVeh?'Vehículo filtrado':'Todos los pendientes'))+` | al ${fmtDate(fechaCorte)}`;
-  if(filtroDesde)filtroLabel+=` (desde ${fmtDate(filtroDesde)})`;
+  if(filtroDesde)filtroLabel+=` (lista desde ${fmtDate(filtroDesde)}, no afecta el Total General)`;
   // Separar por moneda
   const gastosRD=gastosPend.filter(g=>(g.moneda||'RD$')==='RD$');
   const gastosUSD=gastosPend.filter(g=>g.moneda==='USD');
@@ -11487,8 +11548,15 @@ function imprimirCXP(){
       <div style="font-size:11px;color:#6b7280">Filtro: ${filtroLabel} | Fecha: ${fmtDate(today())} | Tasa: RD$ ${tasa} x USD</div>
     </div>
     <div style="text-align:right">
-      ${totalRD>0?`<div style="font-size:11px;color:#6b7280">Pendiente RD$</div><div style="font-size:18px;font-weight:800;color:#dc2626">${fmt(totalRD)}</div>`:''}
-      ${totalUSD>0?`<div style="font-size:11px;color:#6b7280;margin-top:4px">Pendiente USD</div><div style="font-size:18px;font-weight:800;color:#2563eb">$${totalUSD.toLocaleString('en-US',{minimumFractionDigits:2})}</div>`:''}
+      ${totalRD>0?`<div style="font-size:11px;color:#6b7280">Pendiente RD$ (filtrado)</div><div style="font-size:18px;font-weight:800;color:#dc2626">${fmt(totalRD)}</div>`:''}
+      ${totalUSD>0?`<div style="font-size:11px;color:#6b7280;margin-top:4px">Pendiente USD (filtrado)</div><div style="font-size:18px;font-weight:800;color:#2563eb">$${totalUSD.toLocaleString('en-US',{minimumFractionDigits:2})}</div>`:''}
+    </div>
+  </div>
+  <div style="background:#0f172a;border-radius:6px;padding:10px 14px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;color:#fff">
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase">🧮 Total General al ${fmtDate(fechaCorte)} (sin filtros — valida contra el Informe de Cierre)</div>
+    <div style="display:flex;gap:20px">
+      <div style="text-align:right"><div style="font-size:9px;color:#94a3b8">RD$</div><div style="font-size:15px;font-weight:800;color:#f87171">${totalGeneralRD.toLocaleString('es-DO',{minimumFractionDigits:2})}</div></div>
+      <div style="text-align:right"><div style="font-size:9px;color:#94a3b8">USD</div><div style="font-size:15px;font-weight:800;color:#60a5fa">$${totalGeneralUSD.toLocaleString('en-US',{minimumFractionDigits:2})}</div></div>
     </div>
   </div>
   ${gastosRD.length>0?`
@@ -11889,17 +11957,24 @@ function renderCXC(){
   const ds='background:#e2e8f0;color:#adb5bd;cursor:not-allowed;border:1px solid #dee2e6';
 
   // Saldo/estado reconstruidos "a la fecha Hasta" (hoy si no se especifica) — igual que el
-  // Informe de Cierre. Dejando "Desde" vacío, el total coincide exactamente con el informe.
+  // Informe de Cierre, e incluyen cuentas de antes de "Desde" que sigan pendientes en "Hasta".
   const fechaCorte=filtroHasta||today();
-  let items=(DB.cxc||[]).filter(x=>(x.moneda||'RD$')===filtroMoneda&&x.fecha&&x.fecha<=fechaCorte).map(x=>{
+  const baseCompleta=(DB.cxc||[]).filter(x=>x.fecha&&x.fecha<=fechaCorte).map(x=>{
     const saldo=saldoCXCAFecha(x,fechaCorte);
     const abonado=parseFloat(x.total||0)-saldo;
     return{...x,saldo,abonado,status:estadoCXCAFecha(saldo,abonado)};
   });
+  // Total General: ambas monedas, todo lo no saldado, sin filtro de moneda/estado/tipo/Desde —
+  // el número que debe coincidir 1 a 1 con el Informe de Cierre para el mismo "Hasta".
+  const totalGeneralRD=baseCompleta.filter(x=>(x.moneda||'RD$')==='RD$'&&x.status!=='SALDADO').reduce((a,x)=>a+x.saldo,0);
+  const totalGeneralUSD=baseCompleta.filter(x=>x.moneda==='USD'&&x.status!=='SALDADO').reduce((a,x)=>a+x.saldo,0);
+
+  // Moneda/Estado/Tipo sí acotan el total (el usuario los usa para acotar la consulta).
+  // "Desde" NO resta del total — solo filtra qué filas se listan (itemsMostrados).
+  let items=baseCompleta.filter(x=>(x.moneda||'RD$')===filtroMoneda);
   if(filtroStatus==='PENDIENTE')items=items.filter(x=>x.status==='PENDIENTE'||x.status==='PARCIAL');
   else if(filtroStatus!=='TODOS')items=items.filter(x=>x.status===filtroStatus);
   if(filtroTipo!=='TODOS')items=items.filter(x=>tipoCXCDe(x)===filtroTipo);
-  if(filtroDesde)items=items.filter(x=>x.fecha>=filtroDesde);
 
   const esUSD=filtroMoneda==='USD';
   const fV=(n)=>esUSD?'$'+parseFloat(n||0).toLocaleString('en-US',{minimumFractionDigits:2})+' USD':fmt(n);
@@ -11907,11 +11982,13 @@ function renderCXC(){
   const totalGeneral=items.filter(x=>x.status!=='SALDADO').reduce((a,x)=>a+parseFloat(x.total||0),0);
   const totalCobrado=items.filter(x=>x.status!=='SALDADO').reduce((a,x)=>a+parseFloat(x.abonado||0),0);
   const totalPend=items.filter(x=>x.status!=='SALDADO').reduce((a,x)=>a+parseFloat(x.saldo||0),0);
+  let itemsMostrados=items;
+  if(filtroDesde)itemsMostrados=itemsMostrados.filter(x=>x.fecha>=filtroDesde);
 
   document.getElementById('page-cxc').innerHTML=`
     <div class="page-header">
       <div><h1>📬 Cuentas por Cobrar</h1>
-        <p>${items.length} cuenta(s) al ${fmtDate(fechaCorte)} — Pendiente: <strong style="color:var(--amber)">${fV(totalPend)}</strong></p>
+        <p>${items.length} cuenta(s) al ${fmtDate(fechaCorte)}</p>
       </div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <select id="cxc-filtro-moneda" onchange="renderCXC()" style="padding:7px 12px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px;font-weight:700">
@@ -11942,6 +12019,17 @@ function renderCXC(){
       </div>
     </div>
 
+    <div style="background:var(--navy);border-radius:10px;padding:14px 18px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+      <div>
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#94a3b8;letter-spacing:.5px">🧮 Total General al ${fmtDate(fechaCorte)} — para validar contra el Informe de Cierre</div>
+        <div style="font-size:10px;color:#94a3b8;margin-top:2px">Sin filtros de moneda/estado/tipo/fecha "Desde" — todo lo pendiente hasta esa fecha.</div>
+      </div>
+      <div style="display:flex;gap:20px">
+        <div style="text-align:right"><div style="font-size:10px;color:#94a3b8">RD$</div><div style="font-size:18px;font-weight:800;color:#fbbf24">${totalGeneralRD.toLocaleString('es-DO',{minimumFractionDigits:2})}</div></div>
+        <div style="text-align:right"><div style="font-size:10px;color:#94a3b8">USD</div><div style="font-size:18px;font-weight:800;color:#60a5fa">$${totalGeneralUSD.toLocaleString('en-US',{minimumFractionDigits:2})}</div></div>
+      </div>
+    </div>
+
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:16px">
       <div class="stat-card blue">
         <div class="stat-ico">${esUSD?'💵':'💰'}</div>
@@ -11963,7 +12051,7 @@ function renderCXC(){
 
     <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px;color:#92400e;display:flex;align-items:center;gap:8px">
       <span>ℹ️</span>
-      <span>Las cuentas por cobrar se generan automáticamente al registrar ventas con saldo pendiente. También puedes agregar cuentas manualmente con el botón <strong>➕ Nueva CxC</strong>. El saldo mostrado es "a la fecha Hasta" (no cuenta cobros posteriores) — deja "Desde" vacío para que el total coincida exactamente con el Informe de Cierre de ese mes.</span>
+      <span>Las cuentas por cobrar se generan automáticamente al registrar ventas con saldo pendiente. También puedes agregar cuentas manualmente con el botón <strong>➕ Nueva CxC</strong>. El saldo es "a la fecha Hasta" e incluye cuentas anteriores que sigan sin cobrarse. "Desde" solo filtra qué filas se listan abajo — no resta del total ni del Total General.</span>
     </div>
     <div class="card">
       <div class="search-wrap"><input class="search-input" placeholder="Buscar por factura, cliente, vehículo..." oninput="filterTable('cxc-tbl',this.value)"></div>
@@ -11975,7 +12063,7 @@ function renderCXC(){
           <th>Total</th><th>Cobrado</th><th>Saldo</th>
           <th>Vence</th><th>Estado</th>
         </tr></thead>
-        <tbody>${items.length?items.slice().reverse().map(x=>{
+        <tbody>${itemsMostrados.length?itemsMostrados.slice().reverse().map(x=>{
           const tipoBadge=x.esPrestamo?'<span style="background:#dcfce7;color:#16a34a;padding:1px 5px;border-radius:4px;font-size:10px;font-weight:700">🤝 PRÉSTAMO</span>':x.esTraspaso?'<span style="background:#fef3c7;color:#d97706;padding:1px 5px;border-radius:4px;font-size:10px;font-weight:700">🔄 TRASPASO</span>':x.esEndoso?'<span style="background:#ede9fe;color:#7c3aed;padding:1px 5px;border-radius:4px;font-size:10px;font-weight:700">📋 ENDOSO</span>':tipoCXCDe(x)==='PERSONAL'?'<span style="background:#fce7f3;color:#be185d;padding:1px 5px;border-radius:4px;font-size:10px;font-weight:700">🧍 PERSONAL</span>':'<span style="background:#dbeafe;color:#2563eb;padding:1px 5px;border-radius:4px;font-size:10px;font-weight:700">💰 VENTA</span>';
           let vencidaBadge='';let proxInfo='';let fechaVencDisplay=x.fechaVence;
           if(x.esPrestamo&&x.prestamoId&&x.status!=='SALDADO'){
@@ -12643,22 +12731,24 @@ function imprimirCXC(){
   const fV=(n)=>esUSD?'$'+parseFloat(n||0).toLocaleString('en-US',{minimumFractionDigits:2}):fmt(n);
 
   const fechaCorte=filtroHasta||today();
-  let items=(DB.cxc||[]).filter(x=>{
-    const monedaItem=x.moneda||(DB.ventas.find(v=>v.id===x.ventaId)?.moneda)||'RD$';
-    return monedaItem===filtroMoneda&&x.fecha&&x.fecha<=fechaCorte;
-  }).map(x=>{
+  const baseCompleta=(DB.cxc||[]).filter(x=>x.fecha&&x.fecha<=fechaCorte).map(x=>{
     const saldo=saldoCXCAFecha(x,fechaCorte);
     const abonado=parseFloat(x.total||0)-saldo;
     return{...x,saldo,abonado,status:estadoCXCAFecha(saldo,abonado)};
   });
+  const totalGeneralRD=baseCompleta.filter(x=>(x.moneda||'RD$')==='RD$'&&x.status!=='SALDADO').reduce((a,x)=>a+x.saldo,0);
+  const totalGeneralUSD=baseCompleta.filter(x=>x.moneda==='USD'&&x.status!=='SALDADO').reduce((a,x)=>a+x.saldo,0);
+
+  let items=baseCompleta.filter(x=>(x.moneda||'RD$')===filtroMoneda);
   if(filtroStatus==='PENDIENTE')items=items.filter(x=>x.status==='PENDIENTE'||x.status==='PARCIAL');
   else if(filtroStatus!=='TODOS')items=items.filter(x=>x.status===filtroStatus);
   if(filtroTipo!=='TODOS')items=items.filter(x=>tipoCXCDe(x)===filtroTipo);
-  if(filtroDesde)items=items.filter(x=>x.fecha>=filtroDesde);
 
   const totalGeneral=items.reduce((a,x)=>a+parseFloat(x.total||0),0);
   const totalCobrado=items.reduce((a,x)=>a+parseFloat(x.abonado||0),0);
   const totalPend=items.reduce((a,x)=>a+parseFloat(x.saldo||0),0);
+  let itemsMostrados=items;
+  if(filtroDesde)itemsMostrados=itemsMostrados.filter(x=>x.fecha>=filtroDesde);
   const win=window.open('','_blank','width=1000,height=700');
   win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
   <title>CxC ${filtroMoneda} — ${escHtml(empresa)}</title>
@@ -12688,13 +12778,20 @@ function imprimirCXC(){
       <div style="font-size:22px;font-weight:800;color:${esUSD?'#2563eb':'#d97706'}">${fV(totalPend)}</div>
     </div>
   </div>
+  <div style="background:#0f172a;border-radius:6px;padding:10px 14px;margin:14px 0;display:flex;justify-content:space-between;align-items:center;color:#fff">
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase">🧮 Total General al ${fmtDate(fechaCorte)} (sin filtros — valida contra el Informe de Cierre)</div>
+    <div style="display:flex;gap:20px">
+      <div style="text-align:right"><div style="font-size:9px;color:#94a3b8">RD$</div><div style="font-size:15px;font-weight:800;color:#fbbf24">${totalGeneralRD.toLocaleString('es-DO',{minimumFractionDigits:2})}</div></div>
+      <div style="text-align:right"><div style="font-size:9px;color:#94a3b8">USD</div><div style="font-size:15px;font-weight:800;color:#60a5fa">$${totalGeneralUSD.toLocaleString('en-US',{minimumFractionDigits:2})}</div></div>
+    </div>
+  </div>
   <div class="tots">
-    <div class="tot" style="background:#f1f5f9"><label>Total por Cobrar</label><span>${fV(totalGeneral)}</span></div>
+    <div class="tot" style="background:#f1f5f9"><label>Total por Cobrar (filtrado)</label><span>${fV(totalGeneral)}</span></div>
     <div class="tot" style="background:#dcfce7"><label style="color:#16a34a">Total Cobrado</label><span style="color:#16a34a">${fV(totalCobrado)}</span></div>
     <div class="tot" style="background:${esUSD?'#dbeafe':'#fef3c7'}"><label style="color:${esUSD?'#2563eb':'#d97706'}">Saldo Pendiente</label><span style="color:${esUSD?'#2563eb':'#d97706'}">${fV(totalPend)}</span></div>
   </div>
   <table><thead><tr><th>Factura</th><th>Cliente</th><th>Vehículo</th><th>Total</th><th>Cobrado</th><th>Saldo</th><th>Vence</th><th>Estado</th></tr></thead>
-  <tbody>${items.map(x=>`<tr>
+  <tbody>${itemsMostrados.map(x=>`<tr>
     <td style="font-family:monospace;font-weight:700">${escHtml(x.factura||'—')}</td>
     <td style="font-weight:700">${escHtml(x.cliente||'—')}</td>
     <td style="font-size:11px">${escHtml(x.vehiculo||'—')}</td>
@@ -14660,20 +14757,23 @@ function renderSeguros(){
   // Pendiente reconstruido "a la fecha Hasta" (hoy si no se especifica), usando el historial
   // de pagos con fecha — igual criterio que CxP/CxC/Préstamos.
   const fechaCorte=filtroHasta||today();
-  let segs=(DB.seguros||[]).filter(s=>!s.fecha||s.fecha<=fechaCorte).map(s=>{
+  // Base completa acumulada a fechaCorte (ignora "Desde") — de aquí sale el Total General.
+  const segsBase=(DB.seguros||[]).filter(s=>!s.fecha||s.fecha<=fechaCorte).map(s=>{
     const pendiente=pendienteSeguroAFecha(s,fechaCorte);
     const abonado=pagadoSeguroAFecha(s,fechaCorte);
     return{...s,pendiente,abonado,status:pendiente<=0.01?'PAGADO':abonado>0.01?'ABONADO':'PENDIENTE'};
   });
+  const totalPrima=segsBase.reduce((a,s)=>a+parseFloat(s.prima||0),0);
+  const totalPagado=segsBase.reduce((a,s)=>a+parseFloat(s.abonado||0),0);
+  const totalPend=segsBase.reduce((a,s)=>a+parseFloat(s.pendiente||0),0);
+  // "Desde" solo filtra qué filas se listan en la tabla, no los totales de arriba.
+  let segs=segsBase;
   if(filtroDesde)segs=segs.filter(s=>s.fecha&&s.fecha>=filtroDesde);
-  const totalPrima=segs.reduce((a,s)=>a+parseFloat(s.prima||0),0);
-  const totalPagado=segs.reduce((a,s)=>a+parseFloat(s.abonado||0),0);
-  const totalPend=segs.reduce((a,s)=>a+parseFloat(s.pendiente||0),0);
   const sc={PAGADO:'badge-green',ABONADO:'badge-amber',PENDIENTE:'badge-red'};
   const hoy=today();
   document.getElementById('page-seguros').innerHTML=`
     <div class="page-header">
-      <div><h1>🛡️ Seguros de Vehículos</h1><p>${segs.length} seguro(s) al ${fmtDate(fechaCorte)}</p></div>
+      <div><h1>🛡️ Seguros de Vehículos</h1><p>${segsBase.length} seguro(s) al ${fmtDate(fechaCorte)}</p></div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <input type="date" id="seg-filtro-desde" value="${filtroDesde}" onchange="renderSeguros()" title="Desde" style="padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
         <input type="date" id="seg-filtro-hasta" value="${filtroHasta}" onchange="renderSeguros()" title="Hasta" style="padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
@@ -14683,9 +14783,9 @@ function renderSeguros(){
       </div>
     </div>
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:16px">
-      <div class="stat-card blue"><div class="stat-ico">🛡️</div><div class="stat-label">Total Primas</div><div class="stat-value">${fmt(totalPrima)}</div><div class="stat-sub">${segs.length} póliza(s)</div></div>
-      <div class="stat-card green"><div class="stat-ico">✅</div><div class="stat-label">Total Pagado</div><div class="stat-value">${fmt(totalPagado)}</div><div class="stat-sub">${segs.filter(s=>s.status==='PAGADO').length} pagado(s)</div></div>
-      <div class="stat-card ${totalPend>0?'amber':'green'}"><div class="stat-ico">⏳</div><div class="stat-label">Total Pendiente</div><div class="stat-value">${fmt(totalPend)}</div><div class="stat-sub">${segs.filter(s=>s.status!=='PAGADO').length} pendiente(s)</div></div>
+      <div class="stat-card blue"><div class="stat-ico">🛡️</div><div class="stat-label">Total Primas</div><div class="stat-value">${fmt(totalPrima)}</div><div class="stat-sub">${segsBase.length} póliza(s)</div></div>
+      <div class="stat-card green"><div class="stat-ico">✅</div><div class="stat-label">Total Pagado</div><div class="stat-value">${fmt(totalPagado)}</div><div class="stat-sub">${segsBase.filter(s=>s.status==='PAGADO').length} pagado(s)</div></div>
+      <div class="stat-card ${totalPend>0?'amber':'green'}"><div class="stat-ico">⏳</div><div class="stat-label">🧮 Total Pendiente (General — valida contra el Informe)</div><div class="stat-value">${fmt(totalPend)}</div><div class="stat-sub">${segsBase.filter(s=>s.status!=='PAGADO').length} pendiente(s) · "Desde" no afecta este total</div></div>
     </div>
     <div class="card">
       <div class="search-wrap"><input class="search-input" placeholder="Buscar por vehículo, cliente, compañía, póliza..." oninput="filterTable('seg-tbl',this.value)"></div>
@@ -15251,17 +15351,19 @@ function exportarSegurosPDF(){
   const filtroDesde=document.getElementById('seg-filtro-desde')?.value||'';
   const filtroHasta=document.getElementById('seg-filtro-hasta')?.value||'';
   const fechaCorte=filtroHasta||today();
-  let segs=(DB.seguros||[]).filter(s=>!s.fecha||s.fecha<=fechaCorte).map(s=>{
+  const segsBase=(DB.seguros||[]).filter(s=>!s.fecha||s.fecha<=fechaCorte).map(s=>{
     const pendiente=pendienteSeguroAFecha(s,fechaCorte);
     const abonado=pagadoSeguroAFecha(s,fechaCorte);
     return{...s,pendiente,abonado,status:pendiente<=0.01?'PAGADO':abonado>0.01?'ABONADO':'PENDIENTE'};
   });
+  const totalPend=segsBase.reduce((a,s)=>a+parseFloat(s.pendiente||0),0);
+  const totalPrima=segsBase.reduce((a,s)=>a+parseFloat(s.prima||0),0);
+  const totalAbonado=segsBase.reduce((a,s)=>a+parseFloat(s.abonado||0),0);
+  // "Desde" solo filtra qué filas se listan, no los totales de arriba.
+  let segs=segsBase;
   if(filtroDesde)segs=segs.filter(s=>s.fecha&&s.fecha>=filtroDesde);
   const empresa=DB.config.empresa||'DealerSystem';
   const logo=DB.config.logoData||'';
-  const totalPrima=segs.reduce((a,s)=>a+parseFloat(s.prima||0),0);
-  const totalAbonado=segs.reduce((a,s)=>a+parseFloat(s.abonado||0),0);
-  const totalPend=segs.reduce((a,s)=>a+parseFloat(s.pendiente||0),0);
   const win=window.open('','_blank','width=1000,height=700');
   win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Seguros — ${escHtml(empresa)}</title>
   <style>body{font-family:Arial,sans-serif;padding:24px;font-size:11px}h2{font-size:16px;margin:0}
@@ -15375,6 +15477,9 @@ function renderFacturaExterna(){
   let facturasF=DB.facturasExternas||[];
   if(filtroDesde)facturasF=facturasF.filter(f=>f.fecha&&f.fecha>=filtroDesde);
   if(filtroHasta)facturasF=facturasF.filter(f=>f.fecha&&f.fecha<=filtroHasta);
+  const totalMontoFE=facturasF.reduce((a,f)=>a+parseFloat(f.monto||0),0);
+  const totalAbonoFE=facturasF.reduce((a,f)=>a+parseFloat(f.abono||0),0);
+  const totalPendFE=facturasF.reduce((a,f)=>a+parseFloat(f.pendiente||0),0);
   document.getElementById('page-facturaExterna').innerHTML=`
     <div class="page-header">
       <div><h1>🧾 Facturas Externas</h1><p>Vehículos de terceros gestionados por la empresa — ${facturasF.length} factura(s)</p></div>
@@ -15383,6 +15488,17 @@ function renderFacturaExterna(){
         <input type="date" id="fext-filtro-hasta" value="${filtroHasta}" onchange="renderFacturaExterna()" title="Hasta" style="padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
         ${(filtroDesde||filtroHasta)?`<button class="btn btn-secondary btn-sm" onclick="document.getElementById('fext-filtro-desde').value='';document.getElementById('fext-filtro-hasta').value='';renderFacturaExterna()" title="Limpiar fechas">🔄</button>`:''}
         <button class="btn btn-primary" onclick="nuevaFacturaExterna()">➕ Nueva Factura Externa</button>
+      </div>
+    </div>
+    <div style="background:var(--navy);border-radius:10px;padding:14px 18px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+      <div>
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#94a3b8;letter-spacing:.5px">🧮 Total General del rango filtrado</div>
+        <div style="font-size:10px;color:#94a3b8;margin-top:2px">Facturas Externas no aparece en el Informe de Cierre — este total es solo de referencia interna.</div>
+      </div>
+      <div style="display:flex;gap:20px">
+        <div style="text-align:right"><div style="font-size:10px;color:#94a3b8">Monto</div><div style="font-size:16px;font-weight:800;color:#4ade80">${fmt(totalMontoFE)}</div></div>
+        <div style="text-align:right"><div style="font-size:10px;color:#94a3b8">Abono</div><div style="font-size:16px;font-weight:800;color:#60a5fa">${fmt(totalAbonoFE)}</div></div>
+        <div style="text-align:right"><div style="font-size:10px;color:#94a3b8">Pendiente</div><div style="font-size:16px;font-weight:800;color:#f87171">${fmt(totalPendFE)}</div></div>
       </div>
     </div>
     <div class="card" style="margin-top:0">
