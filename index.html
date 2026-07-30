@@ -8202,8 +8202,8 @@ function renderVentas(){
       <div class="stat-card blue">
         <div class="stat-ico">🚗</div>
         <div class="stat-label">Vehículos Vendidos</div>
-        <div class="stat-value">${ventasFilt.filter(v=>v.estadoVenta==='VENDIDO').length}</div>
-        <div class="stat-sub">En tránsito: ${ventasFilt.filter(v=>v.estadoVenta==='TRÁNSITO').length}</div>
+        <div class="stat-value">${ventasFilt.filter(v=>parseFloat(v.pendiente||0)<=0.01&&(v.estadoVenta||'VENDIDO')==='VENDIDO').length}</div>
+        <div class="stat-sub">En tránsito: ${ventasFilt.filter(v=>parseFloat(v.pendiente||0)>0.01||v.estadoVenta==='TRÁNSITO').length}</div>
       </div>
     </div>
     <!-- TABS: Ventas / Entregas -->
@@ -8274,7 +8274,10 @@ function renderVentas(){
               })()}
             </td>
             <td style="font-size:11px">${escHtml(v.metodoPago||'—')}</td>
-            <td><span class="badge ${estColor[v.estadoVenta||'VENDIDO']||'badge-gray'}">${v.estadoVenta||'VENDIDO'}</span></td>
+            <td>${(()=>{
+              const estadoMostrado=parseFloat(v.pendiente||0)>0.01?'TRÁNSITO':(v.estadoVenta||'VENDIDO');
+              return`<span class="badge ${estColor[estadoMostrado]||'badge-gray'}" title="${estadoMostrado==='TRÁNSITO'&&v.estadoVenta==='VENDIDO'?'Entregado pero aún con saldo pendiente por cobrar':''}">${estadoMostrado}</span>`;
+            })()}</td>
           </tr>`;
         }).join(''):'<tr><td colspan="11" style="text-align:center;padding:24px;color:var(--gray)">Sin ventas registradas</td></tr>'}
         </tbody>
@@ -9687,7 +9690,8 @@ function exportarVentasPDF(mes){
   <table><thead><tr><th>Factura</th><th>Fecha</th><th>Vehículo</th><th>Chasis</th><th>Cliente</th><th>Precio</th><th>Inicial</th><th>Pendiente</th><th>Método</th><th>Estado</th></tr></thead>
   <tbody>${ventasFilt.slice().reverse().map(v=>{
     const veh=DB.vehiculos.find(x=>x.id===v.vehiculoId);
-    return`<tr><td style="font-family:monospace">${escHtml(v.factura||'—')}</td><td>${fmtDate(v.fecha)}</td><td>${escHtml(v.vehiculo||'—')}</td><td style="font-family:monospace;font-size:10px">${escHtml(veh?.vin||'—')}</td><td>${escHtml(v.cliente||'—')}</td><td class="g">${fmt(v.precioVenta)}</td><td>${fmt(v.inicial||0)}</td><td class="${parseFloat(v.pendiente||0)>0?'r':'g'}">${fmt(v.pendiente||0)}</td><td>${escHtml(v.metodoPago||'—')}</td><td>${v.estadoVenta||'—'}</td></tr>`;
+    const estadoMostrado=parseFloat(v.pendiente||0)>0.01?'TRÁNSITO':(v.estadoVenta||'VENDIDO');
+    return`<tr><td style="font-family:monospace">${escHtml(v.factura||'—')}</td><td>${fmtDate(v.fecha)}</td><td>${escHtml(v.vehiculo||'—')}</td><td style="font-family:monospace;font-size:10px">${escHtml(veh?.vin||'—')}</td><td>${escHtml(v.cliente||'—')}</td><td class="g">${fmt(v.precioVenta)}</td><td>${fmt(v.inicial||0)}</td><td class="${parseFloat(v.pendiente||0)>0?'r':'g'}">${fmt(v.pendiente||0)}</td><td>${escHtml(v.metodoPago||'—')}</td><td>${escHtml(estadoMostrado)}</td></tr>`;
   }).join('')}
   <tr style="background:#f0fdf4"><td colspan="5" style="font-weight:800;text-align:right">TOTALES:</td><td class="g">${fmt(totalV)}</td><td></td><td class="r">${fmt(totalPend)}</td><td colspan="2"></td></tr>
   </tbody></table>
@@ -14146,10 +14150,12 @@ function graficoBarrasHorizontalesWord(labels,valores,titulo,color){
   ctx.font='bold 13px Arial';ctx.fillStyle='#1c2230';ctx.fillText(titulo,20,20);
   const max=Math.max(...valores,1);
   const plotW=w-padL-padR;
+  const paletaDefecto=['#1c2456','#3f6b4e','#7c9cbf','#9a7b3f','#9c3b32','#6d5a8c','#4a8a7d','#b3552f'];
+  const colores=Array.isArray(color)?color:(color?[color]:paletaDefecto);
   labels.forEach((lb,i)=>{
     const yb=padT+i*26;
     const bw=(valores[i]/max)*plotW;
-    ctx.fillStyle=color||'#9c3b32';
+    ctx.fillStyle=colores[i%colores.length];
     ctx.fillRect(padL,yb,bw,16);
     ctx.fillStyle='#1c2230';ctx.font='10px Arial';ctx.textAlign='right';
     ctx.fillText(lb.length>22?lb.slice(0,22)+'…':lb,padL-8,yb+13);
@@ -14303,9 +14309,11 @@ async function exportarInformeWord(){
   const totalEfectivoCombinado=totalCuentasRD+totalCuentasUSD*tasa;
   const totalPatrimonio=totalInvTotal+totalEfectivoCombinado+totalActivoLibros;
 
-  // Capital Neto — Inversión en vehículos + Cuentas por Cobrar - Cuentas por Pagar (CxP + Préstamos)
+  // Capital Neto — Patrimonio (inventario + efectivo y cuentas bancarias + activos fijos)
+  // + Cuentas por Cobrar - Cuentas por Pagar (CxP + Préstamos). El efectivo/cuentas bancarias
+  // se suma tal cual (con su signo), incluyendo cuentas con saldo negativo.
   const totalPorPagarGeneral=totalCXPCombinado+totalSaldoPrestamosRD+totalSaldoPrestamosUSD*tasa;
-  const capitalNeto=totalInvTotal+cxcPendCombinado-totalPorPagarGeneral;
+  const capitalNeto=totalPatrimonio+cxcPendCombinado-totalPorPagarGeneral;
 
   // Tendencia — Enero a Diciembre del año del informe (meses futuros quedan en blanco)
   const NOMBRES_MES=['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
@@ -14361,9 +14369,10 @@ async function exportarInformeWord(){
     }
 
     imagenesGraficos.push({cid:'graficoCapitalNeto',mime:'image/png',base64:_pngBase64(graficoBarrasHorizontalesWord(
-      ['Inversión en Vehículos','Cuentas por Cobrar','Cuentas por Pagar','Capital Neto'],
-      [totalInvTotal,cxcPendCombinado,totalPorPagarGeneral,Math.max(capitalNeto,0)],
-      'Resumen de Capital Neto al Cierre','#1c2456'
+      ['Inversión en Vehículos','Efectivo y Cuentas Bancarias','Activos Fijos','Cuentas por Cobrar','Cuentas por Pagar','Capital Neto'],
+      [totalInvTotal,totalEfectivoCombinado,totalActivoLibros,cxcPendCombinado,totalPorPagarGeneral,capitalNeto].map(v=>Math.max(v,0)),
+      'Resumen de Capital Neto al Cierre',
+      ['#1c2456','#3f6b4e','#7c9cbf','#2e7d5b','#9c3b32','#c9a35a']
     ))});
   }catch(e){console.warn('Error generando gráficos del informe:',e.message);}
   const tieneGraficoGastosCat=imagenesGraficos.some(i=>i.cid==='graficoGastosCat');
@@ -14564,11 +14573,14 @@ async function exportarInformeWord(){
 
     <div class="rep-sec">
       <div class="rep-sec-head"><h3>Resumen de Capital Neto</h3><span class="rep-tag close">Al cierre</span></div>
-      <p class="rep-note">Inversión en Vehículos + Cuentas por Cobrar − Cuentas por Pagar (CxP + Préstamos Bancos), todo combinado a la tasa de Caja (${fmt(tasa)} por USD).</p>
+      <p class="rep-note">Patrimonio (Inventario + Efectivo y Cuentas Bancarias + Activos Fijos) + Cuentas por Cobrar − Cuentas por Pagar (CxP + Préstamos Bancos), todo combinado a la tasa de Caja (${fmt(tasa)} por USD).</p>
       ${tieneGraficoCapitalNeto?'<p align="center"><img src="cid:graficoCapitalNeto" width="680" height="220"></p>':''}
       <table class="rep-table">
         <tbody>
           <tr><td>Inversión en Vehículos</td><td class="num pos">${fmt(totalInvTotal)}</td></tr>
+          <tr><td>Efectivo y Cuentas Bancarias</td><td class="num ${totalEfectivoCombinado>=0?'pos':'neg'}">${fmt(totalEfectivoCombinado)}</td></tr>
+          <tr><td>Activos Fijos (valor en libros)</td><td class="num pos">${fmt(totalActivoLibros)}</td></tr>
+          <tr class="total"><td>Sub Total Patrimonio</td><td class="num">${fmt(totalPatrimonio)}</td></tr>
           <tr><td>Cuentas por Cobrar</td><td class="num pos">${fmt(cxcPendCombinado)}</td></tr>
           <tr><td>Cuentas por Pagar (CxP + Préstamos)</td><td class="num neg">${fmt(totalPorPagarGeneral)}</td></tr>
           <tr class="total"><td>Capital Neto</td><td class="num ${capitalNeto>=0?'pos':'neg'}" style="font-weight:800">${fmt(capitalNeto)}</td></tr>
