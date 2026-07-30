@@ -3437,12 +3437,21 @@ function labelFormaPagoGasto(fp){
   return labels[fp]||'Efectivo';
 }
 function renderGastos(){
-  const total=DB.gastos.reduce((a,g)=>a+parseFloat(g.monto||0),0);
+  const filtroDesde=document.getElementById('gas-filtro-desde')?.value||'';
+  const filtroHasta=document.getElementById('gas-filtro-hasta')?.value||'';
+  let gastosF=DB.gastos;
+  if(filtroDesde)gastosF=gastosF.filter(g=>g.fecha&&g.fecha>=filtroDesde);
+  if(filtroHasta)gastosF=gastosF.filter(g=>g.fecha&&g.fecha<=filtroHasta);
+  const total=gastosF.reduce((a,g)=>a+parseFloat(g.monto||0),0);
   const ds='background:#e2e8f0;color:#adb5bd;cursor:not-allowed;border:1px solid #dee2e6';
   document.getElementById('page-gastos').innerHTML=`
     <div class="page-header">
-      <div><h1>🏢 Gastos de Empresa</h1><p>Total: ${fmt(total)}</p></div>
+      <div><h1>🏢 Gastos de Empresa</h1><p>${gastosF.length} gasto(s) — Total: ${fmt(total)}</p></div>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <input type="date" id="gas-filtro-desde" value="${filtroDesde}" onchange="renderGastos()" title="Desde" style="padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
+        <input type="date" id="gas-filtro-hasta" value="${filtroHasta}" onchange="renderGastos()" title="Hasta" style="padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
+        ${(filtroDesde||filtroHasta)?`<button class="btn btn-secondary btn-sm" onclick="document.getElementById('gas-filtro-desde').value='';document.getElementById('gas-filtro-hasta').value='';renderGastos()" title="Limpiar fechas">🔄</button>`:''}
+        <div style="width:1px;height:28px;background:var(--gray3);margin:0 2px"></div>
         <button id="gas-btn-editar" disabled class="btn btn-sm" style="${ds}" onclick="gasAccion('editar')">✏️ Editar</button>
         ${(currentUser?.role==='admin'||canDo('eliminar'))?`<button id="gas-btn-eliminar" disabled class="btn btn-sm" style="${ds}" onclick="gasAccion('eliminar')">🗑 Eliminar</button>`:''}
         <button class="btn btn-secondary btn-sm" onclick="imprimirGastos()">📄 PDF</button>
@@ -3451,7 +3460,7 @@ function renderGastos(){
     </div>
     <div class="card"><div class="search-wrap"><input class="search-input" placeholder="Buscar..." oninput="filterTable('gas-tbl',this.value)"></div>
       <div class="table-wrap"><table id="gas-tbl"><thead><tr><th style="width:36px"></th><th>Fecha</th><th>Categoría</th><th>Suplidor</th><th>Descripción</th><th>Forma Pago</th><th>Estado</th><th>Monto</th><th>Por</th></tr></thead>
-        <tbody>${DB.gastos.slice().reverse().map((g)=>{return`<tr onclick="selGasto('${g.id}',this)" style="cursor:pointer">
+        <tbody>${gastosF.slice().reverse().map((g)=>{return`<tr onclick="selGasto('${g.id}',this)" style="cursor:pointer">
           <td style="text-align:center"><input type="radio" name="gas-sel" onclick="event.stopPropagation();selGasto('${g.id}',this.closest('tr'))" style="width:15px;height:15px;cursor:pointer;accent-color:var(--blue)"></td>
           <td>${fmtDate(g.fecha)}</td><td><span class="badge badge-amber">${escHtml(g.categoria||'General')}</span></td>
           <td style="font-size:12px">${escHtml(g.suplidor||'—')}</td>
@@ -3462,6 +3471,8 @@ function renderGastos(){
           <td style="font-size:12px">${escHtml(g.responsable||'—')}</td>
         </tr>`;}).join('')||'<tr><td colspan="9" style="text-align:center;padding:24px;color:var(--gray)">Sin gastos</td></tr>'}
         </tbody></table></div></div>`;
+  const fd=document.getElementById('gas-filtro-desde');if(fd)fd.value=filtroDesde;
+  const fh=document.getElementById('gas-filtro-hasta');if(fh)fh.value=filtroHasta;
 }
 function selGasto(id,tr){
   gasSelectedId=id;
@@ -3637,13 +3648,18 @@ function guardarEditGasto(i){
   logBit('gastos','Editó gasto empresa','');sDB('gastos');closeModal();toast('Gasto actualizado ✓','success');renderGastos();
 }
 function imprimirGastos(){
-  const mes=new Date().toISOString().slice(0,7);
+  const filtroDesde=document.getElementById('gas-filtro-desde')?.value||'';
+  const filtroHasta=document.getElementById('gas-filtro-hasta')?.value||'';
+  let gastosF=DB.gastos;
+  if(filtroDesde)gastosF=gastosF.filter(g=>g.fecha&&g.fecha>=filtroDesde);
+  if(filtroHasta)gastosF=gastosF.filter(g=>g.fecha&&g.fecha<=filtroHasta);
   const win=window.open('','_blank','width=900,height=600');
-  const total=DB.gastos.reduce((a,g)=>a+parseFloat(g.monto||0),0);
+  const total=gastosF.reduce((a,g)=>a+parseFloat(g.monto||0),0);
+  const rangoLabel=(filtroDesde||filtroHasta)?` — ${filtroDesde?fmtDate(filtroDesde):'inicio'} a ${filtroHasta?fmtDate(filtroHasta):'hoy'}`:'';
   win.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Gastos</title><style>body{font-family:Arial,sans-serif;padding:20px;font-size:12px}table{width:100%;border-collapse:collapse;margin-top:14px}th{background:#0f172a;color:#fff;padding:8px;text-align:left;font-size:11px}td{padding:7px 8px;border-bottom:1px solid #e2e8f0}tr:nth-child(even){background:#f8fafc}@media print{.np{display:none}}</style></head><body>'+
-  '<div style="display:flex;justify-content:space-between;border-bottom:2px solid #dc2626;padding-bottom:12px;margin-bottom:14px"><div><h2 style="font-size:18px;margin:0">'+escHtml(DB.config.empresa||'DealerSystem')+'</h2><div style="color:#6b7280">REPORTE DE GASTOS DE EMPRESA</div></div><div style="font-size:11px;color:#6b7280;text-align:right">'+fmtDate(today())+'<br>Total: <strong>'+fmt(total)+'</strong></div></div>'+
+  '<div style="display:flex;justify-content:space-between;border-bottom:2px solid #dc2626;padding-bottom:12px;margin-bottom:14px"><div><h2 style="font-size:18px;margin:0">'+escHtml(DB.config.empresa||'DealerSystem')+'</h2><div style="color:#6b7280">REPORTE DE GASTOS DE EMPRESA'+escHtml(rangoLabel)+'</div></div><div style="font-size:11px;color:#6b7280;text-align:right">'+fmtDate(today())+'<br>Total: <strong>'+fmt(total)+'</strong></div></div>'+
   '<table><thead><tr><th>Fecha</th><th>Categoría</th><th>Suplidor</th><th>Descripción</th><th>Forma Pago</th><th>Estado</th><th>Monto</th></tr></thead><tbody>'+
-  DB.gastos.slice().reverse().map(g=>'<tr><td>'+fmtDate(g.fecha)+'</td><td>'+escHtml(g.categoria||'—')+'</td><td>'+escHtml(g.suplidor||'—')+'</td><td>'+escHtml(g.descripcion||'—')+'</td><td>'+labelFormaPagoGasto(g.formaPago)+'</td><td>'+(g.statusGasto||'SALDADO')+'</td><td style="font-weight:700;color:#dc2626">'+fmt(g.monto)+'</td></tr>').join('')+
+  gastosF.slice().reverse().map(g=>'<tr><td>'+fmtDate(g.fecha)+'</td><td>'+escHtml(g.categoria||'—')+'</td><td>'+escHtml(g.suplidor||'—')+'</td><td>'+escHtml(g.descripcion||'—')+'</td><td>'+labelFormaPagoGasto(g.formaPago)+'</td><td>'+(g.statusGasto||'SALDADO')+'</td><td style="font-weight:700;color:#dc2626">'+fmt(g.monto)+'</td></tr>').join('')+
   '<tr style="background:#dbeafe"><td colspan="6" style="font-weight:800">TOTAL</td><td style="font-weight:800;color:#2563eb">'+fmt(total)+'</td></tr>'+
   '</tbody></table><div class="np" style="margin-top:20px;text-align:center"><button onclick="window.print()" style="padding:10px 24px;background:#dc2626;color:#fff;border:none;border-radius:6px;cursor:pointer">🖨️ Imprimir / PDF</button></div></body></html>');
   win.document.close();
@@ -3811,17 +3827,25 @@ let nomSelectedId=null,nomPagoSelectedId=null;
 function renderNomina(){
   const tab=document.getElementById('nom-tab')?.value||'empleados';
   const mesFiltro=document.getElementById('nom-mes')?.value||'';
+  const filtroDesde=document.getElementById('nom-filtro-desde')?.value||'';
+  const filtroHasta=document.getElementById('nom-filtro-hasta')?.value||'';
   const total=DB.nomina.filter(e=>e.activo).reduce((a,e)=>a+parseFloat(e.salario||0),0);
   const ds='background:#e2e8f0;color:#adb5bd;cursor:not-allowed;border:1px solid #dee2e6';
   const pagos=(DB.nominaPagos||[]);
-  const pagosFilt=mesFiltro?pagos.filter(p=>p.mes===mesFiltro):pagos;
+  let pagosFilt=mesFiltro?pagos.filter(p=>p.mes===mesFiltro):pagos;
+  if(filtroDesde)pagosFilt=pagosFilt.filter(p=>p.fecha&&p.fecha>=filtroDesde);
+  if(filtroHasta)pagosFilt=pagosFilt.filter(p=>p.fecha&&p.fecha<=filtroHasta);
   const totalPagado=pagosFilt.reduce((a,p)=>a+parseFloat(p.monto||0),0);
   document.getElementById('page-nomina').innerHTML=`
     <div class="page-header">
       <div><h1>👷 Nómina</h1><p>${DB.nomina.length} empleados — Nómina mensual: ${fmt(total)}</p></div>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
         <input type="month" id="nom-mes" value="${mesFiltro}" onchange="renderNomina()" style="padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
-        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('nom-mes').value='';renderNomina()">🔄 Todo</button>
+        ${tab==='pagos'?`
+        <input type="date" id="nom-filtro-desde" value="${filtroDesde}" onchange="renderNomina()" title="Desde" style="padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
+        <input type="date" id="nom-filtro-hasta" value="${filtroHasta}" onchange="renderNomina()" title="Hasta" style="padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
+        `:''}
+        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('nom-mes').value='';const fd=document.getElementById('nom-filtro-desde');if(fd)fd.value='';const fh=document.getElementById('nom-filtro-hasta');if(fh)fh.value='';renderNomina()">🔄 Todo</button>
         ${tab==='empleados'?`
           <button id="nom-btn-editar" disabled class="btn btn-sm" style="${ds}" onclick="nomAccion('editar')">✏️ Editar</button>
           <button id="nom-btn-pago" disabled class="btn btn-sm" style="${ds}" onclick="nomAccion('pago')">💵 Registrar Pago</button>
@@ -4121,12 +4145,17 @@ function guardarPagoNomina(i){
 function imprimirPagosNomina(){
   const pagos=DB.nominaPagos||[];
   const mes=document.getElementById('nom-mes')?.value||'';
-  const lista=mes?pagos.filter(p=>p.mes===mes):pagos;
+  const filtroDesde=document.getElementById('nom-filtro-desde')?.value||'';
+  const filtroHasta=document.getElementById('nom-filtro-hasta')?.value||'';
+  let lista=mes?pagos.filter(p=>p.mes===mes):pagos;
+  if(filtroDesde)lista=lista.filter(p=>p.fecha&&p.fecha>=filtroDesde);
+  if(filtroHasta)lista=lista.filter(p=>p.fecha&&p.fecha<=filtroHasta);
   const total=lista.reduce((a,p)=>a+parseFloat(p.monto||0),0);
+  const rangoLabel=(filtroDesde||filtroHasta)?` — ${filtroDesde?fmtDate(filtroDesde):'inicio'} a ${filtroHasta?fmtDate(filtroHasta):'hoy'}`:'';
   const win=window.open('','_blank','width=900,height=700');
   win.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Pagos Nomina</title><style>body{font-family:Arial,sans-serif;padding:24px;font-size:12px}h2{font-size:16px}table{width:100%;border-collapse:collapse;margin-top:12px}th{background:#0f172a;color:#fff;padding:8px;font-size:11px}td{padding:8px;border-bottom:1px solid #e2e8f0}@media print{button{display:none}}</style></head><body>'+
     '<h2>'+escHtml(DB.config.empresa||'DealerSystem')+'</h2>'+
-    '<p style="color:#64748b">Historial de Pagos Nómina'+(mes?' — '+mes:'')+'</p>'+
+    '<p style="color:#64748b">Historial de Pagos Nómina'+(mes?' — '+mes:'')+escHtml(rangoLabel)+'</p>'+
     '<table><thead><tr><th>Fecha</th><th>Empleado</th><th>Tipo</th><th>Monto</th><th>Cuenta</th><th>Nota</th></tr></thead><tbody>'+
     lista.map(p=>{
       const tl={MEN:'Mensual','1Q':'1ra Quincena','2Q':'2da Quincena',SEM:'Semanal',COM:'Comisión'}[p.tipo]||p.tipo;
@@ -4840,14 +4869,24 @@ function fmtP(n,moneda){
 }
 function renderPrestamos(){
   if(!DB.prestamos)DB.prestamos=[];
-  const total=DB.prestamos.length;
-  const deudaRD=DB.prestamos.filter(p=>(p.moneda||'RD$')==='RD$').reduce((a,p)=>a+parseFloat(p.saldoPendiente||0),0);
-  const deudaUSD=DB.prestamos.filter(p=>p.moneda==='USD').reduce((a,p)=>a+parseFloat(p.saldoPendiente||0),0);
+  const filtroDesde=document.getElementById('pr-filtro-desde')?.value||'';
+  const filtroHasta=document.getElementById('pr-filtro-hasta')?.value||'';
+  let prestamosF=DB.prestamos;
+  if(filtroDesde)prestamosF=prestamosF.filter(p=>p.fecha&&p.fecha>=filtroDesde);
+  if(filtroHasta)prestamosF=prestamosF.filter(p=>p.fecha&&p.fecha<=filtroHasta);
+  const total=prestamosF.length;
+  const deudaRD=prestamosF.filter(p=>(p.moneda||'RD$')==='RD$').reduce((a,p)=>a+parseFloat(p.saldoPendiente||0),0);
+  const deudaUSD=prestamosF.filter(p=>p.moneda==='USD').reduce((a,p)=>a+parseFloat(p.saldoPendiente||0),0);
   const resumen=`${total} préstamo(s) — Deuda: RD$ ${deudaRD.toLocaleString('es-DO',{minimumFractionDigits:2})}${deudaUSD>0?' | USD '+deudaUSD.toLocaleString('en-US',{minimumFractionDigits:2}):''}`;
   document.getElementById('page-prestamos').innerHTML=`
     <div class="page-header">
       <div><h1>🏦 Préstamos Bancos</h1><p>${resumen}</p></div>
-      <button class="btn btn-primary" onclick="nuevoPrestamo()">➕ Nuevo Préstamo</button>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <input type="date" id="pr-filtro-desde" value="${filtroDesde}" onchange="renderPrestamos()" title="Desde" style="padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
+        <input type="date" id="pr-filtro-hasta" value="${filtroHasta}" onchange="renderPrestamos()" title="Hasta" style="padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
+        ${(filtroDesde||filtroHasta)?`<button class="btn btn-secondary btn-sm" onclick="document.getElementById('pr-filtro-desde').value='';document.getElementById('pr-filtro-hasta').value='';renderPrestamos()" title="Limpiar fechas">🔄</button>`:''}
+        <button class="btn btn-primary" onclick="nuevoPrestamo()">➕ Nuevo Préstamo</button>
+      </div>
     </div>
     ${total===0?`<div class="card" style="text-align:center;padding:48px">
       <div style="font-size:48px;margin-bottom:12px">🏦</div>
@@ -4863,7 +4902,7 @@ function renderPrestamos(){
           <th>Plazo</th><th>Fecha</th><th>Estado</th><th>Acciones</th>
         </tr></thead>
         <tbody>
-          ${DB.prestamos.map(p=>{
+          ${prestamosF.map(p=>{
             const m=p.moneda||'RD$';
             const tipoLabel={FRANCESA:'Francesa',CAPITAL_FIJO:'Capital Fijo',SOLO_INT_AMORT:'Solo Interés Amort.',SOLO_INT_FIJO:'Solo Interés Fijo',LINEA:'Línea Crédito'};
             const monedaBadge=m==='USD'
@@ -7994,7 +8033,11 @@ function _generarPDFGastosVeh(gastos,tasa,filtroSup,filtroVeh,soloUnVeh){
 // ══ VENTAS ══
 function renderVentas(){
   const mes=document.getElementById('ventas-mes')?.value||'';
-  const ventasFilt=mes?DB.ventas.filter(v=>v.fecha?.startsWith(mes)):DB.ventas;
+  const filtroDesde=document.getElementById('ventas-filtro-desde')?.value||'';
+  const filtroHasta=document.getElementById('ventas-filtro-hasta')?.value||'';
+  let ventasFilt=mes?DB.ventas.filter(v=>v.fecha?.startsWith(mes)):DB.ventas;
+  if(filtroDesde)ventasFilt=ventasFilt.filter(v=>v.fecha&&v.fecha>=filtroDesde);
+  if(filtroHasta)ventasFilt=ventasFilt.filter(v=>v.fecha&&v.fecha<=filtroHasta);
   const tasa=parseFloat(DB.config.tasaCambio||60);
   // Convertir todo a RD$ para los totales
   const totalV=ventasFilt.reduce((a,v)=>a+(v.moneda==='USD'?parseFloat(v.precioVenta||0)*(v.tasaCambio||tasa):parseFloat(v.precioVenta||0)),0);
@@ -8003,10 +8046,12 @@ function renderVentas(){
   const ds='background:#e2e8f0;color:#adb5bd;cursor:not-allowed;border:1px solid #dee2e6';
   document.getElementById('page-ventas').innerHTML=`
     <div class="page-header">
-      <div><h1>💰 Ventas</h1><p>${ventasFilt.length} venta(s)${mes?' en el mes seleccionado':''}</p></div>
+      <div><h1>💰 Ventas</h1><p>${ventasFilt.length} venta(s)${mes?' en el mes seleccionado':''}${(filtroDesde||filtroHasta)?' — '+(filtroDesde?fmtDate(filtroDesde):'inicio')+' a '+(filtroHasta?fmtDate(filtroHasta):'hoy'):''}</p></div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <input type="month" id="ventas-mes" value="${mes}" onchange="renderVentas()" style="padding:7px 12px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
-        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('ventas-mes').value='';renderVentas()">🔄 Todos</button>
+        <input type="date" id="ventas-filtro-desde" value="${filtroDesde}" onchange="renderVentas()" title="Desde" style="padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
+        <input type="date" id="ventas-filtro-hasta" value="${filtroHasta}" onchange="renderVentas()" title="Hasta" style="padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
+        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('ventas-mes').value='';document.getElementById('ventas-filtro-desde').value='';document.getElementById('ventas-filtro-hasta').value='';renderVentas()">🔄 Todos</button>
         <div style="width:1px;height:28px;background:var(--gray3);margin:0 2px"></div>
         <button id="vta-btn-imprimir" disabled class="btn btn-sm" style="${ds}" onclick="ventaAccion('imprimir')" title="Imprimir factura">🖨️ Imprimir</button>
         ${(currentUser?.role==='admin'||canDo('editar'))?`<button id="vta-btn-editar" disabled class="btn btn-sm" style="${ds}" onclick="ventaAccion('editar')" title="Editar">✏️ Editar</button>`:''}
@@ -9503,9 +9548,14 @@ function imprimirFactura(vid){
 }
 
 function exportarVentasPDF(mes){
-  const ventasFilt=mes?DB.ventas.filter(v=>v.fecha?.startsWith(mes)):DB.ventas;
+  const filtroDesde=document.getElementById('ventas-filtro-desde')?.value||'';
+  const filtroHasta=document.getElementById('ventas-filtro-hasta')?.value||'';
+  let ventasFilt=mes?DB.ventas.filter(v=>v.fecha?.startsWith(mes)):DB.ventas;
+  if(filtroDesde)ventasFilt=ventasFilt.filter(v=>v.fecha&&v.fecha>=filtroDesde);
+  if(filtroHasta)ventasFilt=ventasFilt.filter(v=>v.fecha&&v.fecha<=filtroHasta);
   const totalV=ventasFilt.reduce((a,v)=>a+parseFloat(v.precioVenta||0),0);
   const totalPend=ventasFilt.reduce((a,v)=>a+parseFloat(v.pendiente||0),0);
+  const rangoLabel=(filtroDesde||filtroHasta)?` — ${filtroDesde?fmtDate(filtroDesde):'inicio'} a ${filtroHasta?fmtDate(filtroHasta):'hoy'}`:'';
   const win=window.open('','_blank','width=1100,height=750');
   win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Ventas</title>
   <style>body{font-family:Arial,sans-serif;padding:24px;font-size:12px}h2{font-size:18px;margin:0}
@@ -9516,7 +9566,7 @@ function exportarVentasPDF(mes){
   @media print{.np{display:none}}</style></head><body>
   <div style="border-bottom:2px solid #2563eb;padding-bottom:12px;margin-bottom:14px;display:flex;justify-content:space-between">
     <div><h2>${escHtml(DB.config.empresa||'DealerSystem')}</h2>
-    <div style="color:#6b7280">REPORTE DE VENTAS${mes?' — '+mes:''} | ${fmtDate(today())}</div></div>
+    <div style="color:#6b7280">REPORTE DE VENTAS${mes?' — '+mes:''}${escHtml(rangoLabel)} | ${fmtDate(today())}</div></div>
     <div style="text-align:right"><div style="font-size:10px;color:#6b7280">TOTAL VENTAS</div><div style="font-size:20px;font-weight:800;color:#16a34a">${fmt(totalV)}</div></div>
   </div>
   <table><thead><tr><th>Factura</th><th>Fecha</th><th>Vehículo</th><th>Chasis</th><th>Cliente</th><th>Precio</th><th>Inicial</th><th>Pendiente</th><th>Método</th><th>Estado</th></tr></thead>
@@ -10317,9 +10367,11 @@ function renderCXP(){
   const filtroDesde=document.getElementById('cxp-filtro-desde')?.value||'';
   const filtroHasta=document.getElementById('cxp-filtro-hasta')?.value||'';
 
-  // Combinar gastos de vehículos con pendiente + CXP manuales pendientes
-  const gastosVehPend=(DB.gastosVehiculos||[]).filter(g=>parseFloat(g.montoPendiente||0)>0).map(g=>({...g,_origen:'auto'}));
-  const cxpManuales=(DB.cxp||[]).filter(g=>parseFloat(g.montoPendiente||0)>0).map(g=>({...g,_origen:'manual'}));
+  // Con filtro de fechas: mostrar TODO lo que tuvo movimiento en el período (aunque ya esté pagado).
+  // Sin filtro de fechas: mostrar solo lo que sigue pendiente hoy (vista en vivo de CxP).
+  const hayFiltroFecha=!!(filtroDesde||filtroHasta);
+  const gastosVehPend=(hayFiltroFecha?(DB.gastosVehiculos||[]):(DB.gastosVehiculos||[]).filter(g=>parseFloat(g.montoPendiente||0)>0)).map(g=>({...g,_origen:'auto'}));
+  const cxpManuales=(hayFiltroFecha?(DB.cxp||[]):(DB.cxp||[]).filter(g=>parseFloat(g.montoPendiente||0)>0)).map(g=>({...g,_origen:'manual'}));
   let gastosPend=[...gastosVehPend,...cxpManuales];
   if(filtroSup)gastosPend=gastosPend.filter(g=>g.suplidor===filtroSup);
   if(filtroVeh)gastosPend=gastosPend.filter(g=>g.vehiculoId===filtroVeh||g.vehiculo===filtroVeh);
@@ -10343,7 +10395,7 @@ function renderCXP(){
   document.getElementById('page-cxp').innerHTML=`
     <div class="page-header">
       <div><h1>📑 Cuentas por Pagar — Vehículos</h1>
-        <p>${gastosPend.length} pendiente(s) — RD$: <strong style="color:var(--red)">${totalPendRD.toLocaleString('es-DO',{minimumFractionDigits:2})}</strong> | USD: <strong style="color:var(--blue)">$${totalPendUSD.toLocaleString('en-US',{minimumFractionDigits:2})}</strong></p>
+        <p>${gastosPend.length} ${hayFiltroFecha?'registro(s) en el período':'pendiente(s)'} — RD$ pendiente: <strong style="color:var(--red)">${totalPendRD.toLocaleString('es-DO',{minimumFractionDigits:2})}</strong> | USD pendiente: <strong style="color:var(--blue)">$${totalPendUSD.toLocaleString('en-US',{minimumFractionDigits:2})}</strong></p>
       </div>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
         <button class="btn btn-secondary btn-sm" onclick="imprimirCXP()">📄 Exportar PDF</button>
@@ -10460,7 +10512,7 @@ function renderCXP(){
             <td style="color:var(--green)">${fmtMon(g.montoPagado||0)}</td>
             <td style="font-weight:800;color:var(--red)">${fmtMon(g.montoPendiente||0)}</td>
             <td style="font-size:12px;color:${g.fechaPago&&g.fechaPago<=today()?'var(--red)':'var(--gray)'}">${fmtDate(g.fechaPago)||'—'}</td>
-            <td><span class="badge badge-${g.statusGasto==='ABONADO'?'amber':'red'}">${g.statusGasto||'PENDIENTE'}</span></td>
+            <td><span class="badge badge-${g.statusGasto==='PAGADO'?'green':g.statusGasto==='ABONADO'?'amber':'red'}">${g.statusGasto||'PENDIENTE'}</span></td>
             <td>
               <div style="display:flex;gap:4px;flex-wrap:wrap">
                 ${parseFloat(g.montoPendiente||0)>0?`<button class="btn btn-sm btn-green" onclick="event.stopPropagation();${g._origen==='manual'?`abonarCXPManual('${g.id}')`:`abonarDesdeCXP('${g.id}')`}" title="Registrar pago">💵 Pagar</button>`:''}
@@ -11282,8 +11334,9 @@ function imprimirCXP(){
   const filtroMoneda=document.getElementById('cxp-filtro-moneda')?.value||'';
   const filtroDesde=document.getElementById('cxp-filtro-desde')?.value||'';
   const filtroHasta=document.getElementById('cxp-filtro-hasta')?.value||'';
-  const gastosVehP=(DB.gastosVehiculos||[]).filter(g=>parseFloat(g.montoPendiente||0)>0).map(g=>({...g,_origen:'auto'}));
-  const cxpManP=(DB.cxp||[]).filter(g=>parseFloat(g.montoPendiente||0)>0).map(g=>({...g,_origen:'manual'}));
+  const hayFiltroFecha=!!(filtroDesde||filtroHasta);
+  const gastosVehP=(hayFiltroFecha?(DB.gastosVehiculos||[]):(DB.gastosVehiculos||[]).filter(g=>parseFloat(g.montoPendiente||0)>0)).map(g=>({...g,_origen:'auto'}));
+  const cxpManP=(hayFiltroFecha?(DB.cxp||[]):(DB.cxp||[]).filter(g=>parseFloat(g.montoPendiente||0)>0)).map(g=>({...g,_origen:'manual'}));
   let gastosPend=[...gastosVehP,...cxpManP];
   if(filtroSup)gastosPend=gastosPend.filter(g=>g.suplidor===filtroSup);
   if(filtroVeh)gastosPend=gastosPend.filter(g=>g.vehiculoId===filtroVeh||g.vehiculo===filtroVeh);
@@ -11303,7 +11356,7 @@ function imprimirCXP(){
     const v=DB.vehiculos.find(x=>x.id===g.vehiculoId);
     const esUSD=g.moneda==='USD';
     const fV=(n)=>esUSD?'$'+parseFloat(n||0).toLocaleString('en-US',{minimumFractionDigits:2}):fmt(n);
-    const sc={ABONADO:'a',PENDIENTE:'r'};
+    const sc={ABONADO:'a',PENDIENTE:'r',PAGADO:'g'};
     return`<tr><td>${fmtDate(g.fecha)}</td><td style="font-weight:700">${escHtml(g.suplidor||'—')}</td><td>${v?escHtml(v.codigo+' '+v.marca+' '+v.modelo):'—'}</td><td style="font-family:monospace;font-size:10px">${escHtml(v?.vin||'—')}</td><td>${escHtml(g.tipo||'—')}</td><td>${fV(g.montoFactura||0)}</td><td style="color:#16a34a">${fV(g.montoPagado||0)}</td><td style="font-weight:800;color:#dc2626">${fV(g.montoPendiente||0)}</td><td><span class="badge ${sc[g.statusGasto||'PENDIENTE']||'r'}">${g.statusGasto||'PENDIENTE'}</span></td></tr>`;
   }).join('');
   const logoCXP=DB.config.logoData||'';
@@ -11321,7 +11374,7 @@ function imprimirCXP(){
   td{padding:7px 10px;border-bottom:1px solid #e2e8f0}
   tr:nth-child(even){background:#f8fafc}
   .badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700}
-  .a{background:#fef3c7;color:#d97706}.r{background:#fee2e2;color:#dc2626}
+  .a{background:#fef3c7;color:#d97706}.r{background:#fee2e2;color:#dc2626}.g{background:#dcfce7;color:#16a34a}
   .tot{display:flex;justify-content:flex-end;padding:8px 10px;font-weight:800;font-size:13px;border-top:2px solid #0f172a}
   @media print{.noprint{display:none}}</style></head><body>
   <div style="border-bottom:3px solid #dc2626;padding-bottom:12px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:flex-start">
@@ -11340,13 +11393,13 @@ function imprimirCXP(){
     </div>
   </div>
   ${gastosRD.length>0?`
-  <h4 class="rd">💰 Pendientes en RD$ — Pesos Dominicanos</h4>
+  <h4 class="rd">💰 ${hayFiltroFecha?'Movimientos del período en RD$':'Pendientes en RD$'} — Pesos Dominicanos</h4>
   <table><thead><tr><th>Fecha</th><th>Suplidor</th><th>Vehículo</th><th>Chasis</th><th>Tipo Gasto</th><th>Factura</th><th>Pagado</th><th>Pendiente</th><th>Estado</th></tr></thead>
   <tbody>${generarFilas(gastosRD)}
   <tr style="background:#fee2e2"><td colspan="7" style="font-weight:800;text-align:right">TOTAL PENDIENTE RD$:</td><td style="font-weight:800;color:#dc2626">${fmt(totalRD)}</td><td></td></tr>
   </tbody></table>`:''}
   ${gastosUSD.length>0?`
-  <h4 class="usd">💵 Pendientes en USD — Dólares</h4>
+  <h4 class="usd">💵 ${hayFiltroFecha?'Movimientos del período en USD':'Pendientes en USD'} — Dólares</h4>
   <table><thead><tr><th>Fecha</th><th>Suplidor</th><th>Vehículo</th><th>Chasis</th><th>Tipo Gasto</th><th>Factura</th><th>Pagado</th><th>Pendiente</th><th>Estado</th></tr></thead>
   <tbody>${generarFilas(gastosUSD)}
   <tr style="background:#dbeafe"><td colspan="7" style="font-weight:800;text-align:right">TOTAL PENDIENTE USD:</td><td style="font-weight:800;color:#2563eb">$${totalUSD.toLocaleString('en-US',{minimumFractionDigits:2})}</td><td></td></tr>
@@ -11731,6 +11784,8 @@ function renderCXC(){
   const filtroMoneda=document.getElementById('cxc-filtro-moneda')?.value||'RD$';
   const filtroStatus=document.getElementById('cxc-filtro-status')?.value||'PENDIENTE';
   const filtroTipo=document.getElementById('cxc-filtro-tipo')?.value||'TODOS';
+  const filtroDesde=document.getElementById('cxc-filtro-desde')?.value||'';
+  const filtroHasta=document.getElementById('cxc-filtro-hasta')?.value||'';
   const tasa=parseFloat(DB.config.tasaCambio||60);
   const ds='background:#e2e8f0;color:#adb5bd;cursor:not-allowed;border:1px solid #dee2e6';
 
@@ -11738,6 +11793,8 @@ function renderCXC(){
   if(filtroStatus==='PENDIENTE')items=items.filter(x=>x.status==='PENDIENTE'||x.status==='PARCIAL');
   else if(filtroStatus!=='TODOS')items=items.filter(x=>x.status===filtroStatus);
   if(filtroTipo!=='TODOS')items=items.filter(x=>tipoCXCDe(x)===filtroTipo);
+  if(filtroDesde)items=items.filter(x=>x.fecha&&x.fecha>=filtroDesde);
+  if(filtroHasta)items=items.filter(x=>x.fecha&&x.fecha<=filtroHasta);
 
   const esUSD=filtroMoneda==='USD';
   const fV=(n)=>esUSD?'$'+parseFloat(n||0).toLocaleString('en-US',{minimumFractionDigits:2})+' USD':fmt(n);
@@ -11766,6 +11823,9 @@ function renderCXC(){
           <option value="VEHICULO" ${filtroTipo==='VEHICULO'?'selected':''}>🚗 Vehículo</option>
           <option value="PERSONAL" ${filtroTipo==='PERSONAL'?'selected':''}>🧍 Personal</option>
         </select>
+        <input type="date" id="cxc-filtro-desde" value="${filtroDesde}" onchange="renderCXC()" title="Desde" style="padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
+        <input type="date" id="cxc-filtro-hasta" value="${filtroHasta}" onchange="renderCXC()" title="Hasta" style="padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
+        ${(filtroDesde||filtroHasta)?`<button class="btn btn-secondary btn-sm" onclick="document.getElementById('cxc-filtro-desde').value='';document.getElementById('cxc-filtro-hasta').value='';renderCXC()" title="Limpiar fechas">🔄</button>`:''}
         <div style="width:1px;height:28px;background:var(--gray3);margin:0 2px"></div>
         <button id="cxc-btn-cobrar" disabled class="btn btn-sm" style="${ds}" onclick="cxcAccion('cobrar')">💵 Registrar Cobro</button>
         <button id="cxc-btn-historial" disabled class="btn btn-sm" style="${ds}" onclick="cxcAccion('historial')">👁 Historial</button>
@@ -11845,6 +11905,8 @@ function renderCXC(){
   const sm=document.getElementById('cxc-filtro-moneda');if(sm)sm.value=filtroMoneda;
   const ss=document.getElementById('cxc-filtro-status');if(ss)ss.value=filtroStatus;
   const st=document.getElementById('cxc-filtro-tipo');if(st)st.value=filtroTipo;
+  const sd=document.getElementById('cxc-filtro-desde');if(sd)sd.value=filtroDesde;
+  const sh=document.getElementById('cxc-filtro-hasta');if(sh)sh.value=filtroHasta;
 }
 
 function selCXC(id,tr){
@@ -12462,6 +12524,9 @@ function confirmarAbonarCXC(id){
 function imprimirCXC(){
   const filtroMoneda=document.getElementById('cxc-filtro-moneda')?.value||'RD$';
   const filtroTipo=document.getElementById('cxc-filtro-tipo')?.value||'TODOS';
+  const filtroStatus=document.getElementById('cxc-filtro-status')?.value||'PENDIENTE';
+  const filtroDesde=document.getElementById('cxc-filtro-desde')?.value||'';
+  const filtroHasta=document.getElementById('cxc-filtro-hasta')?.value||'';
   const tipoLabelImp=filtroTipo==='VEHICULO'?' — 🚗 Vehículo':filtroTipo==='PERSONAL'?' — 🧍 Personal':'';
   const tasa=parseFloat(DB.config.tasaCambio||60);
   const empresa=DB.config.empresa||'DealerSystem';
@@ -12475,8 +12540,12 @@ function imprimirCXC(){
   let items=(DB.cxc||[]).filter(x=>{
     const monedaItem=x.moneda||(DB.ventas.find(v=>v.id===x.ventaId)?.moneda)||'RD$';
     return monedaItem===filtroMoneda;
-  }).filter(x=>x.status!=='SALDADO');
+  });
+  if(filtroStatus==='PENDIENTE')items=items.filter(x=>x.status==='PENDIENTE'||x.status==='PARCIAL');
+  else if(filtroStatus!=='TODOS')items=items.filter(x=>x.status===filtroStatus);
   if(filtroTipo!=='TODOS')items=items.filter(x=>tipoCXCDe(x)===filtroTipo);
+  if(filtroDesde)items=items.filter(x=>x.fecha&&x.fecha>=filtroDesde);
+  if(filtroHasta)items=items.filter(x=>x.fecha&&x.fecha<=filtroHasta);
 
   const totalGeneral=items.reduce((a,x)=>a+parseFloat(x.total||0),0);
   const totalCobrado=items.reduce((a,x)=>a+parseFloat(x.abonado||0),0);
@@ -13907,6 +13976,36 @@ async function exportarInformeWord(){
   const finMes=new Date(ay,am,0).toISOString().split('T')[0];
   const empresa=DB.config.empresa||'FAYRE';
   const tasa=parseFloat(DB.config.tasaCambio||60);
+  // Saldo pendiente de un gasto/CxP tal como estaba al cierre del mes (no el saldo actual):
+  // resta solo los pagos con fecha hasta el cierre, así un gasto pagado después del mes
+  // sigue apareciendo como pendiente en el informe de ese mes.
+  const pendienteAlCierre=g=>{
+    if(g.pagos&&g.pagos.length){
+      const factura=parseFloat(g.montoFactura||g.monto||0);
+      const pagadoHastaCierre=g.pagos.filter(p=>p.fecha&&p.fecha<=finMes).reduce((a,p)=>a+parseFloat(p.monto||0),0);
+      return factura-pagadoHastaCierre;
+    }
+    return parseFloat(g.montoPendiente||0);
+  };
+  // Mismo criterio para Cuentas por Cobrar: saldo tal como estaba al cierre del mes.
+  const saldoAlCierreCXC=x=>{
+    if(x.pagos&&x.pagos.length){
+      const total=parseFloat(x.total||0);
+      const pagadoHastaCierre=x.pagos.filter(p=>p.fecha&&p.fecha<=finMes).reduce((a,p)=>a+parseFloat(p.monto||0),0);
+      return total-pagadoHastaCierre;
+    }
+    return parseFloat(x.saldo||0);
+  };
+  // Mismo criterio para préstamos bancarios de la compañía: saldo pendiente al cierre del mes,
+  // reconstruido con el capital abonado hasta esa fecha (no el saldo actual del préstamo).
+  const saldoAlCierrePrestamo=p=>{
+    if(p.pagos&&p.pagos.length){
+      const original=parseFloat(p.montoOriginal||0);
+      const capitalHastaCierre=p.pagos.filter(pg=>pg.fecha&&pg.fecha<=finMes).reduce((a,pg)=>a+parseFloat(pg.capital||0),0);
+      return Math.max(0,original-capitalHastaCierre);
+    }
+    return parseFloat(p.saldoPendiente||0);
+  };
 
   // ── DEL MES ──
   const ventasMes=DB.ventas.filter(v=>v.fecha?.startsWith(mes));
@@ -13918,8 +14017,11 @@ async function exportarInformeWord(){
   const totalNominaMes=pagosMes.reduce((a,p)=>a+parseFloat(p.monto||0),0);
 
   // ── AL CIERRE ──
-  const cxcPend=(DB.cxc||[]).filter(x=>x.status!=='SALDADO');
-  const cxpPend=(DB.gastosVehiculos||[]).filter(g=>parseFloat(g.montoPendiente||0)>0);
+  const cxcPend=(DB.cxc||[]).filter(x=>x.fecha&&x.fecha<=finMes).map(x=>({...x,saldo:saldoAlCierreCXC(x)})).filter(x=>x.saldo>0.01);
+  const cxpPend=[...(DB.gastosVehiculos||[]),...(DB.cxp||[])]
+    .filter(g=>g.fecha&&g.fecha<=finMes)
+    .map(g=>({...g,montoPendiente:pendienteAlCierre(g)}))
+    .filter(g=>g.montoPendiente>0.01);
   const vActivos=DB.vehiculos.filter(v=>v.status==='ACTIVO');
   const vAduana=DB.vehiculos.filter(v=>v.status==='ADUANA');
   const vEEUU=DB.vehiculos.filter(v=>v.status==='EN EEUU');
@@ -13938,14 +14040,18 @@ async function exportarInformeWord(){
   const totalActivoAcum=activosCalc.reduce((s,c)=>s+c.acumulada,0);
   const totalActivoLibros=activosCalc.reduce((s,c)=>s+c.valorLibros,0);
 
-  // Suplidores — saldo acumulado al cierre (agrupado por suplidor)
+  // Suplidores — saldo acumulado al cierre (agrupado por suplidor, solo lo facturado hasta el cierre del mes)
+  const pagadoAlCierre=g=>{
+    if(g.pagos&&g.pagos.length)return g.pagos.filter(p=>p.fecha&&p.fecha<=finMes).reduce((a,p)=>a+parseFloat(p.monto||0),0);
+    return parseFloat(g.montoPagado||0);
+  };
   const supMap={};
-  (DB.gastosVehiculos||[]).forEach(g=>{
+  [...(DB.gastosVehiculos||[]),...(DB.cxp||[])].filter(g=>g.fecha&&g.fecha<=finMes).forEach(g=>{
     const nombre=g.suplidor||'Sin suplidor';
     if(!supMap[nombre])supMap[nombre]={facturado:0,pagado:0,pendiente:0};
     supMap[nombre].facturado+=parseFloat(g.montoFactura||g.monto||0);
-    supMap[nombre].pagado+=parseFloat(g.montoPagado||0);
-    supMap[nombre].pendiente+=parseFloat(g.montoPendiente||0);
+    supMap[nombre].pagado+=pagadoAlCierre(g);
+    supMap[nombre].pendiente+=pendienteAlCierre(g);
   });
   const supList=Object.entries(supMap).filter(([,v])=>v.pendiente>0).sort((a,b)=>b[1].pendiente-a[1].pendiente);
   const totalSupFact=supList.reduce((a,[,v])=>a+v.facturado,0);
@@ -13970,20 +14076,20 @@ async function exportarInformeWord(){
   const totalCuentasUSD=cuentasList.reduce((a,[,v])=>a+v.usd,0);
 
   // Intereses de préstamos — del mes + saldo al cierre (los préstamos de la compañía, con su Saldo Pendiente)
-  const prestamosDetalle=(DB.prestamos||[]).map(p=>{
+  const prestamosDetalle=(DB.prestamos||[]).filter(p=>!p.fecha||p.fecha<=finMes).map(p=>{
     const pagosDelMes=(p.pagos||[]).filter(pg=>pg.fecha?.startsWith(mes));
     const capitalMes=pagosDelMes.reduce((a,pg)=>a+parseFloat(pg.capital||0),0);
     const interesMes=pagosDelMes.reduce((a,pg)=>a+parseFloat(pg.interes||0),0);
-    return{p,capitalMes,interesMes};
+    return{p,capitalMes,interesMes,saldoCierre:saldoAlCierrePrestamo(p)};
   });
   const prestamosRD=prestamosDetalle.filter(x=>(x.p.moneda||'RD$')==='RD$');
   const prestamosUSD=prestamosDetalle.filter(x=>x.p.moneda==='USD');
   const totalCapitalMesRD=prestamosRD.reduce((a,x)=>a+x.capitalMes,0);
   const totalInteresMesRD=prestamosRD.reduce((a,x)=>a+x.interesMes,0);
-  const totalSaldoPrestamosRD=prestamosRD.reduce((a,x)=>a+parseFloat(x.p.saldoPendiente||0),0);
+  const totalSaldoPrestamosRD=prestamosRD.reduce((a,x)=>a+x.saldoCierre,0);
   const totalCapitalMesUSD=prestamosUSD.reduce((a,x)=>a+x.capitalMes,0);
   const totalInteresMesUSD=prestamosUSD.reduce((a,x)=>a+x.interesMes,0);
-  const totalSaldoPrestamosUSD=prestamosUSD.reduce((a,x)=>a+parseFloat(x.p.saldoPendiente||0),0);
+  const totalSaldoPrestamosUSD=prestamosUSD.reduce((a,x)=>a+x.saldoCierre,0);
   // Intereses del mes convertidos a RD$ solo para el resumen ejecutivo (no se mezclan monedas en la tabla detallada)
   const totalInteresMesConvertido=totalInteresMesRD+totalInteresMesUSD*tasa;
   const totalGastosConIntereses=totalGastosMes+totalInteresMesConvertido;
@@ -14267,7 +14373,7 @@ async function exportarInformeWord(){
       <p class="rep-note">Todos los préstamos que tiene la compañía, con su Saldo Pendiente al cierre. RD$ y USD no se combinan en un solo total.</p>
       <table class="rep-table">
         <thead><tr><th>Acreedor</th><th>Moneda</th><th class="num">Capital pagado</th><th class="num">Interés generado</th><th class="num">Saldo Pendiente al cierre</th></tr></thead>
-        <tbody>${prestamosDetalle.map(({p,capitalMes,interesMes})=>{const esUSD=p.moneda==='USD';const f=esUSD?fmtUSD:fmt;return`<tr><td style="font-weight:700">${escHtml(p.acreedor||'—')}</td><td>${esUSD?'USD':'RD$'}</td><td class="num">${f(capitalMes)}</td><td class="num neg">${f(interesMes)}</td><td class="num">${f(p.saldoPendiente)}</td></tr>`;}).join('')||'<tr><td colspan="5">Sin préstamos registrados</td></tr>'}
+        <tbody>${prestamosDetalle.map(({p,capitalMes,interesMes,saldoCierre})=>{const esUSD=p.moneda==='USD';const f=esUSD?fmtUSD:fmt;return`<tr><td style="font-weight:700">${escHtml(p.acreedor||'—')}</td><td>${esUSD?'USD':'RD$'}</td><td class="num">${f(capitalMes)}</td><td class="num neg">${f(interesMes)}</td><td class="num">${f(saldoCierre)}</td></tr>`;}).join('')||'<tr><td colspan="5">Sin préstamos registrados</td></tr>'}
         ${prestamosRD.length?`<tr class="total"><td colspan="2">Total RD$</td><td class="num">${fmt(totalCapitalMesRD)}</td><td class="num">${fmt(totalInteresMesRD)}</td><td class="num">${fmt(totalSaldoPrestamosRD)}</td></tr>`:''}
         ${prestamosUSD.length?`<tr class="total"><td colspan="2">Total USD</td><td class="num">${fmtUSD(totalCapitalMesUSD)}</td><td class="num">${fmtUSD(totalInteresMesUSD)}</td><td class="num">${fmtUSD(totalSaldoPrestamosUSD)}</td></tr>`:''}</tbody>
       </table>
