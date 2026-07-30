@@ -4957,39 +4957,34 @@ function fmtP(n,moneda){
 }
 function renderPrestamos(){
   if(!DB.prestamos)DB.prestamos=[];
-  const filtroDesde=document.getElementById('pr-filtro-desde')?.value||'';
   const filtroHasta=document.getElementById('pr-filtro-hasta')?.value||'';
   // Saldo reconstruido "a la fecha Hasta" (hoy si no se especifica) — igual que el Informe de
-  // Cierre. Dejando "Desde" vacío, el total coincide exactamente con el informe. Las acciones
-  // de pago siempre usan el saldo real actual (saldoLive), no el histórico mostrado.
+  // Cierre. Las acciones de pago siempre usan el saldo real actual (saldoLive), no el histórico.
   const fechaCorte=filtroHasta||today();
-  // Base completa acumulada a fechaCorte (ignora "Desde") — es la que da el Total General.
+  const tasa=parseFloat(DB.config.tasaCambio||60);
   const prestamosF=DB.prestamos.filter(p=>!p.fecha||p.fecha<=fechaCorte).map(p=>({...p,saldoLive:p.saldoPendiente,saldoCierre:saldoPrestamoAFecha(p,fechaCorte)}));
   const total=prestamosF.length;
   const deudaRD=prestamosF.filter(p=>(p.moneda||'RD$')==='RD$').reduce((a,p)=>a+p.saldoCierre,0);
   const deudaUSD=prestamosF.filter(p=>p.moneda==='USD').reduce((a,p)=>a+p.saldoCierre,0);
-  // "Desde" solo filtra qué filas se listan en la tabla, no el total.
-  let prestamosMostrados=prestamosF;
-  if(filtroDesde)prestamosMostrados=prestamosMostrados.filter(p=>p.fecha&&p.fecha>=filtroDesde);
+  const deudaCombinada=deudaRD+deudaUSD*tasa;
   const resumen=`${total} préstamo(s) al ${fmtDate(fechaCorte)}`;
   document.getElementById('page-prestamos').innerHTML=`
     <div class="page-header">
       <div><h1>🏦 Préstamos Bancos</h1><p>${resumen}</p></div>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-        <input type="date" id="pr-filtro-desde" value="${filtroDesde}" onchange="renderPrestamos()" title="Desde" style="padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
-        <input type="date" id="pr-filtro-hasta" value="${filtroHasta}" onchange="renderPrestamos()" title="Hasta" style="padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
-        ${(filtroDesde||filtroHasta)?`<button class="btn btn-secondary btn-sm" onclick="document.getElementById('pr-filtro-desde').value='';document.getElementById('pr-filtro-hasta').value='';renderPrestamos()" title="Limpiar fechas">🔄</button>`:''}
+        <input type="date" id="pr-filtro-hasta" value="${filtroHasta}" onchange="renderPrestamos()" title="Saldo al (fecha de corte)" style="padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
+        ${filtroHasta?`<button class="btn btn-secondary btn-sm" onclick="document.getElementById('pr-filtro-hasta').value='';renderPrestamos()" title="Limpiar fecha">🔄</button>`:''}
         <button class="btn btn-primary" onclick="nuevoPrestamo()">➕ Nuevo Préstamo</button>
       </div>
     </div>
     <div style="background:var(--navy);border-radius:10px;padding:14px 18px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
       <div>
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#94a3b8;letter-spacing:.5px">🧮 Total General al ${fmtDate(fechaCorte)} — para validar contra el Informe de Cierre</div>
-        <div style="font-size:10px;color:#94a3b8;margin-top:2px">"Desde" solo filtra la lista de abajo — no afecta este total.</div>
       </div>
       <div style="display:flex;gap:20px">
         <div style="text-align:right"><div style="font-size:10px;color:#94a3b8">RD$</div><div style="font-size:18px;font-weight:800;color:#f87171">${deudaRD.toLocaleString('es-DO',{minimumFractionDigits:2})}</div></div>
         <div style="text-align:right"><div style="font-size:10px;color:#94a3b8">USD</div><div style="font-size:18px;font-weight:800;color:#60a5fa">$${deudaUSD.toLocaleString('en-US',{minimumFractionDigits:2})}</div></div>
+        <div style="text-align:right;border-left:1px solid #334155;padding-left:20px"><div style="font-size:10px;color:#94a3b8">Combinado (a RD$${tasa})</div><div style="font-size:18px;font-weight:800;color:#4ade80">${deudaCombinada.toLocaleString('es-DO',{minimumFractionDigits:2})}</div></div>
       </div>
     </div>
     ${total===0?`<div class="card" style="text-align:center;padding:48px">
@@ -5006,7 +5001,7 @@ function renderPrestamos(){
           <th>Plazo</th><th>Fecha</th><th>Estado</th><th>Acciones</th>
         </tr></thead>
         <tbody>
-          ${prestamosMostrados.map(p=>{
+          ${prestamosF.map(p=>{
             const m=p.moneda||'RD$';
             const tipoLabel={FRANCESA:'Francesa',CAPITAL_FIJO:'Capital Fijo',SOLO_INT_AMORT:'Solo Interés Amort.',SOLO_INT_FIJO:'Solo Interés Fijo',LINEA:'Línea Crédito'};
             const monedaBadge=m==='USD'
@@ -10484,7 +10479,6 @@ function renderCXP(){
   const filtroSup=document.getElementById('cxp-filtro-sup')?.value||'';
   const filtroVeh=document.getElementById('cxp-filtro-veh')?.value||'';
   const filtroMoneda=document.getElementById('cxp-filtro-moneda')?.value||'';
-  const filtroDesde=document.getElementById('cxp-filtro-desde')?.value||'';
   const filtroHasta=document.getElementById('cxp-filtro-hasta')?.value||'';
 
   // Pendiente/Pagado reconstruidos "a la fecha Hasta" (hoy si no se especifica), igual que el
@@ -10509,8 +10503,7 @@ function renderCXP(){
   const totalGeneralRD=baseCompleta.filter(g=>(g.moneda||'RD$')==='RD$').reduce((a,g)=>a+g.montoPendiente,0);
   const totalGeneralUSD=baseCompleta.filter(g=>g.moneda==='USD').reduce((a,g)=>a+g.montoPendiente,0);
 
-  // Suplidor/Vehículo/Moneda sí acotan el total (el usuario los usa para acotar la consulta).
-  // "Desde" NO resta del total — solo filtra qué filas se listan en la tabla (gastosMostrados).
+  // Suplidor/Vehículo/Moneda sí acotan el total y la tabla (el usuario los usa para acotar la consulta).
   let gastosPend=baseCompleta;
   if(filtroSup)gastosPend=gastosPend.filter(g=>g.suplidor===filtroSup);
   if(filtroVeh)gastosPend=gastosPend.filter(g=>g.vehiculoId===filtroVeh||g.vehiculo===filtroVeh);
@@ -10527,9 +10520,8 @@ function renderCXP(){
   const totalPend=gastosPend.reduce((a,g)=>a+parseFloat(g.montoPendiente||0),0);
   const totalFactura=gastosPend.reduce((a,g)=>a+parseFloat(g.montoFactura||0),0);
   const totalPagado=gastosPend.reduce((a,g)=>a+parseFloat(g.montoPagado||0),0);
-  let gastosMostrados=gastosPend;
-  if(filtroDesde)gastosMostrados=gastosMostrados.filter(g=>g.fecha>=filtroDesde);
   const tasa=parseFloat(DB.config.tasaCambio||60);
+  const totalGeneralCombinado=totalGeneralRD+totalGeneralUSD*tasa;
 
   document.getElementById('page-cxp').innerHTML=`
     <div class="page-header">
@@ -10545,17 +10537,18 @@ function renderCXP(){
     <div style="background:var(--navy);border-radius:10px;padding:14px 18px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
       <div>
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#94a3b8;letter-spacing:.5px">🧮 Total General al ${fmtDate(fechaCorte)} — para validar contra el Informe de Cierre</div>
-        <div style="font-size:10px;color:#94a3b8;margin-top:2px">Sin filtros de suplidor/vehículo/moneda/fecha "Desde" — todo lo pendiente hasta esa fecha.</div>
+        <div style="font-size:10px;color:#94a3b8;margin-top:2px">Sin filtros de suplidor/vehículo/moneda — todo lo pendiente hasta esa fecha.</div>
       </div>
       <div style="display:flex;gap:20px">
         <div style="text-align:right"><div style="font-size:10px;color:#94a3b8">RD$</div><div style="font-size:18px;font-weight:800;color:#f87171">${totalGeneralRD.toLocaleString('es-DO',{minimumFractionDigits:2})}</div></div>
         <div style="text-align:right"><div style="font-size:10px;color:#94a3b8">USD</div><div style="font-size:18px;font-weight:800;color:#60a5fa">$${totalGeneralUSD.toLocaleString('en-US',{minimumFractionDigits:2})}</div></div>
+        <div style="text-align:right;border-left:1px solid #334155;padding-left:20px"><div style="font-size:10px;color:#94a3b8">Combinado (a RD$${tasa})</div><div style="font-size:18px;font-weight:800;color:#4ade80">${totalGeneralCombinado.toLocaleString('es-DO',{minimumFractionDigits:2})}</div></div>
       </div>
     </div>
 
     <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px;color:#1e40af;display:flex;align-items:center;gap:8px">
       <span>ℹ️</span>
-      <span>Las cuentas por pagar se generan automáticamente al registrar gastos de vehículo con saldo pendiente. El pendiente es "a la fecha Hasta" e incluye deudas anteriores que sigan sin pagarse. "Desde" solo filtra qué filas se listan abajo — no resta del total ni del Total General.</span>
+      <span>Las cuentas por pagar se generan automáticamente al registrar gastos de vehículo con saldo pendiente. El pendiente es "a la fecha Hasta" e incluye deudas anteriores que sigan sin pagarse.</span>
     </div>
     <div class="card" style="margin-bottom:16px">
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;align-items:end">
@@ -10582,15 +10575,11 @@ function renderCXP(){
           </select>
         </div>
         <div style="display:flex;flex-direction:column;gap:4px">
-          <label style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--gray)">Desde</label>
-          <input type="date" id="cxp-filtro-desde" value="${filtroDesde}" onchange="renderCXP()" style="padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
-        </div>
-        <div style="display:flex;flex-direction:column;gap:4px">
-          <label style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--gray)">Hasta</label>
+          <label style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--gray)">Saldo al (fecha de corte)</label>
           <input type="date" id="cxp-filtro-hasta" value="${filtroHasta}" onchange="renderCXP()" style="padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
         </div>
         <div>
-          <button class="btn btn-secondary" onclick="document.getElementById('cxp-filtro-sup').value='';document.getElementById('cxp-filtro-veh').value='';document.getElementById('cxp-filtro-moneda').value='';document.getElementById('cxp-filtro-desde').value='';document.getElementById('cxp-filtro-hasta').value='';renderCXP()">🔄 Limpiar</button>
+          <button class="btn btn-secondary" onclick="document.getElementById('cxp-filtro-sup').value='';document.getElementById('cxp-filtro-veh').value='';document.getElementById('cxp-filtro-moneda').value='';document.getElementById('cxp-filtro-hasta').value='';renderCXP()">🔄 Limpiar</button>
         </div>
       </div>
     </div>
@@ -10631,7 +10620,7 @@ function renderCXP(){
           <th>Estado</th>
           <th style="width:130px">Acción</th>
         </tr></thead>
-        <tbody>${gastosMostrados.length?gastosMostrados.slice().reverse().map(g=>{
+        <tbody>${gastosPend.length?gastosPend.slice().reverse().map(g=>{
           // Buscar vehículo por id, o por vin/codigo si el id no coincide (datos de otro dispositivo)
           let v=DB.vehiculos.find(x=>x.id===g.vehiculoId);
           if(!v&&g.vehiculoId){
@@ -10679,7 +10668,6 @@ function renderCXP(){
   const fs=document.getElementById('cxp-filtro-sup');if(fs)fs.value=filtroSup;
   const fv=document.getElementById('cxp-filtro-veh');if(fv)fv.value=filtroVeh;
   const fm=document.getElementById('cxp-filtro-moneda');if(fm)fm.value=filtroMoneda;
-  const fd=document.getElementById('cxp-filtro-desde');if(fd)fd.value=filtroDesde;
   const fh=document.getElementById('cxp-filtro-hasta');if(fh)fh.value=filtroHasta;
 }
 
@@ -11482,7 +11470,6 @@ function imprimirCXP(){
   const filtroSup=document.getElementById('cxp-filtro-sup')?.value||'';
   const filtroVeh=document.getElementById('cxp-filtro-veh')?.value||'';
   const filtroMoneda=document.getElementById('cxp-filtro-moneda')?.value||'';
-  const filtroDesde=document.getElementById('cxp-filtro-desde')?.value||'';
   const filtroHasta=document.getElementById('cxp-filtro-hasta')?.value||'';
   const fechaCorte=filtroHasta||today();
   const baseCompleta=[
@@ -11502,11 +11489,10 @@ function imprimirCXP(){
   if(filtroSup)gastosPend=gastosPend.filter(g=>g.suplidor===filtroSup);
   if(filtroVeh)gastosPend=gastosPend.filter(g=>g.vehiculoId===filtroVeh||g.vehiculo===filtroVeh);
   if(filtroMoneda)gastosPend=gastosPend.filter(g=>(g.moneda||'RD$')===filtroMoneda);
-  if(filtroDesde)gastosPend=gastosPend.filter(g=>g.fecha>=filtroDesde);
   const tasa=parseFloat(DB.config.tasaCambio||60);
+  const totalGeneralCombinado=totalGeneralRD+totalGeneralUSD*tasa;
   const empresa=DB.config.empresa||'DealerSystem';
   let filtroLabel=(filtroSup?('Suplidor: '+filtroSup):(filtroVeh?'Vehículo filtrado':'Todos los pendientes'))+` | al ${fmtDate(fechaCorte)}`;
-  if(filtroDesde)filtroLabel+=` (lista desde ${fmtDate(filtroDesde)}, no afecta el Total General)`;
   // Separar por moneda
   const gastosRD=gastosPend.filter(g=>(g.moneda||'RD$')==='RD$');
   const gastosUSD=gastosPend.filter(g=>g.moneda==='USD');
@@ -11557,6 +11543,7 @@ function imprimirCXP(){
     <div style="display:flex;gap:20px">
       <div style="text-align:right"><div style="font-size:9px;color:#94a3b8">RD$</div><div style="font-size:15px;font-weight:800;color:#f87171">${totalGeneralRD.toLocaleString('es-DO',{minimumFractionDigits:2})}</div></div>
       <div style="text-align:right"><div style="font-size:9px;color:#94a3b8">USD</div><div style="font-size:15px;font-weight:800;color:#60a5fa">$${totalGeneralUSD.toLocaleString('en-US',{minimumFractionDigits:2})}</div></div>
+      <div style="text-align:right;border-left:1px solid #334155;padding-left:20px"><div style="font-size:9px;color:#94a3b8">Combinado</div><div style="font-size:15px;font-weight:800;color:#4ade80">${totalGeneralCombinado.toLocaleString('es-DO',{minimumFractionDigits:2})}</div></div>
     </div>
   </div>
   ${gastosRD.length>0?`
@@ -11951,7 +11938,6 @@ function renderCXC(){
   const filtroMoneda=document.getElementById('cxc-filtro-moneda')?.value||'RD$';
   const filtroStatus=document.getElementById('cxc-filtro-status')?.value||'PENDIENTE';
   const filtroTipo=document.getElementById('cxc-filtro-tipo')?.value||'TODOS';
-  const filtroDesde=document.getElementById('cxc-filtro-desde')?.value||'';
   const filtroHasta=document.getElementById('cxc-filtro-hasta')?.value||'';
   const tasa=parseFloat(DB.config.tasaCambio||60);
   const ds='background:#e2e8f0;color:#adb5bd;cursor:not-allowed;border:1px solid #dee2e6';
@@ -11969,8 +11955,7 @@ function renderCXC(){
   const totalGeneralRD=baseCompleta.filter(x=>(x.moneda||'RD$')==='RD$'&&x.status!=='SALDADO').reduce((a,x)=>a+x.saldo,0);
   const totalGeneralUSD=baseCompleta.filter(x=>x.moneda==='USD'&&x.status!=='SALDADO').reduce((a,x)=>a+x.saldo,0);
 
-  // Moneda/Estado/Tipo sí acotan el total (el usuario los usa para acotar la consulta).
-  // "Desde" NO resta del total — solo filtra qué filas se listan (itemsMostrados).
+  // Moneda/Estado/Tipo sí acotan el total y la tabla (el usuario los usa para acotar la consulta).
   let items=baseCompleta.filter(x=>(x.moneda||'RD$')===filtroMoneda);
   if(filtroStatus==='PENDIENTE')items=items.filter(x=>x.status==='PENDIENTE'||x.status==='PARCIAL');
   else if(filtroStatus!=='TODOS')items=items.filter(x=>x.status===filtroStatus);
@@ -11982,8 +11967,7 @@ function renderCXC(){
   const totalGeneral=items.filter(x=>x.status!=='SALDADO').reduce((a,x)=>a+parseFloat(x.total||0),0);
   const totalCobrado=items.filter(x=>x.status!=='SALDADO').reduce((a,x)=>a+parseFloat(x.abonado||0),0);
   const totalPend=items.filter(x=>x.status!=='SALDADO').reduce((a,x)=>a+parseFloat(x.saldo||0),0);
-  let itemsMostrados=items;
-  if(filtroDesde)itemsMostrados=itemsMostrados.filter(x=>x.fecha>=filtroDesde);
+  const totalGeneralCombinado=totalGeneralRD+totalGeneralUSD*tasa;
 
   document.getElementById('page-cxc').innerHTML=`
     <div class="page-header">
@@ -12005,9 +11989,8 @@ function renderCXC(){
           <option value="VEHICULO" ${filtroTipo==='VEHICULO'?'selected':''}>🚗 Vehículo</option>
           <option value="PERSONAL" ${filtroTipo==='PERSONAL'?'selected':''}>🧍 Personal</option>
         </select>
-        <input type="date" id="cxc-filtro-desde" value="${filtroDesde}" onchange="renderCXC()" title="Desde" style="padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
-        <input type="date" id="cxc-filtro-hasta" value="${filtroHasta}" onchange="renderCXC()" title="Hasta" style="padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
-        ${(filtroDesde||filtroHasta)?`<button class="btn btn-secondary btn-sm" onclick="document.getElementById('cxc-filtro-desde').value='';document.getElementById('cxc-filtro-hasta').value='';renderCXC()" title="Limpiar fechas">🔄</button>`:''}
+        <input type="date" id="cxc-filtro-hasta" value="${filtroHasta}" onchange="renderCXC()" title="Saldo al (fecha de corte)" style="padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
+        ${filtroHasta?`<button class="btn btn-secondary btn-sm" onclick="document.getElementById('cxc-filtro-hasta').value='';renderCXC()" title="Limpiar fecha">🔄</button>`:''}
         <div style="width:1px;height:28px;background:var(--gray3);margin:0 2px"></div>
         <button id="cxc-btn-cobrar" disabled class="btn btn-sm" style="${ds}" onclick="cxcAccion('cobrar')">💵 Registrar Cobro</button>
         <button id="cxc-btn-historial" disabled class="btn btn-sm" style="${ds}" onclick="cxcAccion('historial')">👁 Historial</button>
@@ -12022,11 +12005,12 @@ function renderCXC(){
     <div style="background:var(--navy);border-radius:10px;padding:14px 18px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
       <div>
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#94a3b8;letter-spacing:.5px">🧮 Total General al ${fmtDate(fechaCorte)} — para validar contra el Informe de Cierre</div>
-        <div style="font-size:10px;color:#94a3b8;margin-top:2px">Sin filtros de moneda/estado/tipo/fecha "Desde" — todo lo pendiente hasta esa fecha.</div>
+        <div style="font-size:10px;color:#94a3b8;margin-top:2px">Sin filtros de moneda/estado/tipo — todo lo pendiente hasta esa fecha.</div>
       </div>
       <div style="display:flex;gap:20px">
         <div style="text-align:right"><div style="font-size:10px;color:#94a3b8">RD$</div><div style="font-size:18px;font-weight:800;color:#fbbf24">${totalGeneralRD.toLocaleString('es-DO',{minimumFractionDigits:2})}</div></div>
         <div style="text-align:right"><div style="font-size:10px;color:#94a3b8">USD</div><div style="font-size:18px;font-weight:800;color:#60a5fa">$${totalGeneralUSD.toLocaleString('en-US',{minimumFractionDigits:2})}</div></div>
+        <div style="text-align:right;border-left:1px solid #334155;padding-left:20px"><div style="font-size:10px;color:#94a3b8">Combinado (a RD$${tasa})</div><div style="font-size:18px;font-weight:800;color:#4ade80">${totalGeneralCombinado.toLocaleString('es-DO',{minimumFractionDigits:2})}</div></div>
       </div>
     </div>
 
@@ -12063,7 +12047,7 @@ function renderCXC(){
           <th>Total</th><th>Cobrado</th><th>Saldo</th>
           <th>Vence</th><th>Estado</th>
         </tr></thead>
-        <tbody>${itemsMostrados.length?itemsMostrados.slice().reverse().map(x=>{
+        <tbody>${items.length?items.slice().reverse().map(x=>{
           const tipoBadge=x.esPrestamo?'<span style="background:#dcfce7;color:#16a34a;padding:1px 5px;border-radius:4px;font-size:10px;font-weight:700">🤝 PRÉSTAMO</span>':x.esTraspaso?'<span style="background:#fef3c7;color:#d97706;padding:1px 5px;border-radius:4px;font-size:10px;font-weight:700">🔄 TRASPASO</span>':x.esEndoso?'<span style="background:#ede9fe;color:#7c3aed;padding:1px 5px;border-radius:4px;font-size:10px;font-weight:700">📋 ENDOSO</span>':tipoCXCDe(x)==='PERSONAL'?'<span style="background:#fce7f3;color:#be185d;padding:1px 5px;border-radius:4px;font-size:10px;font-weight:700">🧍 PERSONAL</span>':'<span style="background:#dbeafe;color:#2563eb;padding:1px 5px;border-radius:4px;font-size:10px;font-weight:700">💰 VENTA</span>';
           let vencidaBadge='';let proxInfo='';let fechaVencDisplay=x.fechaVence;
           if(x.esPrestamo&&x.prestamoId&&x.status!=='SALDADO'){
@@ -12098,7 +12082,6 @@ function renderCXC(){
   const sm=document.getElementById('cxc-filtro-moneda');if(sm)sm.value=filtroMoneda;
   const ss=document.getElementById('cxc-filtro-status');if(ss)ss.value=filtroStatus;
   const st=document.getElementById('cxc-filtro-tipo');if(st)st.value=filtroTipo;
-  const sd=document.getElementById('cxc-filtro-desde');if(sd)sd.value=filtroDesde;
   const sh=document.getElementById('cxc-filtro-hasta');if(sh)sh.value=filtroHasta;
 }
 
@@ -12718,7 +12701,6 @@ function imprimirCXC(){
   const filtroMoneda=document.getElementById('cxc-filtro-moneda')?.value||'RD$';
   const filtroTipo=document.getElementById('cxc-filtro-tipo')?.value||'TODOS';
   const filtroStatus=document.getElementById('cxc-filtro-status')?.value||'PENDIENTE';
-  const filtroDesde=document.getElementById('cxc-filtro-desde')?.value||'';
   const filtroHasta=document.getElementById('cxc-filtro-hasta')?.value||'';
   const tipoLabelImp=filtroTipo==='VEHICULO'?' — 🚗 Vehículo':filtroTipo==='PERSONAL'?' — 🧍 Personal':'';
   const tasa=parseFloat(DB.config.tasaCambio||60);
@@ -12747,8 +12729,7 @@ function imprimirCXC(){
   const totalGeneral=items.reduce((a,x)=>a+parseFloat(x.total||0),0);
   const totalCobrado=items.reduce((a,x)=>a+parseFloat(x.abonado||0),0);
   const totalPend=items.reduce((a,x)=>a+parseFloat(x.saldo||0),0);
-  let itemsMostrados=items;
-  if(filtroDesde)itemsMostrados=itemsMostrados.filter(x=>x.fecha>=filtroDesde);
+  const totalGeneralCombinado=totalGeneralRD+totalGeneralUSD*tasa;
   const win=window.open('','_blank','width=1000,height=700');
   win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
   <title>CxC ${filtroMoneda} — ${escHtml(empresa)}</title>
@@ -12771,7 +12752,7 @@ function imprimirCXC(){
       ${tel?`<div style="font-size:11px;color:#475569">Tel: ${escHtml(tel)}</div>`:''}
       ${dir?`<div style="font-size:11px;color:#475569">${escHtml(dir)}</div>`:''}
       <h3>CUENTAS POR COBRAR — ${esUSD?'USD DÓLARES':'RD$ PESOS'}${tipoLabelImp}</h3>
-      <div style="font-size:11px;color:#6b7280">Al ${fmtDate(fechaCorte)}${filtroDesde?' (desde '+fmtDate(filtroDesde)+')':''} | Generado: ${fmtDate(today())}${esUSD?' | Tasa: RD$ '+tasa+' x USD':''}</div>
+      <div style="font-size:11px;color:#6b7280">Al ${fmtDate(fechaCorte)} | Generado: ${fmtDate(today())}${esUSD?' | Tasa: RD$ '+tasa+' x USD':''}</div>
     </div>
     <div style="text-align:right">
       <div style="font-size:10px;color:#6b7280">TOTAL PENDIENTE</div>
@@ -12783,6 +12764,7 @@ function imprimirCXC(){
     <div style="display:flex;gap:20px">
       <div style="text-align:right"><div style="font-size:9px;color:#94a3b8">RD$</div><div style="font-size:15px;font-weight:800;color:#fbbf24">${totalGeneralRD.toLocaleString('es-DO',{minimumFractionDigits:2})}</div></div>
       <div style="text-align:right"><div style="font-size:9px;color:#94a3b8">USD</div><div style="font-size:15px;font-weight:800;color:#60a5fa">$${totalGeneralUSD.toLocaleString('en-US',{minimumFractionDigits:2})}</div></div>
+      <div style="text-align:right;border-left:1px solid #334155;padding-left:20px"><div style="font-size:9px;color:#94a3b8">Combinado (a RD$${tasa})</div><div style="font-size:15px;font-weight:800;color:#4ade80">${totalGeneralCombinado.toLocaleString('es-DO',{minimumFractionDigits:2})}</div></div>
     </div>
   </div>
   <div class="tots">
@@ -12791,7 +12773,7 @@ function imprimirCXC(){
     <div class="tot" style="background:${esUSD?'#dbeafe':'#fef3c7'}"><label style="color:${esUSD?'#2563eb':'#d97706'}">Saldo Pendiente</label><span style="color:${esUSD?'#2563eb':'#d97706'}">${fV(totalPend)}</span></div>
   </div>
   <table><thead><tr><th>Factura</th><th>Cliente</th><th>Vehículo</th><th>Total</th><th>Cobrado</th><th>Saldo</th><th>Vence</th><th>Estado</th></tr></thead>
-  <tbody>${itemsMostrados.map(x=>`<tr>
+  <tbody>${items.map(x=>`<tr>
     <td style="font-family:monospace;font-weight:700">${escHtml(x.factura||'—')}</td>
     <td style="font-weight:700">${escHtml(x.cliente||'—')}</td>
     <td style="font-size:11px">${escHtml(x.vehiculo||'—')}</td>
@@ -14200,7 +14182,10 @@ async function exportarInformeWord(){
 
   // ── AL CIERRE ──
   const cxcPend=(DB.cxc||[]).filter(x=>x.fecha&&x.fecha<=finMes).map(x=>({...x,saldo:saldoAlCierreCXC(x)})).filter(x=>x.saldo>0.01);
-  const cxpPend=[...(DB.gastosVehiculos||[]),...(DB.cxp||[])]
+  const cxpPend=[
+    ...(DB.gastosVehiculos||[]).map(g=>({...g,_origen:'auto'})),
+    ...(DB.cxp||[]).map(g=>({...g,_origen:'manual'}))
+  ]
     .filter(g=>g.fecha&&g.fecha<=finMes)
     .map(g=>({...g,montoPendiente:pendienteAlCierre(g)}))
     .filter(g=>g.montoPendiente>0.01);
@@ -14221,20 +14206,6 @@ async function exportarInformeWord(){
   const totalActivoDepMes=activosCalc.reduce((s,c)=>s+c.mensual,0);
   const totalActivoAcum=activosCalc.reduce((s,c)=>s+c.acumulada,0);
   const totalActivoLibros=activosCalc.reduce((s,c)=>s+c.valorLibros,0);
-
-  // Suplidores — saldo acumulado al cierre (agrupado por suplidor, solo lo facturado hasta el cierre del mes)
-  const supMap={};
-  [...(DB.gastosVehiculos||[]),...(DB.cxp||[])].filter(g=>g.fecha&&g.fecha<=finMes).forEach(g=>{
-    const nombre=g.suplidor||'Sin suplidor';
-    if(!supMap[nombre])supMap[nombre]={facturado:0,pagado:0,pendiente:0};
-    supMap[nombre].facturado+=parseFloat(g.montoFactura||g.monto||0);
-    supMap[nombre].pagado+=pagadoAlCierre(g);
-    supMap[nombre].pendiente+=pendienteAlCierre(g);
-  });
-  const supList=Object.entries(supMap).filter(([,v])=>v.pendiente>0).sort((a,b)=>b[1].pendiente-a[1].pendiente);
-  const totalSupFact=supList.reduce((a,[,v])=>a+v.facturado,0);
-  const totalSupPag=supList.reduce((a,[,v])=>a+v.pagado,0);
-  const totalSupPend=supList.reduce((a,[,v])=>a+v.pendiente,0);
 
   // Cuentas bancarias — saldo acumulado al cierre del mes
   const cajaHastaCierre=DB.caja.filter(c=>c.fecha&&c.fecha<=finMes);
@@ -14291,18 +14262,35 @@ async function exportarInformeWord(){
   });
   const cxcClienteList=Object.entries(cxcPorCliente).sort((a,b)=>b[1]-a[1]);
 
-  // Cuentas por pagar — acumulado por suplidor, separado RD$/USD
+  // Cuentas por pagar — acumulado por suplidor, separado RD$/USD y por origen: lo que viene de
+  // Gastos de Vehículo (_origen 'auto', siempre ligado a un vehículo) vs CXP Manual (_origen
+  // 'manual', deudas con el suplidor que no vienen de un gasto de vehículo específico).
   const cxpPorSuplidor={};
   cxpPend.forEach(g=>{
     const key=g.suplidor||'Sin suplidor';
-    if(!cxpPorSuplidor[key])cxpPorSuplidor[key]={rd:0,usd:0};
-    if((g.moneda||'RD$')==='USD')cxpPorSuplidor[key].usd+=parseFloat(g.montoPendiente||0);
-    else cxpPorSuplidor[key].rd+=parseFloat(g.montoPendiente||0);
+    if(!cxpPorSuplidor[key])cxpPorSuplidor[key]={vehRD:0,vehUSD:0,manRD:0,manUSD:0};
+    const esUSD=(g.moneda||'RD$')==='USD';
+    const campo=(g._origen==='auto'?'veh':'man')+(esUSD?'USD':'RD');
+    cxpPorSuplidor[key][campo]+=parseFloat(g.montoPendiente||0);
   });
-  const cxpSuplidorList=Object.entries(cxpPorSuplidor).sort((a,b)=>(b[1].rd+b[1].usd*tasa)-(a[1].rd+a[1].usd*tasa));
+  const cxpSuplidorList=Object.entries(cxpPorSuplidor).map(([nombre,v])=>{
+    const rd=v.vehRD+v.manRD, usd=v.vehUSD+v.manUSD;
+    return[nombre,{...v,rd,usd,combinado:rd+usd*tasa}];
+  }).sort((a,b)=>b[1].combinado-a[1].combinado);
   const totalCXPPendRD=cxpSuplidorList.reduce((a,[,v])=>a+v.rd,0);
   const totalCXPPendUSD=cxpSuplidorList.reduce((a,[,v])=>a+v.usd,0);
   const totalCXPCombinado=totalCXPPendRD+totalCXPPendUSD*tasa;
+  const totalVehRD=cxpSuplidorList.reduce((a,[,v])=>a+v.vehRD,0);
+  const totalVehUSD=cxpSuplidorList.reduce((a,[,v])=>a+v.vehUSD,0);
+  const totalManRD=cxpSuplidorList.reduce((a,[,v])=>a+v.manRD,0);
+  const totalManUSD=cxpSuplidorList.reduce((a,[,v])=>a+v.manUSD,0);
+  // Muestra RD$/USD juntos en una celda cuando el suplidor tiene deuda en ambas monedas.
+  const fmtOrigen=(rd,usd)=>{
+    if(rd>0&&usd>0)return`${fmt(rd)}<br>${fmtUSD(usd)}`;
+    if(usd>0)return fmtUSD(usd);
+    if(rd>0)return fmt(rd);
+    return'—';
+  };
 
   // Resumen ejecutivo — cuentas por cobrar separadas por moneda
   const cxcPendRD=cxcPend.filter(x=>(x.moneda||'RD$')==='RD$').reduce((a,x)=>a+parseFloat(x.saldo||0),0);
@@ -14463,22 +14451,13 @@ async function exportarInformeWord(){
   <div class="rep-page">
     <div class="rep-sec">
       <div class="rep-sec-head"><h3>Cuentas por pagar pendientes</h3><span class="rep-tag close">Al cierre</span></div>
-      <p class="rep-note">Acumulado por suplidor, separado en pesos y dólares.</p>
+      <p class="rep-note">Acumulado por suplidor. "Por Gastos de Vehículo" es deuda ligada a un vehículo específico; "CXP Manual" es deuda con el suplidor que no viene de un gasto de vehículo (ej. cargos mensuales generales).</p>
       <table class="rep-table">
-        <thead><tr><th>Suplidor</th><th class="num">Pendiente RD$</th><th class="num">Pendiente USD</th></tr></thead>
-        <tbody>${cxpSuplidorList.map(([nombre,v])=>`<tr><td style="font-weight:700">${escHtml(nombre)}</td><td class="num neg">${v.rd?fmt(v.rd):'—'}</td><td class="num neg">${v.usd?fmtUSD(v.usd):'—'}</td></tr>`).join('')||'<tr><td colspan="3">Sin cuentas por pagar pendientes</td></tr>'}
-        ${cxpSuplidorList.length?`<tr class="total"><td>Total pendiente</td><td class="num">${fmt(totalCXPPendRD)}</td><td class="num">${fmtUSD(totalCXPPendUSD)}</td></tr>`:''}</tbody>
+        <thead><tr><th>Suplidor</th><th class="num">Por Gastos de Vehículo</th><th class="num">CXP Manual</th><th class="num">Total Pendiente</th></tr></thead>
+        <tbody>${cxpSuplidorList.map(([nombre,v])=>`<tr><td style="font-weight:700">${escHtml(nombre)}</td><td class="num">${fmtOrigen(v.vehRD,v.vehUSD)}</td><td class="num">${fmtOrigen(v.manRD,v.manUSD)}</td><td class="num neg" style="font-weight:600">${fmtOrigen(v.rd,v.usd)}</td></tr>`).join('')||'<tr><td colspan="4">Sin cuentas por pagar pendientes</td></tr>'}
+        ${cxpSuplidorList.length?`<tr class="total"><td>Total</td><td class="num">${fmtOrigen(totalVehRD,totalVehUSD)}</td><td class="num">${fmtOrigen(totalManRD,totalManUSD)}</td><td class="num">${fmtOrigen(totalCXPPendRD,totalCXPPendUSD)}</td></tr>`:''}</tbody>
       </table>
-      <p class="rep-note" style="margin-top:8px">Total combinado a la tasa de Caja (${fmt(tasa)} por USD): <strong>${fmt(totalCXPCombinado)}</strong></p>
-    </div>
-
-    <div class="rep-sec">
-      <div class="rep-sec-head"><h3>Suplidores — saldo al cierre</h3><span class="rep-tag close">Al cierre</span></div>
-      <table class="rep-table">
-        <thead><tr><th>Suplidor</th><th class="num">Facturado (histórico)</th><th class="num">Pagado</th><th class="num">Pendiente al cierre</th></tr></thead>
-        <tbody>${supList.map(([nombre,v])=>`<tr><td style="font-weight:700">${escHtml(nombre)}</td><td class="num">${fmt(v.facturado)}</td><td class="num">${fmt(v.pagado)}</td><td class="num neg" style="font-weight:600">${fmt(v.pendiente)}</td></tr>`).join('')||'<tr><td colspan="4">Sin suplidores con movimiento</td></tr>'}
-        ${supList.length?`<tr class="total"><td>Total pendiente</td><td class="num">${fmt(totalSupFact)}</td><td class="num">${fmt(totalSupPag)}</td><td class="num">${fmt(totalSupPend)}</td></tr>`:''}</tbody>
-      </table>
+      <p class="rep-note" style="margin-top:8px"><strong>Total General (pesos + dólares convertidos a la tasa de Caja, ${fmt(tasa)} por USD): ${fmt(totalCXPCombinado)}</strong></p>
     </div>
   </div>
 
@@ -14752,40 +14731,34 @@ function exportarActivosFijosWord(){
 // ══ SEGUROS ══
 function renderSeguros(){
   if(!DB.seguros)DB.seguros=[];
-  const filtroDesde=document.getElementById('seg-filtro-desde')?.value||'';
   const filtroHasta=document.getElementById('seg-filtro-hasta')?.value||'';
   // Pendiente reconstruido "a la fecha Hasta" (hoy si no se especifica), usando el historial
   // de pagos con fecha — igual criterio que CxP/CxC/Préstamos.
   const fechaCorte=filtroHasta||today();
-  // Base completa acumulada a fechaCorte (ignora "Desde") — de aquí sale el Total General.
-  const segsBase=(DB.seguros||[]).filter(s=>!s.fecha||s.fecha<=fechaCorte).map(s=>{
+  const segs=(DB.seguros||[]).filter(s=>!s.fecha||s.fecha<=fechaCorte).map(s=>{
     const pendiente=pendienteSeguroAFecha(s,fechaCorte);
     const abonado=pagadoSeguroAFecha(s,fechaCorte);
     return{...s,pendiente,abonado,status:pendiente<=0.01?'PAGADO':abonado>0.01?'ABONADO':'PENDIENTE'};
   });
-  const totalPrima=segsBase.reduce((a,s)=>a+parseFloat(s.prima||0),0);
-  const totalPagado=segsBase.reduce((a,s)=>a+parseFloat(s.abonado||0),0);
-  const totalPend=segsBase.reduce((a,s)=>a+parseFloat(s.pendiente||0),0);
-  // "Desde" solo filtra qué filas se listan en la tabla, no los totales de arriba.
-  let segs=segsBase;
-  if(filtroDesde)segs=segs.filter(s=>s.fecha&&s.fecha>=filtroDesde);
+  const totalPrima=segs.reduce((a,s)=>a+parseFloat(s.prima||0),0);
+  const totalPagado=segs.reduce((a,s)=>a+parseFloat(s.abonado||0),0);
+  const totalPend=segs.reduce((a,s)=>a+parseFloat(s.pendiente||0),0);
   const sc={PAGADO:'badge-green',ABONADO:'badge-amber',PENDIENTE:'badge-red'};
   const hoy=today();
   document.getElementById('page-seguros').innerHTML=`
     <div class="page-header">
-      <div><h1>🛡️ Seguros de Vehículos</h1><p>${segsBase.length} seguro(s) al ${fmtDate(fechaCorte)}</p></div>
+      <div><h1>🛡️ Seguros de Vehículos</h1><p>${segs.length} seguro(s) al ${fmtDate(fechaCorte)}</p></div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <input type="date" id="seg-filtro-desde" value="${filtroDesde}" onchange="renderSeguros()" title="Desde" style="padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
-        <input type="date" id="seg-filtro-hasta" value="${filtroHasta}" onchange="renderSeguros()" title="Hasta" style="padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
-        ${(filtroDesde||filtroHasta)?`<button class="btn btn-secondary btn-sm" onclick="document.getElementById('seg-filtro-desde').value='';document.getElementById('seg-filtro-hasta').value='';renderSeguros()" title="Limpiar fechas">🔄</button>`:''}
+        <input type="date" id="seg-filtro-hasta" value="${filtroHasta}" onchange="renderSeguros()" title="Saldo al (fecha de corte)" style="padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
+        ${filtroHasta?`<button class="btn btn-secondary btn-sm" onclick="document.getElementById('seg-filtro-hasta').value='';renderSeguros()" title="Limpiar fecha">🔄</button>`:''}
         <button class="btn btn-secondary" onclick="exportarSegurosPDF()">📄 Exportar PDF</button>
         <button class="btn btn-primary" onclick="nuevoSeguro()">➕ Nuevo Seguro</button>
       </div>
     </div>
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:16px">
-      <div class="stat-card blue"><div class="stat-ico">🛡️</div><div class="stat-label">Total Primas</div><div class="stat-value">${fmt(totalPrima)}</div><div class="stat-sub">${segsBase.length} póliza(s)</div></div>
-      <div class="stat-card green"><div class="stat-ico">✅</div><div class="stat-label">Total Pagado</div><div class="stat-value">${fmt(totalPagado)}</div><div class="stat-sub">${segsBase.filter(s=>s.status==='PAGADO').length} pagado(s)</div></div>
-      <div class="stat-card ${totalPend>0?'amber':'green'}"><div class="stat-ico">⏳</div><div class="stat-label">🧮 Total Pendiente (General — valida contra el Informe)</div><div class="stat-value">${fmt(totalPend)}</div><div class="stat-sub">${segsBase.filter(s=>s.status!=='PAGADO').length} pendiente(s) · "Desde" no afecta este total</div></div>
+      <div class="stat-card blue"><div class="stat-ico">🛡️</div><div class="stat-label">Total Primas</div><div class="stat-value">${fmt(totalPrima)}</div><div class="stat-sub">${segs.length} póliza(s)</div></div>
+      <div class="stat-card green"><div class="stat-ico">✅</div><div class="stat-label">Total Pagado</div><div class="stat-value">${fmt(totalPagado)}</div><div class="stat-sub">${segs.filter(s=>s.status==='PAGADO').length} pagado(s)</div></div>
+      <div class="stat-card ${totalPend>0?'amber':'green'}"><div class="stat-ico">⏳</div><div class="stat-label">🧮 Total Pendiente (General — valida contra el Informe)</div><div class="stat-value">${fmt(totalPend)}</div><div class="stat-sub">${segs.filter(s=>s.status!=='PAGADO').length} pendiente(s)</div></div>
     </div>
     <div class="card">
       <div class="search-wrap"><input class="search-input" placeholder="Buscar por vehículo, cliente, compañía, póliza..." oninput="filterTable('seg-tbl',this.value)"></div>
@@ -15348,20 +15321,16 @@ function confirmarAbonoSeguro(id){
 }
 
 function exportarSegurosPDF(){
-  const filtroDesde=document.getElementById('seg-filtro-desde')?.value||'';
   const filtroHasta=document.getElementById('seg-filtro-hasta')?.value||'';
   const fechaCorte=filtroHasta||today();
-  const segsBase=(DB.seguros||[]).filter(s=>!s.fecha||s.fecha<=fechaCorte).map(s=>{
+  const segs=(DB.seguros||[]).filter(s=>!s.fecha||s.fecha<=fechaCorte).map(s=>{
     const pendiente=pendienteSeguroAFecha(s,fechaCorte);
     const abonado=pagadoSeguroAFecha(s,fechaCorte);
     return{...s,pendiente,abonado,status:pendiente<=0.01?'PAGADO':abonado>0.01?'ABONADO':'PENDIENTE'};
   });
-  const totalPend=segsBase.reduce((a,s)=>a+parseFloat(s.pendiente||0),0);
-  const totalPrima=segsBase.reduce((a,s)=>a+parseFloat(s.prima||0),0);
-  const totalAbonado=segsBase.reduce((a,s)=>a+parseFloat(s.abonado||0),0);
-  // "Desde" solo filtra qué filas se listan, no los totales de arriba.
-  let segs=segsBase;
-  if(filtroDesde)segs=segs.filter(s=>s.fecha&&s.fecha>=filtroDesde);
+  const totalPend=segs.reduce((a,s)=>a+parseFloat(s.pendiente||0),0);
+  const totalPrima=segs.reduce((a,s)=>a+parseFloat(s.prima||0),0);
+  const totalAbonado=segs.reduce((a,s)=>a+parseFloat(s.abonado||0),0);
   const empresa=DB.config.empresa||'DealerSystem';
   const logo=DB.config.logoData||'';
   const win=window.open('','_blank','width=1000,height=700');
@@ -15376,7 +15345,7 @@ function exportarSegurosPDF(){
   @media print{.np{display:none}}</style></head><body>
   <div style="border-bottom:3px solid #2563eb;padding-bottom:10px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center">
     <div>${logo?`<img src="${logo}" style="height:40px;object-fit:contain;margin-bottom:4px"><br>`:''}<h2>${escHtml(empresa)}</h2>
-      <div style="color:#6b7280;font-size:11px">REPORTE DE SEGUROS — al ${fmtDate(fechaCorte)}${filtroDesde?' (desde '+fmtDate(filtroDesde)+')':''} | Generado: ${fmtDate(today())}</div>
+      <div style="color:#6b7280;font-size:11px">REPORTE DE SEGUROS — al ${fmtDate(fechaCorte)} | Generado: ${fmtDate(today())}</div>
     </div>
     <div style="text-align:right"><div style="font-size:10px;color:#6b7280">TOTAL PENDIENTE</div>
       <div style="font-size:20px;font-weight:800;color:#dc2626">${fmt(totalPend)}</div>
