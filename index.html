@@ -14253,14 +14253,16 @@ async function exportarInformeWord(){
   const totalInvGastos=inventarioDetalle.reduce((a,x)=>a+x.gastosVeh,0);
   const totalInvTotal=inventarioDetalle.reduce((a,x)=>a+x.total,0);
 
-  // Cuentas por cobrar — acumulado por cliente (convertido a RD$ cuando la cuenta es en USD)
+  // Cuentas por cobrar — acumulado por cliente, separado en Pesos y Dólares, más el total
+  // combinado a la tasa de Caja (para que se vea de dónde sale la conversión, no solo el total).
   const cxcPorCliente={};
   cxcPend.forEach(x=>{
     const key=x.cliente||'Sin cliente';
-    const saldoRD=(x.moneda||'RD$')==='USD'?parseFloat(x.saldo||0)*tasa:parseFloat(x.saldo||0);
-    cxcPorCliente[key]=(cxcPorCliente[key]||0)+saldoRD;
+    if(!cxcPorCliente[key])cxcPorCliente[key]={rd:0,usd:0};
+    if((x.moneda||'RD$')==='USD')cxcPorCliente[key].usd+=parseFloat(x.saldo||0);
+    else cxcPorCliente[key].rd+=parseFloat(x.saldo||0);
   });
-  const cxcClienteList=Object.entries(cxcPorCliente).sort((a,b)=>b[1]-a[1]);
+  const cxcClienteList=Object.entries(cxcPorCliente).map(([nombre,v])=>[nombre,{...v,combinado:v.rd+v.usd*tasa}]).sort((a,b)=>b[1].combinado-a[1].combinado);
 
   // Cuentas por pagar — acumulado por suplidor, separado RD$/USD y por origen: lo que viene de
   // Gastos de Vehículo (_origen 'auto', siempre ligado a un vehículo) vs CXP Manual (_origen
@@ -14300,6 +14302,10 @@ async function exportarInformeWord(){
   // Resumen ejecutivo — patrimonio (inventario + efectivo/cuentas + activos fijos)
   const totalEfectivoCombinado=totalCuentasRD+totalCuentasUSD*tasa;
   const totalPatrimonio=totalInvTotal+totalEfectivoCombinado+totalActivoLibros;
+
+  // Capital Neto — Inversión en vehículos + Cuentas por Cobrar - Cuentas por Pagar (CxP + Préstamos)
+  const totalPorPagarGeneral=totalCXPCombinado+totalSaldoPrestamosRD+totalSaldoPrestamosUSD*tasa;
+  const capitalNeto=totalInvTotal+cxcPendCombinado-totalPorPagarGeneral;
 
   // Tendencia — Enero a Diciembre del año del informe (meses futuros quedan en blanco)
   const NOMBRES_MES=['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
@@ -14351,11 +14357,18 @@ async function exportarInformeWord(){
 
     const topCxc=cxcClienteList.slice(0,8);
     if(topCxc.length){
-      imagenesGraficos.push({cid:'graficoCxc',mime:'image/png',base64:_pngBase64(graficoBarrasHorizontalesWord(topCxc.map(e=>e[0]),topCxc.map(e=>e[1]),'Top Clientes — Saldo Pendiente CxC'))});
+      imagenesGraficos.push({cid:'graficoCxc',mime:'image/png',base64:_pngBase64(graficoBarrasHorizontalesWord(topCxc.map(e=>e[0]),topCxc.map(e=>e[1].combinado),'Top Clientes — Saldo Pendiente CxC (combinado)'))});
     }
+
+    imagenesGraficos.push({cid:'graficoCapitalNeto',mime:'image/png',base64:_pngBase64(graficoBarrasHorizontalesWord(
+      ['Inversión en Vehículos','Cuentas por Cobrar','Cuentas por Pagar','Capital Neto'],
+      [totalInvTotal,cxcPendCombinado,totalPorPagarGeneral,Math.max(capitalNeto,0)],
+      'Resumen de Capital Neto al Cierre','#1c2456'
+    ))});
   }catch(e){console.warn('Error generando gráficos del informe:',e.message);}
   const tieneGraficoGastosCat=imagenesGraficos.some(i=>i.cid==='graficoGastosCat');
   const tieneGraficoCxc=imagenesGraficos.some(i=>i.cid==='graficoCxc');
+  const tieneGraficoCapitalNeto=imagenesGraficos.some(i=>i.cid==='graficoCapitalNeto');
 
   const html=`<div class="rep-page rep-cover" align="center">
     ${logoWord?`<p align="center" style="text-align:center;margin:0"><img class="rep-cover-logo" src="cid:logoFayre" width="${logoWord.w}" height="${logoWord.h}"></p>`:''}
@@ -14437,12 +14450,12 @@ async function exportarInformeWord(){
   <div class="rep-page">
     <div class="rep-sec">
       <div class="rep-sec-head"><h3>Cuentas por cobrar pendientes</h3><span class="rep-tag close">Al cierre</span></div>
-      <p class="rep-note">Acumulado por cliente — solo saldo pendiente.</p>
+      <p class="rep-note">Acumulado por cliente — solo saldo pendiente, separado en Pesos y Dólares, con el total ya convertido a la tasa de Caja (${fmt(tasa)} por USD).</p>
       ${tieneGraficoCxc?'<p align="center"><img src="cid:graficoCxc" width="680" height="'+Math.max(220,50+Math.min(cxcClienteList.length,8)*26)+'"></p>':''}
       <table class="rep-table">
-        <thead><tr><th>Cliente</th><th class="num">Saldo Pendiente</th></tr></thead>
-        <tbody>${cxcClienteList.map(([nombre,saldo])=>`<tr><td style="font-weight:700">${escHtml(nombre)}</td><td class="num neg">${fmt(saldo)}</td></tr>`).join('')||'<tr><td colspan="2">Sin cuentas por cobrar pendientes</td></tr>'}
-        ${cxcClienteList.length?`<tr class="total"><td>Total pendiente</td><td class="num">${fmt(cxcPendCombinado)}</td></tr>`:''}</tbody>
+        <thead><tr><th>Cliente</th><th class="num">Pesos</th><th class="num">Dólar</th><th class="num">Total</th></tr></thead>
+        <tbody>${cxcClienteList.map(([nombre,v])=>`<tr><td style="font-weight:700">${escHtml(nombre)}</td><td class="num">${v.rd?fmt(v.rd):'—'}</td><td class="num">${v.usd?fmtUSD(v.usd):'—'}</td><td class="num neg" style="font-weight:700">${fmt(v.combinado)}</td></tr>`).join('')||'<tr><td colspan="4">Sin cuentas por cobrar pendientes</td></tr>'}
+        ${cxcClienteList.length?`<tr class="total"><td>Total pendiente</td><td class="num">${fmt(cxcPendRD)}</td><td class="num">${fmtUSD(cxcPendUSD)}</td><td class="num">${fmt(cxcPendCombinado)}</td></tr>`:''}</tbody>
       </table>
     </div>
   </div>
@@ -14546,6 +14559,20 @@ async function exportarInformeWord(){
         <thead><tr><th>Mes</th><th class="num">Beneficio</th><th class="num">Gastos</th><th class="num">Ganancia Neta</th></tr></thead>
         <tbody>${tendenciaMeses.map(t=>t.futuro?`<tr><td style="font-weight:700">${t.mes}</td><td class="num">—</td><td class="num">—</td><td class="num">—</td></tr>`:`<tr><td style="font-weight:700">${t.mes}</td><td class="num pos">${fmt(t.beneficio)}</td><td class="num neg">${fmt(t.gastos+t.nomina)}</td><td class="num ${t.ganNeta>=0?'pos':'neg'}" style="font-weight:600">${fmt(t.ganNeta)}</td></tr>`).join('')}
         <tr class="total"><td>Total ${ay}</td><td class="num">${fmt(totalTendBeneficio)}</td><td class="num">${fmt(totalTendGastos)}</td><td class="num ${totalTendGanNeta>=0?'pos':'neg'}">${fmt(totalTendGanNeta)}</td></tr></tbody>
+      </table>
+    </div>
+
+    <div class="rep-sec">
+      <div class="rep-sec-head"><h3>Resumen de Capital Neto</h3><span class="rep-tag close">Al cierre</span></div>
+      <p class="rep-note">Inversión en Vehículos + Cuentas por Cobrar − Cuentas por Pagar (CxP + Préstamos Bancos), todo combinado a la tasa de Caja (${fmt(tasa)} por USD).</p>
+      ${tieneGraficoCapitalNeto?'<p align="center"><img src="cid:graficoCapitalNeto" width="680" height="220"></p>':''}
+      <table class="rep-table">
+        <tbody>
+          <tr><td>Inversión en Vehículos</td><td class="num pos">${fmt(totalInvTotal)}</td></tr>
+          <tr><td>Cuentas por Cobrar</td><td class="num pos">${fmt(cxcPendCombinado)}</td></tr>
+          <tr><td>Cuentas por Pagar (CxP + Préstamos)</td><td class="num neg">${fmt(totalPorPagarGeneral)}</td></tr>
+          <tr class="total"><td>Capital Neto</td><td class="num ${capitalNeto>=0?'pos':'neg'}" style="font-weight:800">${fmt(capitalNeto)}</td></tr>
+        </tbody>
       </table>
     </div>
 
