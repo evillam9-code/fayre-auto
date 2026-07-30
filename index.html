@@ -10314,6 +10314,8 @@ function renderCXP(){
   const filtroSup=document.getElementById('cxp-filtro-sup')?.value||'';
   const filtroVeh=document.getElementById('cxp-filtro-veh')?.value||'';
   const filtroMoneda=document.getElementById('cxp-filtro-moneda')?.value||'';
+  const filtroDesde=document.getElementById('cxp-filtro-desde')?.value||'';
+  const filtroHasta=document.getElementById('cxp-filtro-hasta')?.value||'';
 
   // Combinar gastos de vehículos con pendiente + CXP manuales pendientes
   const gastosVehPend=(DB.gastosVehiculos||[]).filter(g=>parseFloat(g.montoPendiente||0)>0).map(g=>({...g,_origen:'auto'}));
@@ -10322,6 +10324,8 @@ function renderCXP(){
   if(filtroSup)gastosPend=gastosPend.filter(g=>g.suplidor===filtroSup);
   if(filtroVeh)gastosPend=gastosPend.filter(g=>g.vehiculoId===filtroVeh||g.vehiculo===filtroVeh);
   if(filtroMoneda)gastosPend=gastosPend.filter(g=>(g.moneda||'RD$')===filtroMoneda);
+  if(filtroDesde)gastosPend=gastosPend.filter(g=>g.fecha&&g.fecha>=filtroDesde);
+  if(filtroHasta)gastosPend=gastosPend.filter(g=>g.fecha&&g.fecha<=filtroHasta);
 
   const gRD=gastosPend.filter(g=>(g.moneda||'RD$')==='RD$');
   const gUSD=gastosPend.filter(g=>g.moneda==='USD');
@@ -10352,7 +10356,7 @@ function renderCXP(){
       <span>Las cuentas por pagar se generan automáticamente al registrar gastos de vehículo con saldo pendiente.</span>
     </div>
     <div class="card" style="margin-bottom:16px">
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:12px;align-items:end">
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;align-items:end">
         <div style="display:flex;flex-direction:column;gap:4px">
           <label style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--gray)">Suplidor</label>
           <select id="cxp-filtro-sup" onchange="renderCXP()" style="padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
@@ -10375,8 +10379,16 @@ function renderCXP(){
             <option value="USD" ${filtroMoneda==='USD'?'selected':''}>🇺🇸 USD — Dólares</option>
           </select>
         </div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <label style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--gray)">Desde</label>
+          <input type="date" id="cxp-filtro-desde" value="${filtroDesde}" onchange="renderCXP()" style="padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <label style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--gray)">Hasta</label>
+          <input type="date" id="cxp-filtro-hasta" value="${filtroHasta}" onchange="renderCXP()" style="padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
+        </div>
         <div>
-          <button class="btn btn-secondary" onclick="document.getElementById('cxp-filtro-sup').value='';document.getElementById('cxp-filtro-veh').value='';document.getElementById('cxp-filtro-moneda').value='';renderCXP()">🔄 Limpiar</button>
+          <button class="btn btn-secondary" onclick="document.getElementById('cxp-filtro-sup').value='';document.getElementById('cxp-filtro-veh').value='';document.getElementById('cxp-filtro-moneda').value='';document.getElementById('cxp-filtro-desde').value='';document.getElementById('cxp-filtro-hasta').value='';renderCXP()">🔄 Limpiar</button>
         </div>
       </div>
     </div>
@@ -10465,6 +10477,8 @@ function renderCXP(){
   const fs=document.getElementById('cxp-filtro-sup');if(fs)fs.value=filtroSup;
   const fv=document.getElementById('cxp-filtro-veh');if(fv)fv.value=filtroVeh;
   const fm=document.getElementById('cxp-filtro-moneda');if(fm)fm.value=filtroMoneda;
+  const fd=document.getElementById('cxp-filtro-desde');if(fd)fd.value=filtroDesde;
+  const fh=document.getElementById('cxp-filtro-hasta');if(fh)fh.value=filtroHasta;
 }
 
 function eliminarRegistroCXP(id,origen){
@@ -11266,15 +11280,20 @@ function imprimirCXP(){
   const filtroSup=document.getElementById('cxp-filtro-sup')?.value||'';
   const filtroVeh=document.getElementById('cxp-filtro-veh')?.value||'';
   const filtroMoneda=document.getElementById('cxp-filtro-moneda')?.value||'';
+  const filtroDesde=document.getElementById('cxp-filtro-desde')?.value||'';
+  const filtroHasta=document.getElementById('cxp-filtro-hasta')?.value||'';
   const gastosVehP=(DB.gastosVehiculos||[]).filter(g=>parseFloat(g.montoPendiente||0)>0).map(g=>({...g,_origen:'auto'}));
   const cxpManP=(DB.cxp||[]).filter(g=>parseFloat(g.montoPendiente||0)>0).map(g=>({...g,_origen:'manual'}));
   let gastosPend=[...gastosVehP,...cxpManP];
   if(filtroSup)gastosPend=gastosPend.filter(g=>g.suplidor===filtroSup);
   if(filtroVeh)gastosPend=gastosPend.filter(g=>g.vehiculoId===filtroVeh||g.vehiculo===filtroVeh);
   if(filtroMoneda)gastosPend=gastosPend.filter(g=>(g.moneda||'RD$')===filtroMoneda);
+  if(filtroDesde)gastosPend=gastosPend.filter(g=>g.fecha&&g.fecha>=filtroDesde);
+  if(filtroHasta)gastosPend=gastosPend.filter(g=>g.fecha&&g.fecha<=filtroHasta);
   const tasa=parseFloat(DB.config.tasaCambio||60);
   const empresa=DB.config.empresa||'DealerSystem';
-  const filtroLabel=filtroSup?('Suplidor: '+filtroSup):(filtroVeh?'Vehículo filtrado':'Todos los pendientes');
+  let filtroLabel=filtroSup?('Suplidor: '+filtroSup):(filtroVeh?'Vehículo filtrado':'Todos los pendientes');
+  if(filtroDesde||filtroHasta)filtroLabel+=` | ${filtroDesde?fmtDate(filtroDesde):'inicio'} a ${filtroHasta?fmtDate(filtroHasta):'hoy'}`;
   // Separar por moneda
   const gastosRD=gastosPend.filter(g=>(g.moneda||'RD$')==='RD$');
   const gastosUSD=gastosPend.filter(g=>g.moneda==='USD');
