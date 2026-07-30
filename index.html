@@ -2992,7 +2992,7 @@ async function guardarEditCaja(i){
   const anterior=DB.caja[i];
   DB.caja[i]={...c,fecha,tipo,categoria:cat,monto,descripcion:desc,banco,cuenta,referencia:cuenta?banco+' / '+cuenta:c.referencia||'',formaPago,numeroCheque,nombreCheque,responsable};
   try{
-    if(!window._fbActivo)throw new Error('sin firebase');
+    if(!navigator.onLine||!window._fbActivo)throw new Error('sin firebase');
     await fbGuardar('caja');
   }catch(e){
     DB.caja[i]=anterior;
@@ -3009,7 +3009,7 @@ async function eliminarCajaMov(i){
   const detalle=(c.descripcion||'')+' '+(c.moneda||'RD$')+' '+fmtMoneyDisplay(c.monto);
   DB.caja.splice(i,1);
   try{
-    if(!window._fbActivo)throw new Error('sin firebase');
+    if(!navigator.onLine||!window._fbActivo)throw new Error('sin firebase');
     await fbGuardar('caja');
   }catch(e){
     DB.caja.splice(i,0,c);
@@ -3417,7 +3417,7 @@ async function guardarCajaMov(tipo){
     formaPago,numeroCheque,nombreCheque,
     responsable:document.getElementById('cj-resp').value});
   try{
-    if(!window._fbActivo)throw new Error('sin firebase');
+    if(!navigator.onLine||!window._fbActivo)throw new Error('sin firebase');
     await fbGuardar('caja');
   }catch(e){
     DB.caja.pop();
