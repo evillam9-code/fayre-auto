@@ -14208,7 +14208,7 @@ async function exportarInformeWord(){
 
   // Activos fijos — al cierre
   const activosCalc=(DB.activosFijos||[]).map(a=>({a,...calcDepreciacionActivo(a,mes)}));
-  const totalActivoCompra=activosCalc.reduce((s,c)=>s+parseFloat(c.a.valorCompra||0),0);
+  const totalActivoCompra=activosCalc.reduce((s,c)=>s+valorCompraTotalActivo(c.a),0);
   const totalActivoDepMes=activosCalc.reduce((s,c)=>s+c.mensual,0);
   const totalActivoAcum=activosCalc.reduce((s,c)=>s+c.acumulada,0);
   const totalActivoLibros=activosCalc.reduce((s,c)=>s+c.valorLibros,0);
@@ -14529,9 +14529,9 @@ async function exportarInformeWord(){
       <div class="rep-sec-head"><h3>Activos fijos y depreciación</h3><span class="rep-tag close">Al cierre</span></div>
       <p class="rep-note">Todos los activos vigentes, con depreciación acumulada desde su compra — no solo los del mes.</p>
       <table class="rep-table">
-        <thead><tr><th>Activo</th><th class="num">Valor Compra</th><th class="num">Depr. del Mes</th><th class="num">Depr. Acumulada</th><th class="num">Valor en Libros</th></tr></thead>
-        <tbody>${activosCalc.map(({a,mensual,acumulada,valorLibros})=>`<tr><td>${escHtml(a.nombre)}</td><td class="num">${fmt(a.valorCompra)}</td><td class="num">${fmt(mensual)}</td><td class="num">${fmt(acumulada)}</td><td class="num" style="font-weight:600">${fmt(valorLibros)}</td></tr>`).join('')||'<tr><td colspan="5">Sin activos fijos registrados</td></tr>'}
-        ${activosCalc.length?`<tr class="total"><td>Total</td><td class="num">${fmt(totalActivoCompra)}</td><td class="num">${fmt(totalActivoDepMes)}</td><td class="num">${fmt(totalActivoAcum)}</td><td class="num">${fmt(totalActivoLibros)}</td></tr>`:''}</tbody>
+        <thead><tr><th>Activo</th><th class="num">Cant.</th><th class="num">Valor Compra</th><th class="num">Depr. del Mes</th><th class="num">Depr. Acumulada</th><th class="num">Valor en Libros</th></tr></thead>
+        <tbody>${activosCalc.map(({a,mensual,acumulada,valorLibros})=>`<tr><td>${escHtml(a.nombre)}</td><td class="num">${cantidadActivo(a)}</td><td class="num">${fmt(valorCompraTotalActivo(a))}</td><td class="num">${fmt(mensual)}</td><td class="num">${fmt(acumulada)}</td><td class="num" style="font-weight:600">${fmt(valorLibros)}</td></tr>`).join('')||'<tr><td colspan="6">Sin activos fijos registrados</td></tr>'}
+        ${activosCalc.length?`<tr class="total"><td colspan="2">Total</td><td class="num">${fmt(totalActivoCompra)}</td><td class="num">${fmt(totalActivoDepMes)}</td><td class="num">${fmt(totalActivoAcum)}</td><td class="num">${fmt(totalActivoLibros)}</td></tr>`:''}</tbody>
       </table>
     </div>
 
@@ -14600,9 +14600,12 @@ async function exportarInformeWord(){
 }
 
 // ══ ACTIVOS FIJOS ══
+function cantidadActivo(a){return parseInt(a.cantidad||1)||1;}
+function valorCompraTotalActivo(a){return parseFloat(a.valorCompra||0)*cantidadActivo(a);}
 function calcDepreciacionActivo(a,hastaMes){
-  const compra=parseFloat(a.valorCompra||0);
-  const residual=parseFloat(a.valorResidual||0);
+  const cantidad=cantidadActivo(a);
+  const compra=parseFloat(a.valorCompra||0)*cantidad;
+  const residual=parseFloat(a.valorResidual||0)*cantidad;
   const vidaUtil=parseInt(a.vidaUtil||0)||1;
   const mensual=(compra-residual)/vidaUtil;
   const fc=new Date((a.fecha||today())+'T12:00:00');
@@ -14620,7 +14623,7 @@ function renderActivosFijos(){
   const mesActual=today().slice(0,7);
   const activos=DB.activosFijos;
   const calc=activos.map(a=>({a,...calcDepreciacionActivo(a,mesActual)}));
-  const totalCompra=activos.reduce((s,a)=>s+parseFloat(a.valorCompra||0),0);
+  const totalCompra=activos.reduce((s,a)=>s+valorCompraTotalActivo(a),0);
   const totalDepMes=calc.reduce((s,c)=>s+c.mensual,0);
   const totalAcum=calc.reduce((s,c)=>s+c.acumulada,0);
   const totalLibros=calc.reduce((s,c)=>s+c.valorLibros,0);
@@ -14640,12 +14643,13 @@ function renderActivosFijos(){
     </div>
     <div class="card">
       <div class="table-wrap"><table>
-        <thead><tr><th>Activo</th><th>Categoría</th><th>Compra</th><th>Valor Compra</th><th>Vida Útil</th><th>Depr. Mensual</th><th>Depr. Acumulada</th><th>Valor en Libros</th><th>Acciones</th></tr></thead>
+        <thead><tr><th>Activo</th><th>Categoría</th><th>Compra</th><th>Cant.</th><th>Valor Compra</th><th>Vida Útil</th><th>Depr. Mensual</th><th>Depr. Acumulada</th><th>Valor en Libros</th><th>Acciones</th></tr></thead>
         <tbody>${activos.length?calc.map(({a,mensual,acumulada,valorLibros})=>`<tr>
           <td style="font-weight:700">${escHtml(a.nombre)}</td>
           <td>${escHtml(a.categoria||'—')}</td>
           <td>${fmtDate(a.fecha)}</td>
-          <td>${fmt(a.valorCompra)}</td>
+          <td style="text-align:center">${cantidadActivo(a)}</td>
+          <td>${fmt(valorCompraTotalActivo(a))}</td>
           <td>${a.vidaUtil} m</td>
           <td>${fmt(mensual)}</td>
           <td>${fmt(acumulada)}</td>
@@ -14656,8 +14660,8 @@ function renderActivosFijos(){
               ${(currentUser?.role==='admin'||canDo('borrarActivosFijos')||canDo('eliminar'))?`<button class="btn btn-red btn-sm" onclick="eliminarActivoFijo('${a.id}')">🗑</button>`:''}
             </div>
           </td>
-        </tr>`).join(''):'<tr><td colspan="9" style="text-align:center;padding:24px;color:var(--gray)">Sin activos fijos registrados</td></tr>'}
-        ${activos.length?`<tr style="background:var(--gray2)"><td colspan="6" style="font-weight:700;text-align:right">TOTALES</td><td style="font-weight:800">${fmt(totalAcum)}</td><td style="font-weight:800;color:var(--green)">${fmt(totalLibros)}</td><td></td></tr>`:''}
+        </tr>`).join(''):'<tr><td colspan="10" style="text-align:center;padding:24px;color:var(--gray)">Sin activos fijos registrados</td></tr>'}
+        ${activos.length?`<tr style="background:var(--gray2)"><td colspan="7" style="font-weight:700;text-align:right">TOTALES</td><td style="font-weight:800">${fmt(totalAcum)}</td><td style="font-weight:800;color:var(--green)">${fmt(totalLibros)}</td><td></td></tr>`:''}
         </tbody>
       </table></div>
     </div>`;
@@ -14674,16 +14678,20 @@ function _formActivoFijo(a){
     <div class="form-row c2">
       <div class="form-field"><label class="required">Fecha de Compra</label>
         <input type="date" id="af-fecha" value="${a?.fecha||today()}"></div>
-      <div class="form-field"><label class="required">Valor de Compra</label>
+      <div class="form-field"><label class="required">Valor de Compra (por unidad)</label>
         <input type="text" id="af-valor" value="${a?.valorCompra?fmtMoneyDisplay(a.valorCompra):''}" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)" placeholder="0.00"></div>
     </div>
     <div class="form-row c2">
+      <div class="form-field"><label class="required">Cantidad</label>
+        <input type="text" id="af-cantidad" value="${a?.cantidad||1}" placeholder="Ej: 5" title="Cuántas unidades iguales de este activo (ej. 5 sillas). El valor de compra es por unidad."></div>
       <div class="form-field"><label class="required">Vida Útil (meses)</label>
         <input type="text" id="af-vida" value="${a?.vidaUtil||''}" placeholder="Ej: 60"></div>
-      <div class="form-field"><label>Valor Residual</label>
-        <input type="text" id="af-residual" value="${a?.valorResidual?fmtMoneyDisplay(a.valorResidual):''}" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)" placeholder="0.00"></div>
     </div>
-    <div class="form-field"><label>Notas</label><input type="text" id="af-obs" value="${escHtml(a?.obs||'')}" placeholder="Opcional"></div>`;
+    <div class="form-row c2">
+      <div class="form-field"><label>Valor Residual (por unidad)</label>
+        <input type="text" id="af-residual" value="${a?.valorResidual?fmtMoneyDisplay(a.valorResidual):''}" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)" placeholder="0.00"></div>
+      <div class="form-field"><label>Notas</label><input type="text" id="af-obs" value="${escHtml(a?.obs||'')}" placeholder="Opcional"></div>
+    </div>`;
 }
 function nuevoActivoFijo(){
   openModal('🏛️ Nuevo Activo Fijo',_formActivoFijo(null),
@@ -14701,16 +14709,18 @@ function guardarActivoFijo(id){
   const categoria=document.getElementById('af-categoria').value;
   const fecha=document.getElementById('af-fecha').value;
   const valorCompra=parseFloat((document.getElementById('af-valor').value||'0').replace(/,/g,''));
+  const cantidad=parseInt(document.getElementById('af-cantidad').value||'1')||1;
   const vidaUtil=parseInt(document.getElementById('af-vida').value||'0');
   const valorResidual=parseFloat((document.getElementById('af-residual').value||'0').replace(/,/g,''));
   const obs=document.getElementById('af-obs').value.trim();
   if(!nombre){toast('Ingresa el nombre del activo','error');return;}
   if(!fecha){toast('Ingresa la fecha de compra','error');return;}
   if(!valorCompra){toast('Ingresa el valor de compra','error');return;}
+  if(cantidad<1){toast('La cantidad debe ser al menos 1','error');return;}
   if(!vidaUtil){toast('Ingresa la vida útil en meses','error');return;}
   if(!DB.activosFijos)DB.activosFijos=[];
   const prev=id?DB.activosFijos.find(x=>x.id===id):null;
-  const a={id:id||uid(),nombre,categoria,fecha,valorCompra,valorResidual,vidaUtil,obs,creado:prev?.creado||today()};
+  const a={id:id||uid(),nombre,categoria,fecha,valorCompra,cantidad,valorResidual,vidaUtil,obs,creado:prev?.creado||today()};
   if(id){const i=DB.activosFijos.findIndex(x=>x.id===id);DB.activosFijos[i]=a;}
   else DB.activosFijos.push(a);
   sDB('activosFijos');
@@ -14735,7 +14745,7 @@ function exportarActivosFijosWord(){
   const mesActual=today().slice(0,7);
   const activos=DB.activosFijos||[];
   const calc=activos.map(a=>({a,...calcDepreciacionActivo(a,mesActual)}));
-  const totalCompra=activos.reduce((s,a)=>s+parseFloat(a.valorCompra||0),0);
+  const totalCompra=activos.reduce((s,a)=>s+valorCompraTotalActivo(a),0);
   const totalAcum=calc.reduce((s,c)=>s+c.acumulada,0);
   const totalLibros=calc.reduce((s,c)=>s+c.valorLibros,0);
   const empresa=DB.config.empresa||'FAYRE';
@@ -14745,7 +14755,7 @@ function exportarActivosFijosWord(){
     <table style="width:100%;border-collapse:collapse;font-size:11px">
       <thead><tr style="background:#0f172a;color:#fff">
         <th style="padding:6px 8px;text-align:left">Activo</th><th style="padding:6px 8px;text-align:left">Categoría</th>
-        <th style="padding:6px 8px;text-align:left">Compra</th><th style="padding:6px 8px;text-align:right">Valor Compra</th>
+        <th style="padding:6px 8px;text-align:left">Compra</th><th style="padding:6px 8px;text-align:right">Cant.</th><th style="padding:6px 8px;text-align:right">Valor Compra</th>
         <th style="padding:6px 8px;text-align:right">Depr. Acumulada</th><th style="padding:6px 8px;text-align:right">Valor en Libros</th>
       </tr></thead>
       <tbody>
@@ -14753,11 +14763,12 @@ function exportarActivosFijosWord(){
         <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0">${escHtml(a.nombre)}</td>
         <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0">${escHtml(a.categoria||'—')}</td>
         <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0">${fmtDate(a.fecha)}</td>
-        <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;text-align:right">${fmt(a.valorCompra)}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;text-align:right">${cantidadActivo(a)}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;text-align:right">${fmt(valorCompraTotalActivo(a))}</td>
         <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;text-align:right">${fmt(acumulada)}</td>
         <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;text-align:right;font-weight:700">${fmt(valorLibros)}</td>
       </tr>`).join('')}
-      <tr style="font-weight:700"><td colspan="3" style="padding:6px 8px;text-align:right">TOTAL</td>
+      <tr style="font-weight:700"><td colspan="4" style="padding:6px 8px;text-align:right">TOTAL</td>
         <td style="padding:6px 8px;text-align:right">${fmt(totalCompra)}</td>
         <td style="padding:6px 8px;text-align:right">${fmt(totalAcum)}</td>
         <td style="padding:6px 8px;text-align:right">${fmt(totalLibros)}</td></tr>
