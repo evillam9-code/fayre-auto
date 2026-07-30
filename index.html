@@ -13832,6 +13832,56 @@ function _redimensionarLogoParaWord(dataUri,targetDisplayPx){
     img.src=dataUri;
   });
 }
+// ══ GRÁFICOS DEL INFORME (canvas → PNG, para embeber en Word) ══
+function _nuevoCanvasGrafico(w,h){
+  const c=document.createElement('canvas');c.width=w;c.height=h;
+  const ctx=c.getContext('2d');
+  ctx.fillStyle='#fbfaf7';ctx.fillRect(0,0,w,h);
+  return{c,ctx};
+}
+function _pngBase64(canvas){return canvas.toDataURL('image/png').split(',')[1];}
+function graficoPastelWord(labels,valores,titulo){
+  const w=560,h=Math.max(200,40+labels.length*18),cx=140,cy=h/2,r=110;
+  const{c,ctx}=_nuevoCanvasGrafico(w,h);
+  ctx.font='bold 13px Arial';ctx.fillStyle='#1c2230';ctx.fillText(titulo,20,20);
+  const total=valores.reduce((a,v)=>a+v,0)||1;
+  const colores=['#1c2456','#9a7b3f','#3f6b4e','#9c3b32','#5b6472','#7c9cbf','#c9a35a','#6d5a8c','#4a8a7d','#b3552f'];
+  let ang=-Math.PI/2;
+  valores.forEach((v,i)=>{
+    const slice=(v/total)*Math.PI*2;
+    ctx.fillStyle=colores[i%colores.length];
+    ctx.beginPath();ctx.moveTo(cx,cy);ctx.arc(cx,cy,r,ang,ang+slice);ctx.closePath();ctx.fill();
+    ang+=slice;
+  });
+  let ly=44;
+  ctx.font='10px Arial';ctx.textAlign='left';
+  labels.forEach((lb,i)=>{
+    ctx.fillStyle=colores[i%colores.length];ctx.fillRect(300,ly-9,10,10);
+    ctx.fillStyle='#1c2230';
+    const pct=((valores[i]/total)*100).toFixed(0);
+    ctx.fillText((lb.length>16?lb.slice(0,16)+'…':lb)+' — '+pct+'%',314,ly);
+    ly+=18;
+  });
+  return c;
+}
+function graficoBarrasHorizontalesWord(labels,valores,titulo,color){
+  const w=680,h=Math.max(220,50+labels.length*26),padL=180,padR=90,padT=34;
+  const{c,ctx}=_nuevoCanvasGrafico(w,h);
+  ctx.font='bold 13px Arial';ctx.fillStyle='#1c2230';ctx.fillText(titulo,20,20);
+  const max=Math.max(...valores,1);
+  const plotW=w-padL-padR;
+  labels.forEach((lb,i)=>{
+    const yb=padT+i*26;
+    const bw=(valores[i]/max)*plotW;
+    ctx.fillStyle=color||'#9c3b32';
+    ctx.fillRect(padL,yb,bw,16);
+    ctx.fillStyle='#1c2230';ctx.font='10px Arial';ctx.textAlign='right';
+    ctx.fillText(lb.length>22?lb.slice(0,22)+'…':lb,padL-8,yb+13);
+    ctx.textAlign='left';
+    ctx.fillText(fmt(valores[i]),padL+bw+6,yb+13);
+  });
+  return c;
+}
 async function exportarInformeWord(){
   const mes=document.getElementById('inf-mes')?.value||today().slice(0,7);
   const [ay,am]=mes.split('-').map(Number);
@@ -13996,6 +14046,26 @@ async function exportarInformeWord(){
   const logoWord=await _redimensionarLogoParaWord(DB.config.logoCotizacion||DB.config.logoData,520);
   const nombreMesPortada=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][am-1];
 
+  // Gráficos del informe (se generan como PNG y se embeben por cid: en el Word)
+  const imagenesGraficos=[];
+  let numCategoriasGastos=0;
+  try{
+    const gastosPorCat={};
+    gastosMes.forEach(g=>{const cat=g.categoria||'Sin categoría';gastosPorCat[cat]=(gastosPorCat[cat]||0)+parseFloat(g.monto||0);});
+    const catEntries=Object.entries(gastosPorCat).sort((a,b)=>b[1]-a[1]);
+    numCategoriasGastos=catEntries.length;
+    if(catEntries.length){
+      imagenesGraficos.push({cid:'graficoGastosCat',mime:'image/png',base64:_pngBase64(graficoPastelWord(catEntries.map(e=>e[0]),catEntries.map(e=>e[1]),'Gastos del Mes por Categoría'))});
+    }
+
+    const topCxc=cxcClienteList.slice(0,8);
+    if(topCxc.length){
+      imagenesGraficos.push({cid:'graficoCxc',mime:'image/png',base64:_pngBase64(graficoBarrasHorizontalesWord(topCxc.map(e=>e[0]),topCxc.map(e=>e[1]),'Top Clientes — Saldo Pendiente CxC'))});
+    }
+  }catch(e){console.warn('Error generando gráficos del informe:',e.message);}
+  const tieneGraficoGastosCat=imagenesGraficos.some(i=>i.cid==='graficoGastosCat');
+  const tieneGraficoCxc=imagenesGraficos.some(i=>i.cid==='graficoCxc');
+
   const html=`<div class="rep-page rep-cover" align="center">
     ${logoWord?`<p align="center" style="text-align:center;margin:0"><img class="rep-cover-logo" src="cid:logoFayre" width="${logoWord.w}" height="${logoWord.h}"></p>`:''}
     <div class="rep-cover-empresa" align="center">${escHtml(empresa)}</div>
@@ -14077,6 +14147,7 @@ async function exportarInformeWord(){
     <div class="rep-sec">
       <div class="rep-sec-head"><h3>Cuentas por cobrar pendientes</h3><span class="rep-tag close">Al cierre</span></div>
       <p class="rep-note">Acumulado por cliente — solo saldo pendiente.</p>
+      ${tieneGraficoCxc?'<p align="center"><img src="cid:graficoCxc" width="680" height="'+Math.max(220,50+Math.min(cxcClienteList.length,8)*26)+'"></p>':''}
       <table class="rep-table">
         <thead><tr><th>Cliente</th><th class="num">Saldo Pendiente</th></tr></thead>
         <tbody>${cxcClienteList.map(([nombre,saldo])=>`<tr><td style="font-weight:700">${escHtml(nombre)}</td><td class="num neg">${fmt(saldo)}</td></tr>`).join('')||'<tr><td colspan="2">Sin cuentas por cobrar pendientes</td></tr>'}
@@ -14130,6 +14201,7 @@ async function exportarInformeWord(){
   <div class="rep-page">
     <div class="rep-sec">
       <div class="rep-sec-head"><h3>Gastos de empresa — detalle por gasto</h3><span class="rep-tag close">Del mes</span></div>
+      ${tieneGraficoGastosCat?'<p align="center"><img src="cid:graficoGastosCat" width="560" height="'+Math.max(200,40+numCategoriasGastos*18)+'"></p>':''}
       <table class="rep-table">
         <thead><tr><th>Fecha</th><th>Categoría</th><th>Descripción</th><th>Suplidor</th><th class="num">Monto</th></tr></thead>
         <tbody>${gastosMes.map(g=>`<tr><td>${fmtDate(g.fecha)}</td><td>${escHtml(g.categoria||'')}</td><td>${escHtml(g.descripcion||'')}</td><td>${escHtml(g.suplidor||'—')}</td><td class="num">${fmt(g.monto)}</td></tr>`).join('')||'<tr><td colspan="5">Sin gastos en este período</td></tr>'}
@@ -14201,10 +14273,9 @@ async function exportarInformeWord(){
   const nombreArchivoInforme='Informe Mensual '+empresa+' '+nombreMesArchivo+' '+ay+'.doc';
   if(logoWord){
     const logoBase64Puro=logoWord.src.split(',')[1]||'';
-    descargarWordConImagenes(html,nombreArchivoInforme,INFORME_CIERRE_CSS,[{cid:'logoFayre',mime:'image/png',base64:logoBase64Puro}]);
-  } else {
-    descargarWord(html,nombreArchivoInforme,INFORME_CIERRE_CSS);
+    imagenesGraficos.push({cid:'logoFayre',mime:'image/png',base64:logoBase64Puro});
   }
+  descargarWordConImagenes(html,nombreArchivoInforme,INFORME_CIERRE_CSS,imagenesGraficos);
 }
 
 // ══ ACTIVOS FIJOS ══
