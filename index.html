@@ -7266,10 +7266,10 @@ function renderGastosVeh(){
           <th style="width:36px"></th>
           <th>Fecha</th>
           <th>Vehículo</th>
+          <th>Chasis</th>
           <th>Suplidor</th>
           <th>Tipo de Gasto</th>
           <th>No. Factura</th>
-          <th>Moneda</th>
           <th>Banco / Cuenta</th>
           <th>M. Factura</th>
           <th>Abonado</th>
@@ -7290,10 +7290,10 @@ function renderGastosVeh(){
             <td style="text-align:center"><input type="radio" name="gveh-sel" onclick="event.stopPropagation();selGVeh('${g.id}',this.closest('tr'))" style="width:15px;height:15px;cursor:pointer;accent-color:var(--blue)"></td>
             <td style="font-size:12px">${fmtDate(g.fecha)}</td>
             <td style="font-size:12px;font-weight:600">${v?escHtml(v.codigo+' '+v.marca+' '+v.modelo):'—'}</td>
+            <td style="font-family:monospace;font-size:11px">${escHtml(v?.vin||'—')}</td>
             <td style="font-size:12px">${escHtml(g.suplidor||'—')}</td>
             <td><span class="badge badge-amber" style="font-size:11px">${escHtml(g._origen==='manual'?(g.descripcion||g.tipo||'—'):g.tipo||'—')}</span>${g.noFactura?`<div style="font-family:monospace;font-size:10px;color:var(--blue);margin-top:2px">${escHtml(g.noFactura)}</div>`:''}</td>
             <td style="font-family:monospace;font-size:11px;color:var(--navy)">${escHtml(g.noFactura||'—')}</td>
-            <td><span class="badge ${esUSD?'badge-blue':'badge-green'}" style="font-size:11px">${g.moneda||'RD$'}</span></td>
             <td style="font-size:12px">${escHtml(g.cuenta||'—')}</td>
             <td style="font-weight:700;color:var(--navy)">${fV(g.montoFactura)}</td>
             <td style="color:var(--green);font-weight:600">${fV(g.montoPagado)}</td>
