@@ -16202,6 +16202,7 @@ window.addEventListener('load', ()=>{
         if(cajaFixed&&typeof fbGuardar==='function')fbGuardar('caja').catch(()=>{});
       })();
       if(typeof fbActivarListeners==='function') fbActivarListeners();
+      if(typeof iniciarMonitorConexion==='function') iniciarMonitorConexion();
       if(btn){btn.textContent='Ingresar al sistema →';btn.disabled=false;}
       // Actualizar indicador Firebase
       const _dot=document.getElementById('fb-dot');
@@ -16637,6 +16638,49 @@ function fbActivarListeners(){
   console.log('✅ Firebase listeners activos — tiempo real habilitado');
 }
 
+// ══ MONITOR DE CONEXIÓN (detecta internet caído o de baja calidad que impide sincronizar) ══
+function iniciarMonitorConexion(){
+  if(window._connMonitorIniciado||!window._fbDB||!window._fbCol)return;
+  window._connMonitorIniciado=true;
+
+  function mostrarBannerConexion(msg){
+    let b=document.getElementById('conn-banner');
+    if(!b){
+      b=document.createElement('div');
+      b.id='conn-banner';
+      b.style.cssText='position:fixed;top:0;left:0;right:0;z-index:99998;background:#dc2626;color:#fff;text-align:center;padding:8px 12px;font-size:13px;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,.25)';
+      document.body.appendChild(b);
+    }
+    b.textContent=msg;
+    b.style.display='block';
+  }
+  function ocultarBannerConexion(){
+    const b=document.getElementById('conn-banner');
+    if(b)b.style.display='none';
+  }
+
+  window.addEventListener('offline',()=>{
+    clearTimeout(window._connMonitorTimer);
+    mostrarBannerConexion('🔴 Sin conexión a internet — viendo datos guardados localmente, pueden faltar cambios recientes');
+  });
+
+  // metadata.fromCache es la señal real de Firestore: se activa tanto sin internet
+  // como con internet de baja calidad que no logra llegar al servidor
+  _fbDB.collection(_fbCol).doc('config').onSnapshot({includeMetadataChanges:true}, snap=>{
+    clearTimeout(window._connMonitorTimer);
+    if(snap.metadata.fromCache){
+      // Esperar unos segundos: al abrir la app siempre hay un primer snapshot de caché
+      window._connMonitorTimer=setTimeout(()=>{
+        mostrarBannerConexion(navigator.onLine
+          ?'🟠 Conexión a internet lenta o inestable — es posible que no veas los últimos cambios'
+          :'🔴 Sin conexión a internet — viendo datos guardados localmente, pueden faltar cambios recientes');
+      },5000);
+    } else {
+      ocultarBannerConexion();
+    }
+  }, err=>console.warn('Monitor de conexión:',err.message));
+}
+
 window.forzarSincronizacion = async function(){
   if(!window._fbActivo){toast('Firebase no está conectado','error');return;}
   const keys=['config','users','vehiculos','clientes','suplidores','ventas','cotizaciones',
@@ -16732,6 +16776,7 @@ window.fbIniciar = async function(){
       })();
       // Activar listeners de tiempo real
       if(typeof fbActivarListeners==='function') fbActivarListeners();
+      if(typeof iniciarMonitorConexion==='function') iniciarMonitorConexion();
       // Iniciar verificador de versión automática
       if(typeof iniciarVerificadorVersion==='function') iniciarVerificadorVersion();
       // Actualizar sidebar con logo de Firebase
