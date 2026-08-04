@@ -2987,7 +2987,7 @@ function renderCaja(){
           <td><span class="badge ${c.tipo==='ENTRADA'?'badge-green':'badge-red'}">${c.tipo==='ENTRADA'?'📥 Entrada':'📤 Salida'}</span></td>
           <td><span class="badge badge-gray" style="font-size:11px">${escHtml(c.categoria||'—')}</span></td>
           <td>${escHtml(c.descripcion||'—')}${c.formaPago==='CHEQUE'&&c.numeroCheque?`<div style="font-size:10px;color:var(--blue);font-weight:600;margin-top:2px">🖊️ Cheque #${escHtml(c.numeroCheque)}${c.nombreCheque?' — '+escHtml(c.nombreCheque):''}</div>`:''}</td>
-          <td style="font-weight:700;color:${c.tipo==='ENTRADA'?'var(--green)':'var(--red)'}">${fmt(c.monto)}</td>
+          <td style="font-weight:700;color:${c.tipo==='ENTRADA'?'var(--green)':'var(--red)'}">${c.moneda==='USD'?'USD '+parseFloat(c.monto||0).toLocaleString('en-US',{minimumFractionDigits:2}):fmt(c.monto)}</td>
           <td style="font-size:12px;color:var(--gray)">${escHtml(c.referencia||'—')}</td>
           <td style="font-size:12px">${escHtml(c.responsable||'—')}</td>
           <td style="display:flex;gap:4px">${(currentUser?.role==='admin'||canDo('editar'))?`<button class="btn btn-secondary btn-sm" onclick="editarCaja(${i})" title="Editar">✏️</button>`:''} ${(currentUser?.role==='admin'||canDo('eliminar'))?`<button class="btn btn-red btn-sm" onclick="eliminarCajaMov(${i})" title="Eliminar">🗑</button>`:''}</td>
@@ -3028,6 +3028,12 @@ function editarCaja(i){
       <div class="form-field"><label>Banco</label><select id="ec-banco" onchange="actualizarCuentasCajaEdit()">${bancoOpts}</select></div>
       <div class="form-field"><label>Cuenta</label><select id="ec-cuenta">${cuentaOpts}</select></div>
     </div>
+    <div class="form-field"><label class="required">Moneda</label>
+      <select id="ec-moneda">
+        <option value="RD$" ${(c.moneda||'RD$')==='RD$'?'selected':''}>RD$ — Pesos</option>
+        <option value="USD" ${c.moneda==='USD'?'selected':''}>USD — Dólares</option>
+      </select>
+    </div>
     <div class="form-field"><label>Forma de Pago</label>
       <select id="ec-forma" data-prev="${c.formaPago&&c.formaPago!=='CHEQUE'?c.formaPago:'EFECTIVO'}" onchange="onFormaPagoChange(this,'ec',true)">
         <option value="EFECTIVO" ${(c.formaPago||'EFECTIVO')==='EFECTIVO'?'selected':''}>Efectivo</option>
@@ -3058,13 +3064,14 @@ async function guardarEditCaja(i){
   const desc=document.getElementById('ec-desc').value.trim();
   const banco=document.getElementById('ec-banco').value;
   const cuenta=document.getElementById('ec-cuenta').value;
+  const moneda=document.getElementById('ec-moneda')?.value||c.moneda||'RD$';
   const formaPago=document.getElementById('ec-forma')?.value||'EFECTIVO';
   const numeroCheque=document.getElementById('ec-numcheque')?.value||'';
   const nombreCheque=document.getElementById('ec-nombrecheque')?.value||'';
   const responsable=document.getElementById('ec-resp')?.value||'';
   if(!fecha||!monto){toast('Fecha y monto son requeridos','error');return;}
   const anterior=DB.caja[i];
-  DB.caja[i]={...c,fecha,tipo,categoria:cat,monto,descripcion:desc,banco,cuenta,referencia:cuenta?banco+' / '+cuenta:c.referencia||'',formaPago,numeroCheque,nombreCheque,responsable};
+  DB.caja[i]={...c,fecha,tipo,categoria:cat,monto,descripcion:desc,banco,cuenta,moneda,referencia:cuenta?banco+' / '+cuenta:c.referencia||'',formaPago,numeroCheque,nombreCheque,responsable};
   try{
     if(!navigator.onLine||!window._fbActivo)throw new Error('sin firebase');
     await fbGuardar('caja');
@@ -11295,12 +11302,13 @@ function confirmarPagoCXP(i){
   DB.gastosVehiculos[i].pagos.push({id:uid(),fecha:fechaPago,monto,cuenta:cuentaPago,nota:notaPago,saldado,cajaId:cajaIdCXPP,formaPago:formaPagoCXPP,numeroCheque:numeroChequeCXPP,
     ...(esUSD&&tasa?{tasa,equivRD,moneda:'USD'}:{})
   });
-  // Registrar en caja — RD$ o USD
+  // Registrar en caja — RD$ o USD (según la moneda real de la cuenta de destino)
   const bancoPagoCXP=document.getElementById('cxpp-banco')?.value||'';
   if(esUSD&&tasa){
+    const cuentaDestinoEsUSD=/USD|Dólares/.test(cuentaPago);
     DB.caja.push({id:cajaIdCXPP,fecha:fechaPago,tipo:'SALIDA',categoria:'CXP USD',
       descripcion:'Pago CXP USD: '+g.descripcion+(g.suplidor?' — '+g.suplidor:'')+' (Tasa: '+tasa.toFixed(2)+')'+(numeroChequeCXPP?` (Cheque #${numeroChequeCXPP})`:''),
-      monto:equivRD,moneda:'USD',banco:bancoPagoCXP,cuenta:cuentaPago,
+      monto:cuentaDestinoEsUSD?monto:equivRD,moneda:cuentaDestinoEsUSD?'USD':'RD$',banco:bancoPagoCXP,cuenta:cuentaPago,
       referencia:bancoPagoCXP&&cuentaPago?bancoPagoCXP+' / '+cuentaPago:cuentaPago,
       formaPago:formaPagoCXPP,numeroCheque:numeroChequeCXPP,responsable:currentUser?.nombre||''});
   } else {
