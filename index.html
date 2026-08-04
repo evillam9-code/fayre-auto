@@ -2653,7 +2653,6 @@ function refreshConsultaCuentasIfActive(){
 function renderCaja(){
   const mes=document.getElementById('caja-mes')?.value||today().slice(0,7);
   const tab=document.getElementById('caja-tab')?.value||'TODO';
-  const vista=document.getElementById('caja-vista')?.value||'MES';
   const modoFecha=document.getElementById('caja-modo-fecha')?.value||'MES';
   const fechaDesde=document.getElementById('caja-desde')?.value||'';
   const fechaHasta=document.getElementById('caja-hasta')?.value||'';
@@ -2683,9 +2682,11 @@ function renderCaja(){
   const balUSD=entradasUSD-salidasUSD;
   const totalGeneralPeriodo=balRD+(balUSD*tasa);
 
-  // Saldo ACUMULADO por cuenta (todos los movimientos históricos)
+  // Saldo ACUMULADO por cuenta — histórico hasta la fecha de corte del período seleccionado
+  // (si eliges Julio, es el acumulado al 31 de julio; no ignora el filtro de mes/rango)
+  const fechaCorteAcum=modoFecha==='RANGO'?(fechaHasta||today()):ultimoDiaMes(mes);
   const cuentasAcum={};
-  DB.caja.forEach(c=>{
+  DB.caja.filter(c=>c.fecha&&c.fecha<=fechaCorteAcum).forEach(c=>{
     const banco=normalizarBanco(c.banco)||'Sin banco';
     const cuenta=c.cuenta||'Sin cuenta';
     const moneda=c.moneda||'RD$';
@@ -2705,15 +2706,6 @@ function renderCaja(){
     if(!cuentasPeriodo[key])cuentasPeriodo[key]={banco,cuenta,moneda,entradas:0,salidas:0};
     if(c.tipo==='ENTRADA')cuentasPeriodo[key].entradas+=parseFloat(c.monto||0);
     else cuentasPeriodo[key].salidas+=parseFloat(c.monto||0);
-  });
-
-  const cuentasData=vista==='ACUMULADO'?cuentasAcum:cuentasPeriodo;
-
-  // Agrupar por banco para las tarjetas
-  const bancoGroups={};
-  Object.values(cuentasData).forEach(c=>{
-    if(!bancoGroups[c.banco])bancoGroups[c.banco]=[];
-    bancoGroups[c.banco].push(c);
   });
 
   // Totales acumulados para header de saldo total
@@ -2776,21 +2768,21 @@ function renderCaja(){
     return b;
   }
 
-  // Merge known accounts with data, always keeping all accounts visible
+  // Merge known accounts con AMBOS datos — período y acumulado a la vez (sin selector que oculte uno u otro)
   const allCuentasData={};
   ALL_ACCOUNTS.forEach(a=>{
     const key=`${a.banco}||${a.cuenta}||${a.moneda}`;
-    allCuentasData[key]={banco:a.banco,cuenta:a.cuenta,moneda:a.moneda,entradas:0,salidas:0,sinMovs:true};
+    allCuentasData[key]={banco:a.banco,cuenta:a.cuenta,moneda:a.moneda,entP:0,salP:0,entA:0,salA:0};
   });
-  // Overlay with actual data
-  Object.entries(cuentasData).forEach(([key,val])=>{
-    if(allCuentasData[key]){
-      allCuentasData[key].entradas=val.entradas;
-      allCuentasData[key].salidas=val.salidas;
-      allCuentasData[key].sinMovs=(val.entradas===0&&val.salidas===0);
-    } else {
-      allCuentasData[key]={...val,sinMovs:false};
-    }
+  Object.entries(cuentasPeriodo).forEach(([key,val])=>{
+    if(!allCuentasData[key])allCuentasData[key]={banco:val.banco,cuenta:val.cuenta,moneda:val.moneda,entP:0,salP:0,entA:0,salA:0};
+    allCuentasData[key].entP=val.entradas;
+    allCuentasData[key].salP=val.salidas;
+  });
+  Object.entries(cuentasAcum).forEach(([key,val])=>{
+    if(!allCuentasData[key])allCuentasData[key]={banco:val.banco,cuenta:val.cuenta,moneda:val.moneda,entP:0,salP:0,entA:0,salA:0};
+    allCuentasData[key].entA=val.entradas;
+    allCuentasData[key].salA=val.salidas;
   });
   // Group by banco
   const allBancoGroups={};
@@ -2801,28 +2793,30 @@ function renderCaja(){
 
   const bancoCards=Object.entries(allBancoGroups).map(([banco,cuentas])=>{
     const cuentasHTML=cuentas.map(c=>{
-      const saldo=c.entradas-c.salidas;
+      const saldoP=c.entP-c.salP;
+      const saldoA=c.entA-c.salA;
       const isUSD=c.moneda==='USD';
-      const sinMovs=c.sinMovs&&saldo===0;
+      const sinMovs=c.entP===0&&c.salP===0;
       return `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:${sinMovs?'rgba(100,116,139,.06)':'#fff'};border-radius:8px;border:1px solid ${sinMovs?'rgba(100,116,139,.2)':'var(--gray3)'};margin-bottom:6px;opacity:${sinMovs?'.65':'1'}">
         <div>
           <div style="font-size:13px;font-weight:700;color:${sinMovs?'var(--gray)':'var(--navy)'}">${escHtml(c.cuenta)}</div>
-          <div style="font-size:11px;color:var(--gray);margin-top:2px">${isUSD?'🇺🇸 Dólares':'🇩🇴 Pesos'} · Ent: ${isUSD?fmtUSD(c.entradas):fmt(c.entradas)} · Sal: ${isUSD?fmtUSD(c.salidas):fmt(c.salidas)}</div>
-          ${isUSD?`<div style="font-size:11px;color:var(--gray);margin-top:1px">≈ ${fmt(saldo*tasa)} al cambio</div>`:''}
+          <div style="font-size:11px;color:var(--gray);margin-top:2px">${isUSD?'🇺🇸 Dólares':'🇩🇴 Pesos'} · Ent: ${isUSD?fmtUSD(c.entP):fmt(c.entP)} · Sal: ${isUSD?fmtUSD(c.salP):fmt(c.salP)}</div>
           ${sinMovs?'<div style="font-size:10px;color:var(--gray);margin-top:2px;font-style:italic">Sin movimientos en este período</div>':''}
         </div>
         <div style="text-align:right">
-          <div style="font-size:18px;font-weight:900;color:${sinMovs?'var(--gray)':saldo>=0?'var(--green)':'var(--red)'}">${isUSD?fmtUSD(saldo):fmt(saldo)}</div>
-          <div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--gray)">Saldo ${vista==='ACUMULADO'?'acumulado':periodoLabel}</div>
+          <div style="font-size:15px;font-weight:900;color:${saldoP>=0?'var(--green)':'var(--red)'}">${isUSD?fmtUSD(saldoP):fmt(saldoP)}</div>
+          <div style="font-size:9px;font-weight:600;text-transform:uppercase;color:var(--gray);margin-bottom:4px">Saldo ${periodoLabel}</div>
+          <div style="font-size:15px;font-weight:900;color:${saldoA>=0?'var(--green)':'var(--red)'}">${isUSD?fmtUSD(saldoA):fmt(saldoA)}</div>
+          <div style="font-size:9px;font-weight:600;text-transform:uppercase;color:var(--gray)">Acumulado al ${fmtDate(fechaCorteAcum)}</div>
         </div>
       </div>`;
     }).join('');
-    const totRD=cuentas.filter(c=>c.moneda==='RD$').reduce((a,c)=>a+(c.entradas-c.salidas),0);
-    const totUSD=cuentas.filter(c=>c.moneda==='USD').reduce((a,c)=>a+(c.entradas-c.salidas),0);
-    const totEntRD=cuentas.filter(c=>c.moneda==='RD$').reduce((a,c)=>a+c.entradas,0);
-    const totSalRD=cuentas.filter(c=>c.moneda==='RD$').reduce((a,c)=>a+c.salidas,0);
-    const totEntUSD=cuentas.filter(c=>c.moneda==='USD').reduce((a,c)=>a+c.entradas,0);
-    const totSalUSD=cuentas.filter(c=>c.moneda==='USD').reduce((a,c)=>a+c.salidas,0);
+    const totRD=cuentas.filter(c=>c.moneda==='RD$').reduce((a,c)=>a+(c.entP-c.salP),0);
+    const totUSD=cuentas.filter(c=>c.moneda==='USD').reduce((a,c)=>a+(c.entP-c.salP),0);
+    const totEntRD=cuentas.filter(c=>c.moneda==='RD$').reduce((a,c)=>a+c.entP,0);
+    const totSalRD=cuentas.filter(c=>c.moneda==='RD$').reduce((a,c)=>a+c.salP,0);
+    const totEntUSD=cuentas.filter(c=>c.moneda==='USD').reduce((a,c)=>a+c.entP,0);
+    const totSalUSD=cuentas.filter(c=>c.moneda==='USD').reduce((a,c)=>a+c.salP,0);
     return `<div class="card" style="border-top:3px solid var(--blue);margin-bottom:14px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
         <div class="card-title" style="margin:0;padding:0;border:none">🏦 ${escHtml(banco)}</div>
@@ -2921,7 +2915,7 @@ function renderCaja(){
 
     <!-- Saldo acumulado total de todas las cuentas -->
     <div style="background:var(--navy2);border-radius:10px;padding:14px 18px;margin-bottom:14px;border:1px solid #334155">
-      <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#64748b;letter-spacing:.8px;margin-bottom:10px">🏦 SALDO ACUMULADO HISTÓRICO — TODAS LAS CUENTAS</div>
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#64748b;letter-spacing:.8px;margin-bottom:10px">🏦 SALDO ACUMULADO — TODAS LAS CUENTAS (AL ${fmtDate(fechaCorteAcum).toUpperCase()})</div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:10px;text-align:center">
         <div style="background:rgba(74,222,128,.10);border-radius:8px;padding:10px 6px">
           <div style="font-size:9px;font-weight:700;text-transform:uppercase;color:#4ade80;letter-spacing:.5px;margin-bottom:4px">Saldo RD$</div>
@@ -2948,22 +2942,10 @@ function renderCaja(){
       </div>
     </div>
 
-    <!-- Selector de vista por cuentas -->
+    <!-- Saldo por cuentas bancarias: período y acumulado, siempre juntos, igual que Consulta de Cuentas -->
     <div class="card" style="margin-bottom:14px;padding:14px 16px">
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
-        <div style="font-size:14px;font-weight:700">🏦 Saldo por Cuentas Bancarias</div>
-        <div style="display:flex;gap:8px;align-items:center">
-          <select id="caja-vista" onchange="renderCaja()" style="padding:6px 12px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
-            <option value="MES" ${vista==='MES'?'selected':''}>Movimientos del período</option>
-            <option value="ACUMULADO" ${vista==='ACUMULADO'?'selected':''}>Saldo acumulado total</option>
-          </select>
-        </div>
-      </div>
-      <div style="font-size:11px;color:var(--gray);margin-top:6px">
-        ${vista==='ACUMULADO'
-          ?'Mostrando el saldo acumulado de todos los movimientos históricos por cuenta.'
-          :`Mostrando solo los movimientos de: ${periodoLabel}.`}
-      </div>
+      <div style="font-size:14px;font-weight:700">🏦 Saldo por Cuentas Bancarias</div>
+      <div style="font-size:11px;color:var(--gray);margin-top:6px">Cada cuenta muestra su movimiento de ${periodoLabel} y su saldo acumulado al ${fmtDate(fechaCorteAcum)}.</div>
     </div>
 
     <!-- Tarjetas por banco/cuenta -->
@@ -11363,6 +11345,7 @@ function editarPagoGastoVeh(gid,pi){
   const g=(DB.gastosVehiculos||[]).find(x=>x.id===gid);if(!g)return;
   const pagosArr=asegurarPagosGastoVeh(g);
   const p=pagosArr[pi];if(!p)return;
+  const esUSDEPGV=(g.moneda||'RD$')==='USD';
   const bcs=DB.config.bancoCuentas||[];
   const bancoAct=p.banco||(bcs[0]?bcs[0].banco:'');
   const bancoOpts=bcs.map(b=>`<option value="${escHtml(b.banco)}" ${b.banco===bancoAct?'selected':''}>${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos</option>';
@@ -11378,6 +11361,7 @@ function editarPagoGastoVeh(gid,pi){
       <div class="form-field"><label>Banco</label><select id="epgv-banco" onchange="actualizarCuentasEditPagoGV()">${bancoOpts}</select></div>
       <div class="form-field"><label>Cuenta</label><select id="epgv-cuenta">${cuentaOpts}</select></div>
     </div>
+    <div class="form-field"><label>Moneda</label><input type="text" readonly style="background:var(--gray2)" value="${esUSDEPGV?'USD — Dólares':'RD$ — Pesos'}"></div>
     <div class="form-field"><label>Nota</label><input type="text" id="epgv-nota" value="${escHtml(p.nota||'')}"></div>`,
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
      <button class="btn btn-green" onclick="guardarEditPagoGastoVeh()">💾 Guardar</button>`);
@@ -11407,7 +11391,7 @@ function guardarEditPagoGastoVeh(){
   p.fecha=fechaNueva;p.monto=montoNuevo;p.banco=bancoNuevo;p.cuenta=cuentaNueva;p.nota=document.getElementById('epgv-nota')?.value||'';
   const ci=buscarCajaPorId(p.cajaId);
   if(ci>=0){
-    DB.caja[ci].fecha=fechaNueva;DB.caja[ci].monto=montoNuevo;
+    DB.caja[ci].fecha=fechaNueva;DB.caja[ci].monto=montoNuevo;DB.caja[ci].moneda=g.moneda||'RD$';
     DB.caja[ci].banco=normalizarBancoGlobal(bancoNuevo);DB.caja[ci].cuenta=limpiarCuenta(cuentaNueva);
     DB.caja[ci].referencia=bancoNuevo&&cuentaNueva?bancoNuevo+' / '+cuentaNueva:cuentaNueva;
   } else {
@@ -13055,6 +13039,7 @@ function editarPagoCXC(cxcId,pagoIndex){
       <div class="form-field"><label>Banco</label><select id="epc-banco" onchange="actualizarCuentasEditPagoCXC()">${bancoOpts}</select></div>
       <div class="form-field"><label>Cuenta Bancaria</label><select id="epc-cuenta">${cuentaOpts}</select></div>
     </div>
+    <div class="form-field"><label>Moneda</label><input type="text" readonly style="background:var(--gray2)" value="${esUSD?'USD — Dólares':'RD$ — Pesos'}"></div>
     <div class="form-field"><label>Nota</label><input type="text" id="epc-nota" value="${escHtml(p.nota||'')}" placeholder="Descripción del cobro"></div>`,
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
      <button class="btn btn-green" onclick="guardarEditPagoCXC()">💾 Guardar Cambios</button>`);
@@ -13099,11 +13084,15 @@ function guardarEditPagoCXC(){
     }
   }
 
+  // Localizar el movimiento de Caja vinculado ANTES de sobrescribir fecha/monto del pago
+  // (la búsqueda de respaldo para pagos antiguos sin cajaId compara por fecha+monto contra
+  // el valor ORIGINAL; si se busca después de sobrescribir, nunca lo encuentra y duplica el movimiento)
+  let ci=buscarCajaDePagoCXC(x,p);
+
   // Actualizar el pago dentro del historial
   p.fecha=fechaNueva;p.monto=montoNuevo;p.banco=bancoNuevo;p.cuenta=cuentaNueva;p.nota=notaNueva;p.saldado=saldado;
 
   // Sincronizar el movimiento de Caja vinculado
-  let ci=buscarCajaDePagoCXC(x,p);
   if(ci<0){ // no existe movimiento vinculado (fue borrado manualmente, o es un pago histórico sin caja) → crearlo
     const nuevoCajaId=p.cajaId||uid();
     DB.caja.push({id:nuevoCajaId,fecha:fechaNueva,tipo:'ENTRADA',categoria:'Cobro CxC',descripcion:`Cobro CxC: ${x.cliente} — ${x.factura}`,monto:montoNuevo,moneda:x.moneda||'RD$',banco:normalizarBancoGlobal(bancoNuevo),cuenta:limpiarCuenta(cuentaNueva),referencia:bancoNuevo?(bancoNuevo+' / '+cuentaNueva):cuentaNueva,responsable:currentUser?.nombre||''});
@@ -13111,6 +13100,7 @@ function guardarEditPagoCXC(){
   } else if(ci>=0){
     DB.caja[ci].fecha=fechaNueva;
     DB.caja[ci].monto=montoNuevo;
+    DB.caja[ci].moneda=x.moneda||'RD$';
     DB.caja[ci].banco=normalizarBancoGlobal(bancoNuevo);
     DB.caja[ci].cuenta=limpiarCuenta(cuentaNueva);
     DB.caja[ci].referencia=bancoNuevo?(bancoNuevo+' / '+cuentaNueva):cuentaNueva;
