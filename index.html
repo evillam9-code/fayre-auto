@@ -2793,7 +2793,6 @@ function renderCaja(){
 
   const bancoCards=Object.entries(allBancoGroups).map(([banco,cuentas])=>{
     const cuentasHTML=cuentas.map(c=>{
-      const saldoP=c.entP-c.salP;
       const saldoA=c.entA-c.salA;
       const isUSD=c.moneda==='USD';
       const sinMovs=c.entP===0&&c.salP===0;
@@ -2804,10 +2803,8 @@ function renderCaja(){
           ${sinMovs?'<div style="font-size:10px;color:var(--gray);margin-top:2px;font-style:italic">Sin movimientos en este período</div>':''}
         </div>
         <div style="text-align:right">
-          <div style="font-size:15px;font-weight:900;color:${saldoP>=0?'var(--green)':'var(--red)'}">${isUSD?fmtUSD(saldoP):fmt(saldoP)}</div>
-          <div style="font-size:9px;font-weight:600;text-transform:uppercase;color:var(--gray);margin-bottom:4px">Saldo ${periodoLabel}</div>
-          <div style="font-size:15px;font-weight:900;color:${saldoA>=0?'var(--green)':'var(--red)'}">${isUSD?fmtUSD(saldoA):fmt(saldoA)}</div>
-          <div style="font-size:9px;font-weight:600;text-transform:uppercase;color:var(--gray)">Acumulado al ${fmtDate(fechaCorteAcum)}</div>
+          <div style="font-size:18px;font-weight:900;color:${saldoA>=0?'var(--green)':'var(--red)'}">${isUSD?fmtUSD(saldoA):fmt(saldoA)}</div>
+          <div style="font-size:9px;font-weight:600;text-transform:uppercase;color:var(--gray)">Saldo al ${fmtDate(fechaCorteAcum)}</div>
         </div>
       </div>`;
     }).join('');
@@ -2942,10 +2939,10 @@ function renderCaja(){
       </div>
     </div>
 
-    <!-- Saldo por cuentas bancarias: período y acumulado, siempre juntos, igual que Consulta de Cuentas -->
+    <!-- Saldo por cuentas bancarias: un solo monto (saldo real acumulado a la fecha), igual que Consulta de Cuentas -->
     <div class="card" style="margin-bottom:14px;padding:14px 16px">
       <div style="font-size:14px;font-weight:700">🏦 Saldo por Cuentas Bancarias</div>
-      <div style="font-size:11px;color:var(--gray);margin-top:6px">Cada cuenta muestra su movimiento de ${periodoLabel} y su saldo acumulado al ${fmtDate(fechaCorteAcum)}.</div>
+      <div style="font-size:11px;color:var(--gray);margin-top:6px">Saldo real de cada cuenta al ${fmtDate(fechaCorteAcum)} — coincide con Consulta de Cuentas para el mismo período.</div>
     </div>
 
     <!-- Tarjetas por banco/cuenta -->
