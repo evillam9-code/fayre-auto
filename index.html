@@ -4330,10 +4330,13 @@ function renderInformes(){
   const cajaSUSD=cajaFiltInf.filter(c=>c.tipo==='SALIDA'&&c.moneda==='USD').reduce((a,c)=>a+parseFloat(c.monto||0),0);
   const tasa=parseFloat(DB.config.tasaCambio||60);
   const fmtUSD=n=>'USD '+parseFloat(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
-  // Resumen por cuenta en el mes
+  // Resumen por cuenta en el mes — normaliza banco/cuenta para no duplicar la misma
+  // cuenta en dos filas cuando el nombre del banco quedó guardado con distinta mayúscula
   const infCuentas={};
   cajaFiltInf.forEach(c=>{
-    const key=(c.banco&&c.cuenta)?`${c.banco} / ${c.cuenta}`:(c.banco||'Sin cuenta');
+    const bancoInf=normalizarBancoGlobal(c.banco||'');
+    const cuentaInf=limpiarCuenta(c.cuenta||'');
+    const key=(bancoInf&&cuentaInf)?`${bancoInf} / ${cuentaInf}`:(bancoInf||'Sin cuenta');
     const mon=c.moneda||'RD$';
     if(!infCuentas[key])infCuentas[key]={entRD:0,salRD:0,entUSD:0,salUSD:0};
     if(c.tipo==='ENTRADA'){if(mon==='USD')infCuentas[key].entUSD+=parseFloat(c.monto||0);else infCuentas[key].entRD+=parseFloat(c.monto||0);}
