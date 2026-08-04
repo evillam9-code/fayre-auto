@@ -3171,14 +3171,32 @@ function moduloOrigenCaja(categoria){
   if(c.includes('cuadre')||c.includes('ajuste')||c.includes('mov. cta'))return 'Ajuste / Cuadre de Caja';
   return 'Caja (Manual)';
 }
+function ultimoDiaMes(mes){
+  const [a,m]=mes.split('-').map(Number);
+  return `${mes}-${String(new Date(a,m,0).getDate()).padStart(2,'0')}`;
+}
+function nombreMesEs(mes){
+  const [a,m]=mes.split('-');
+  return `${['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][parseInt(m)-1]} ${a}`;
+}
 function renderConsultaCuentas(){
   const bcs=DB.config.bancoCuentas||[];
   const bancoSel=document.getElementById('cc-banco')?.value||(bcs[0]?bcs[0].banco:'');
   const bancoObj=bcs.find(b=>b.banco===bancoSel)||bcs[0];
   const primeraCuenta=bancoObj&&bancoObj.cuentas&&bancoObj.cuentas[0]?(bancoObj.cuentas[0].tipo+' — '+bancoObj.cuentas[0].numero):'';
   const cuentaSel=document.getElementById('cc-cuenta')?.value||primeraCuenta;
-  const desde=document.getElementById('cc-desde')?.value||'';
-  const hasta=document.getElementById('cc-hasta')?.value||'';
+  const modoFecha=document.getElementById('cc-modo-fecha')?.value||'RANGO';
+  const mes=document.getElementById('cc-mes')?.value||today().slice(0,7);
+  let desde,hasta,periodoLabel;
+  if(modoFecha==='MES'){
+    desde=mes+'-01';hasta=ultimoDiaMes(mes);
+    periodoLabel=nombreMesEs(mes);
+  } else {
+    desde=document.getElementById('cc-desde')?.value||'';
+    hasta=document.getElementById('cc-hasta')?.value||'';
+    periodoLabel=desde||hasta?`${desde?fmtDate(desde):'Inicio'} al ${hasta?fmtDate(hasta):'Hoy'}`:'Todo el historial';
+  }
+  const busqueda=(document.getElementById('cc-buscar')?.value||'').trim().toLowerCase();
 
   const bancoOpts=bcs.map(b=>`<option value="${escHtml(b.banco)}" ${b.banco===bancoSel?'selected':''}>${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos configurados</option>';
   const cuentaOpts=(bancoObj?.cuentas||[]).map(c=>{const v=c.tipo+' — '+c.numero;return`<option value="${escHtml(v)}" ${v===cuentaSel?'selected':''}>${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('')||'<option value="">Sin cuentas</option>';
@@ -3187,6 +3205,9 @@ function renderConsultaCuentas(){
   if(desde)movs=movs.filter(c=>c.fecha&&c.fecha>=desde);
   if(hasta)movs=movs.filter(c=>c.fecha&&c.fecha<=hasta);
   movs=movs.slice().sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
+  if(busqueda){
+    movs=movs.filter(m=>[m.descripcion,m.categoria,m.referencia,m.responsable,m.numeroCheque,m.nombreCheque,fmtDate(m.fecha)].filter(Boolean).join(' ').toLowerCase().includes(busqueda));
+  }
 
   const cuentaInfo=(bancoObj?.cuentas||[]).find(c=>(c.tipo+' — '+c.numero)===cuentaSel);
   const esUSD=cuentaInfo?(cuentaInfo.tipo.includes('USD')||cuentaInfo.tipo.includes('Dólares')):false;
@@ -3195,6 +3216,13 @@ function renderConsultaCuentas(){
   const entradas=movs.filter(m=>m.tipo==='ENTRADA').reduce((a,m)=>a+parseFloat(m.monto||0),0);
   const salidas=movs.filter(m=>m.tipo==='SALIDA').reduce((a,m)=>a+parseFloat(m.monto||0),0);
   const saldo=entradas-salidas;
+
+  // Saldo acumulado histórico de la cuenta hasta la fecha de corte (ignora "Desde" y la búsqueda)
+  const fechaCorte=hasta||today();
+  const movsAcum=DB.caja.filter(c=>normalizarBancoGlobal(c.banco)===normalizarBancoGlobal(bancoSel)&&limpiarCuenta(c.cuenta||'')===limpiarCuenta(cuentaSel)&&c.fecha&&c.fecha<=fechaCorte);
+  const entradasAcum=movsAcum.filter(m=>m.tipo==='ENTRADA').reduce((a,m)=>a+parseFloat(m.monto||0),0);
+  const salidasAcum=movsAcum.filter(m=>m.tipo==='SALIDA').reduce((a,m)=>a+parseFloat(m.monto||0),0);
+  const saldoAcumulado=entradasAcum-salidasAcum;
 
   document.getElementById('page-consultaCuentas').innerHTML=`
     <div class="page-header">
@@ -3205,18 +3233,33 @@ function renderConsultaCuentas(){
       </div>
     </div>
     <div class="card" style="margin-bottom:14px">
-      <div class="form-row" style="grid-template-columns:repeat(4,1fr)">
+      <div class="form-row" style="grid-template-columns:repeat(3,1fr)">
         <div class="form-field"><label>Banco</label><select id="cc-banco" onchange="renderConsultaCuentas()">${bancoOpts}</select></div>
         <div class="form-field"><label>Cuenta</label><select id="cc-cuenta" onchange="renderConsultaCuentas()">${cuentaOpts}</select></div>
+        <div class="form-field"><label>Filtrar por</label>
+          <select id="cc-modo-fecha" onchange="renderConsultaCuentas()">
+            <option value="RANGO" ${modoFecha==='RANGO'?'selected':''}>Rango de fechas</option>
+            <option value="MES" ${modoFecha==='MES'?'selected':''}>Mes específico</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row" style="grid-template-columns:repeat(3,1fr);margin-top:10px">
+        ${modoFecha==='MES'?`
+        <div class="form-field"><label>Mes</label><input type="month" id="cc-mes" value="${mes}" onchange="renderConsultaCuentas()"></div>
+        <input type="hidden" id="cc-desde" value="${desde}"><input type="hidden" id="cc-hasta" value="${hasta}">
+        `:`
         <div class="form-field"><label>Desde</label><input type="date" id="cc-desde" value="${desde}" onchange="renderConsultaCuentas()"></div>
         <div class="form-field"><label>Hasta</label><input type="date" id="cc-hasta" value="${hasta}" onchange="renderConsultaCuentas()"></div>
+        `}
+        <div class="form-field"><label>🔍 Buscar</label><input class="search-input" id="cc-buscar" value="${escHtml(busqueda)}" placeholder="Descripción, referencia, responsable..." oninput="renderConsultaCuentas()"></div>
       </div>
-      <div style="font-size:11px;color:var(--gray);margin-top:2px">${desde||hasta?`Mostrando movimientos ${desde?'desde '+fmtDate(desde)+' ':''}${hasta?'hasta '+fmtDate(hasta):''}`:'Mostrando todo el historial disponible para esta cuenta.'}</div>
+      <div style="font-size:11px;color:var(--gray);margin-top:8px">Mostrando movimientos de: <b>${periodoLabel}</b>${busqueda?` — filtrado por texto "${escHtml(busqueda)}" (${movs.length} resultado${movs.length===1?'':'s'})`:''}</div>
     </div>
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px">
-      <div class="card" style="text-align:center;background:var(--green2);margin-bottom:0"><div style="font-size:10px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:.5px">Total Entradas</div><div style="font-size:20px;font-weight:900;color:var(--green)">${fV(entradas)}</div></div>
-      <div class="card" style="text-align:center;background:var(--red2);margin-bottom:0"><div style="font-size:10px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:.5px">Total Salidas</div><div style="font-size:20px;font-weight:900;color:var(--red)">${fV(salidas)}</div></div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px">
+      <div class="card" style="text-align:center;background:var(--green2);margin-bottom:0"><div style="font-size:10px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:.5px">Entradas del Período</div><div style="font-size:20px;font-weight:900;color:var(--green)">${fV(entradas)}</div></div>
+      <div class="card" style="text-align:center;background:var(--red2);margin-bottom:0"><div style="font-size:10px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:.5px">Salidas del Período</div><div style="font-size:20px;font-weight:900;color:var(--red)">${fV(salidas)}</div></div>
       <div class="card" style="text-align:center;background:${saldo>=0?'var(--green2)':'var(--red2)'};margin-bottom:0"><div style="font-size:10px;font-weight:700;color:${saldo>=0?'var(--green)':'var(--red)'};text-transform:uppercase;letter-spacing:.5px">Saldo del Período</div><div style="font-size:20px;font-weight:900;color:${saldo>=0?'var(--green)':'var(--red)'}">${fV(saldo)}</div></div>
+      <div class="card" style="text-align:center;background:${saldoAcumulado>=0?'var(--green2)':'var(--red2)'};margin-bottom:0"><div style="font-size:10px;font-weight:700;color:${saldoAcumulado>=0?'var(--green)':'var(--red)'};text-transform:uppercase;letter-spacing:.5px">Acumulado al ${fmtDate(fechaCorte)}</div><div style="font-size:20px;font-weight:900;color:${saldoAcumulado>=0?'var(--green)':'var(--red)'}">${fV(saldoAcumulado)}</div></div>
     </div>
     <div class="card">
       <div class="table-wrap"><table id="cc-tbl">
@@ -3235,8 +3278,10 @@ function exportarConsultaCuentasPDF(){
   const bcs=DB.config.bancoCuentas||[];
   const bancoSel=document.getElementById('cc-banco')?.value||'';
   const cuentaSel=document.getElementById('cc-cuenta')?.value||'';
+  const modoFecha=document.getElementById('cc-modo-fecha')?.value||'RANGO';
   const desde=document.getElementById('cc-desde')?.value||'';
   const hasta=document.getElementById('cc-hasta')?.value||'';
+  const busqueda=(document.getElementById('cc-buscar')?.value||'').trim().toLowerCase();
   const bancoObj=bcs.find(b=>b.banco===bancoSel);
   const cuentaInfo=(bancoObj?.cuentas||[]).find(c=>(c.tipo+' — '+c.numero)===cuentaSel);
   const moneda=cuentaInfo?(cuentaInfo.tipo.includes('USD')||cuentaInfo.tipo.includes('Dólares')?'USD':'RD$'):'RD$';
@@ -3247,10 +3292,18 @@ function exportarConsultaCuentasPDF(){
   if(desde)movs=movs.filter(c=>c.fecha&&c.fecha>=desde);
   if(hasta)movs=movs.filter(c=>c.fecha&&c.fecha<=hasta);
   movs=movs.slice().sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
+  if(busqueda){
+    movs=movs.filter(m=>[m.descripcion,m.categoria,m.referencia,m.responsable,m.numeroCheque,m.nombreCheque,fmtDate(m.fecha)].filter(Boolean).join(' ').toLowerCase().includes(busqueda));
+  }
   const entradas=movs.filter(m=>m.tipo==='ENTRADA').reduce((a,m)=>a+parseFloat(m.monto||0),0);
   const salidas=movs.filter(m=>m.tipo==='SALIDA').reduce((a,m)=>a+parseFloat(m.monto||0),0);
   const saldo=entradas-salidas;
-  const periodoLabel=desde||hasta?`${desde?fmtDate(desde):'Inicio'} al ${hasta?fmtDate(hasta):'Hoy'}`:'Todo el historial';
+  const fechaCorte=hasta||today();
+  const movsAcum=DB.caja.filter(c=>normalizarBancoGlobal(c.banco)===normalizarBancoGlobal(bancoSel)&&limpiarCuenta(c.cuenta||'')===limpiarCuenta(cuentaSel)&&c.fecha&&c.fecha<=fechaCorte);
+  const entradasAcum=movsAcum.filter(m=>m.tipo==='ENTRADA').reduce((a,m)=>a+parseFloat(m.monto||0),0);
+  const salidasAcum=movsAcum.filter(m=>m.tipo==='SALIDA').reduce((a,m)=>a+parseFloat(m.monto||0),0);
+  const saldoAcumulado=entradasAcum-salidasAcum;
+  const periodoLabel=modoFecha==='MES'&&desde?nombreMesEs(desde.slice(0,7)):(desde||hasta?`${desde?fmtDate(desde):'Inicio'} al ${hasta?fmtDate(hasta):'Hoy'}`:'Todo el historial');
   const empresa=DB.config.empresa||'DealerSystem';
 
   const win=window.open('','_blank','width=900,height=650');
@@ -3272,7 +3325,7 @@ function exportarConsultaCuentasPDF(){
   .ent{color:#16a34a;font-weight:700}.sal{color:#dc2626;font-weight:700}
   @media print{button{display:none}}</style></head><body>
   <div class="hdr">
-    <div>${DB.config.logoData?`<img src="${DB.config.logoData}" style="max-height:46px;margin-bottom:6px;display:block">`:''}<h2>${escHtml(empresa)}</h2><p>Estado de cuenta — Período: ${periodoLabel}</p></div>
+    <div>${DB.config.logoData?`<img src="${DB.config.logoData}" style="max-height:46px;margin-bottom:6px;display:block">`:''}<h2>${escHtml(empresa)}</h2><p>Estado de cuenta — Período: ${periodoLabel}${busqueda?` — Búsqueda: "${escHtml(busqueda)}"`:''}</p></div>
     <div style="text-align:right;font-size:11px;color:#6b7280">Fecha de impresión: ${fmtDate(today())}<br>Total movimientos: ${movs.length}</div>
   </div>
   <div class="cuenta-box">
@@ -3285,6 +3338,7 @@ function exportarConsultaCuentasPDF(){
     <div class="res-box"><div class="res-label">Total Entradas</div><div class="res-val" style="color:#16a34a">${fV(entradas)}</div></div>
     <div class="res-box"><div class="res-label">Total Salidas</div><div class="res-val" style="color:#dc2626">${fV(salidas)}</div></div>
     <div class="res-box"><div class="res-label">Saldo</div><div class="res-val" style="color:${saldo>=0?'#16a34a':'#dc2626'}">${fV(saldo)}</div></div>
+    <div class="res-box"><div class="res-label">Acumulado al ${fmtDate(fechaCorte)}</div><div class="res-val" style="color:${saldoAcumulado>=0?'#16a34a':'#dc2626'}">${fV(saldoAcumulado)}</div></div>
   </div>
   <table><thead><tr><th>Fecha</th><th>Módulo de Origen</th><th>Descripción</th><th>Tipo</th><th>Monto</th></tr></thead>
   <tbody>${movs.map(m=>`<tr>
