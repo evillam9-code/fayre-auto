@@ -11460,14 +11460,30 @@ function confirmarPagoCXP(i){
   renderCXP();
 }
 
+// Busca un registro de CxP en cualquiera de sus dos orígenes (Gastos de Vehículo automático,
+// o CXP Manual). Centraliza la búsqueda para que Historial/Editar/Eliminar pago funcionen
+// igual sin importar de dónde vino el registro — antes solo buscaban en gastosVehiculos y
+// por eso el historial no abría para las CXP Manual (quedaba "en blanco" al hacer clic).
+function _hallarRegCXP(gid){
+  let g=(DB.gastosVehiculos||[]).find(x=>x.id===gid);
+  if(g)return{g,col:'gastosVehiculos'};
+  g=(DB.cxp||[]).find(x=>x.id===gid);
+  if(g)return{g,col:'cxp'};
+  return null;
+}
+function imprimirReciboPagoCXPById(gid,pago){
+  const r=_hallarRegCXP(gid);if(!r)return;
+  imprimirReciboPagoCXP(r.g,pago);
+}
 function verHistorialCXP(gid){
-  const g=(DB.gastosVehiculos||[]).find(x=>x.id===gid);if(!g)return;
+  const r=_hallarRegCXP(gid);if(!r)return;
+  const g=r.g;
   const v=DB.vehiculos.find(x=>x.id===g.vehiculoId);
   const esUSD=g.moneda==='USD';
   const fV=(n)=>esUSD?'$'+parseFloat(n||0).toLocaleString('en-US',{minimumFractionDigits:2})+' USD':fmt(n);
   const puedeEditarPagoGV=currentUser?.role==='admin'||canDo('editar')||currentUser?.permisos?.editarGastosVeh;
   const puedeBorrarPagoGV=currentUser?.role==='admin'||canDo('eliminar')||currentUser?.permisos?.borrarGastosVeh;
-  const pagosGVHist=asegurarPagosGastoVeh(g);
+  const pagosGVHist=r.col==='cxp'?asegurarPagosCXPManual(g):asegurarPagosGastoVeh(g);
   const rows=pagosGVHist.map((p,pi)=>`<tr>
     <td>${fmtDate(p.fecha)}</td>
     <td style="font-weight:700;color:var(--green)">${fV(p.monto)}</td>
@@ -11477,7 +11493,7 @@ function verHistorialCXP(gid){
     <td>${escHtml(p.nota||'—')}</td>
     <td><span class="badge ${p.saldado?'badge-green':'badge-amber'}">${p.saldado?'SALDADO':'ABONO'}</span></td>
     <td style="display:flex;gap:4px">
-      ${(currentUser?.role==='admin'||canDo('imprimir'))?`<button class="btn btn-secondary btn-sm" title="Imprimir" onclick="imprimirReciboPagoCXP(DB.gastosVehiculos.find(x=>x.id==='${g.id}'),{fecha:'${p.fecha}',monto:${p.monto},cuenta:'${escHtml(p.cuenta||'')}',nota:'${escHtml(p.nota||'')}',saldado:${p.saldado||false},tasa:${p.tasa||0},equivRD:${p.equivRD||0}})">🖨️</button>`:''}
+      ${(currentUser?.role==='admin'||canDo('imprimir'))?`<button class="btn btn-secondary btn-sm" title="Imprimir" onclick="imprimirReciboPagoCXPById('${g.id}',{fecha:'${p.fecha}',monto:${p.monto},cuenta:'${escHtml(p.cuenta||'')}',nota:'${escHtml(p.nota||'')}',saldado:${p.saldado||false},tasa:${p.tasa||0},equivRD:${p.equivRD||0}})">🖨️</button>`:''}
       ${puedeEditarPagoGV?`<button class="btn btn-secondary btn-sm" title="Editar pago" onclick="editarPagoGastoVeh('${g.id}',${pi})">✏️</button>`:''}
       ${puedeBorrarPagoGV?`<button class="btn btn-red btn-sm" title="Eliminar / Revertir pago" onclick="eliminarPagoGastoVeh('${g.id}',${pi})">🗑</button>`:''}
     </td>
@@ -11488,13 +11504,14 @@ function verHistorialCXP(gid){
       <div style="text-align:center;padding:10px;background:var(--green2);border-radius:8px"><div style="font-size:10px;color:var(--green)">Total Pagado</div><div style="font-weight:800;color:var(--green)">${fV(g.montoPagado||0)}</div></div>
       <div style="text-align:center;padding:10px;background:var(--red2);border-radius:8px"><div style="font-size:10px;color:var(--red)">Pendiente</div><div style="font-weight:800;color:var(--red)">${fV(g.montoPendiente||0)}</div></div>
     </div>
-    <div style="font-size:12px;color:var(--gray);margin-bottom:8px">${escHtml(g.tipo||'—')} — ${v?escHtml(v.codigo+' '+v.marca+' '+v.modelo):'—'} — Suplidor: <strong>${escHtml(g.suplidor||'—')}</strong></div>
+    <div style="font-size:12px;color:var(--gray);margin-bottom:8px">${escHtml(g.tipo||g.descripcion||'—')} — ${v?escHtml(v.codigo+' '+v.marca+' '+v.modelo):'—'} — Suplidor: <strong>${escHtml(g.suplidor||'—')}</strong></div>
     <table><thead><tr><th>Fecha</th><th>Monto</th>${esUSD?'<th>Tasa</th><th>Equiv RD$</th>':''}<th>Cuenta</th><th>Nota</th><th>Tipo</th><th>Acciones</th></tr></thead>
     <tbody>${rows||`<tr><td colspan="${esUSD?8:6}" style="text-align:center;padding:16px;color:var(--gray)">Sin pagos registrados</td></tr>`}</tbody></table>`);
 }
 function editarPagoGastoVeh(gid,pi){
-  const g=(DB.gastosVehiculos||[]).find(x=>x.id===gid);if(!g)return;
-  const pagosArr=asegurarPagosGastoVeh(g);
+  const r=_hallarRegCXP(gid);if(!r)return;
+  const g=r.g;
+  const pagosArr=r.col==='cxp'?asegurarPagosCXPManual(g):asegurarPagosGastoVeh(g);
   const p=pagosArr[pi];if(!p)return;
   const esUSDEPGV=(g.moneda||'RD$')==='USD';
   const bcs=DB.config.bancoCuentas||[];
@@ -11527,8 +11544,9 @@ function actualizarCuentasEditPagoGV(){
 function guardarEditPagoGastoVeh(){
   const gid=document.getElementById('epgv-gid').value;
   const pi=parseInt(document.getElementById('epgv-pi').value);
-  const g=(DB.gastosVehiculos||[]).find(x=>x.id===gid);if(!g)return;
-  const pagosArr=asegurarPagosGastoVeh(g);
+  const r=_hallarRegCXP(gid);if(!r)return;
+  const g=r.g;
+  const pagosArr=r.col==='cxp'?asegurarPagosCXPManual(g):asegurarPagosGastoVeh(g);
   const p=pagosArr[pi];if(!p)return;
   const montoNuevo=parseFloat((document.getElementById('epgv-monto').value||'0').replace(/,/g,''));
   if(!montoNuevo||montoNuevo<=0){toast('Ingresa un monto válido','error');return;}
@@ -11547,21 +11565,22 @@ function guardarEditPagoGastoVeh(){
     DB.caja[ci].referencia=bancoNuevo&&cuentaNueva?bancoNuevo+' / '+cuentaNueva:cuentaNueva;
   } else {
     const nuevoId=uid();
-    DB.caja.push({id:nuevoId,fecha:fechaNueva,tipo:'SALIDA',categoria:'Gasto de Vehículo',
-      descripcion:`Gasto [${g.codigo||g.vehiculoId}]: ${g.tipo||''} — ${g.suplidor||''}`,
+    DB.caja.push({id:nuevoId,fecha:fechaNueva,tipo:'SALIDA',categoria:r.col==='cxp'?'CXP Manual':'Gasto de Vehículo',
+      descripcion:r.col==='cxp'?`CxP Manual [${g.suplidor||''}]: ${g.descripcion||''}`:`Gasto [${g.codigo||g.vehiculoId}]: ${g.tipo||''} — ${g.suplidor||''}`,
       monto:montoNuevo,moneda:g.moneda||'RD$',banco:normalizarBancoGlobal(bancoNuevo),cuenta:limpiarCuenta(cuentaNueva),
       referencia:bancoNuevo&&cuentaNueva?bancoNuevo+' / '+cuentaNueva:cuentaNueva,responsable:currentUser?.nombre||''});
     p.cajaId=nuevoId;
   }
   g.pagos=pagosArr;
-  sDB('gastosVehiculos');sDB('caja');refreshCajaIfActive();closeModal();
+  sDB(r.col);sDB('caja');refreshCajaIfActive();closeModal();
   toast('Pago actualizado ✓','success');renderCXP();
   verHistorialCXP(gid);
 }
 function eliminarPagoGastoVeh(gid,pi){
   if(currentUser?.role!=='admin'&&!canDo('eliminar')&&!currentUser?.permisos?.borrarGastosVeh){toast('No tienes permiso para eliminar','error');return;}
-  const g=(DB.gastosVehiculos||[]).find(x=>x.id===gid);if(!g)return;
-  const pagosArr=asegurarPagosGastoVeh(g);
+  const r=_hallarRegCXP(gid);if(!r)return;
+  const g=r.g;
+  const pagosArr=r.col==='cxp'?asegurarPagosCXPManual(g):asegurarPagosGastoVeh(g);
   const p=pagosArr[pi];if(!p)return;
   if(!confirm('¿Eliminar este pago? Se restará del total pagado y se eliminará el movimiento en Caja. Esta acción no se puede deshacer.'))return;
   const monto=parseFloat(p.monto||0);
@@ -11572,7 +11591,7 @@ function eliminarPagoGastoVeh(gid,pi){
   g.pagos=pagosArr;
   const ci=buscarCajaPorId(p.cajaId);
   if(ci>=0)DB.caja.splice(ci,1);
-  sDB('gastosVehiculos');sDB('caja');refreshCajaIfActive();
+  sDB(r.col);sDB('caja');refreshCajaIfActive();
   toast('Pago eliminado y Caja actualizada ✓','success');renderCXP();
   verHistorialCXP(gid);
 }
