@@ -10542,6 +10542,68 @@ function supAccionDirecta(accion,id){
   }
 }
 
+// Reparación manual del historial de pagos (botón en CxC/CxP) — hace lo mismo que la
+// reconciliación automática de renderCXC/renderCXP, pero de una sola vez y a demanda,
+// mostrando cuántos registros corrigió. Segura: nunca borra pagos reales, solo agrega
+// ajustes visibles en el historial o quita duplicados exactos (mismo cajaId).
+function repararHistorialPagos(){
+  if(currentUser?.role!=='admin'){toast('Solo un administrador puede ejecutar esta reparación','error');return;}
+  if(!confirm('Esto revisará todas las CxC y CxP y corregirá el detalle de pagos donde no coincida con el total realmente pagado (agrega el ajuste al historial, no borra nada). ¿Continuar?'))return;
+  let n=0;
+  (DB.cxc||[]).forEach(x=>{
+    if(x.esPrestamo&&x.prestamoId){
+      const po=(DB.prestamosOtorgados||[]).find(p=>p.id===x.prestamoId);
+      if(po&&po.pagos&&po.pagos.length){
+        const pagosCapital=po.pagos.map(p=>({id:p.id,fecha:p.fecha,monto:parseFloat(p.capital||0),banco:p.banco||'',cuenta:p.cuenta||'',moneda:p.moneda||x.moneda||'RD$',referencia:p.referencia||''})).filter(p=>p.monto>0.01);
+        const sumaCap=pagosCapital.reduce((a,p)=>a+p.monto,0);
+        const abonadoActual=parseFloat(x.abonado||0);
+        const yaCorrecto=x.pagos&&x.pagos.length&&Math.abs((x.pagos.reduce((a,p)=>a+parseFloat(p.monto||0),0))-sumaCap)<0.01;
+        if(!yaCorrecto&&Math.abs(sumaCap-abonadoActual)<0.01){x.pagos=pagosCapital;n++;}
+      }
+      return;
+    }
+    const abonadoActual=parseFloat(x.abonado||0);
+    const sumaPagos=(x.pagos||[]).reduce((a,p)=>a+parseFloat(p.monto||0),0);
+    const gap=abonadoActual-sumaPagos;
+    if(gap>0.01){
+      if(!x.pagos)x.pagos=[];
+      x.pagos.unshift({id:uid(),fecha:x.fecha||today(),monto:gap,nota:'Ajuste — abono histórico no registrado en el detalle',legacy:true});
+      n++;
+    }
+  });
+  [...(DB.gastosVehiculos||[]),...(DB.cxp||[])].forEach(g=>{
+    if(g.pagos&&g.pagos.length>1){
+      const vistos=new Set();
+      const dedup=g.pagos.filter(p=>{
+        if(!p.cajaId)return true;
+        const yaVisto=vistos.has(p.cajaId);
+        if(!yaVisto)vistos.add(p.cajaId);
+        return !(yaVisto&&p.legacy);
+      });
+      if(dedup.length!==g.pagos.length){
+        const cajaIds=dedup.filter(p=>p.cajaId).map(p=>p.cajaId);
+        if(new Set(cajaIds).size===cajaIds.length){g.pagos=dedup;n++;}
+      }
+    }
+    const montoPagadoReal=parseFloat(g.montoPagado||0);
+    const sumaPagos=(g.pagos||[]).reduce((a,p)=>a+parseFloat(p.monto||0),0);
+    const gap=montoPagadoReal-sumaPagos;
+    if(gap>0.01){
+      if(!g.pagos)g.pagos=[];
+      g.pagos.unshift({id:uid(),fecha:g.fecha||today(),monto:gap,nota:'Ajuste — pago histórico no registrado en el detalle',legacy:true});
+      n++;
+    }
+    const pendienteReal=Math.max(0,parseFloat(g.montoFactura||0)-montoPagadoReal);
+    if(Math.abs(parseFloat(g.montoPendiente||0)-pendienteReal)>0.01){g.montoPendiente=pendienteReal;n++;}
+  });
+  if(n>0){
+    sDB('cxc');sDB('gastosVehiculos');sDB('cxp');
+    toast(`✅ Se corrigieron ${n} registro(s). Actualizando...`,'success');
+    setTimeout(()=>location.reload(),1500);
+  } else {
+    toast('No se encontraron diferencias que corregir ✓','success');
+  }
+}
 // ══ CUENTAS POR PAGAR (CxP) ══
 function renderCXP(){
   const filtroSup=document.getElementById('cxp-filtro-sup')?.value||'';
@@ -10549,31 +10611,46 @@ function renderCXP(){
   const filtroMoneda=document.getElementById('cxp-filtro-moneda')?.value||'';
   const filtroHasta=document.getElementById('cxp-filtro-hasta')?.value||'';
 
-  // Reconciliar pagos[] — quita duplicados dejados por un bug anterior donde el primer abono
-  // de un gasto quedaba registrado dos veces (una vez "legacy" reconstruida + una vez real,
-  // ambas con el mismo cajaId). Eso podía dejar el pendiente calculado en 0 o negativo y hacer
-  // que el gasto desapareciera de la lista aunque todavía se debiera dinero.
+  // Reconciliar pagos[] contra montoPagado real:
+  // 1) Quita duplicados dejados por un bug anterior donde el primer abono de un gasto quedaba
+  //    registrado dos veces (una "legacy" reconstruida + una real, ambas con el mismo cajaId).
+  // 2) Rellena el hueco cuando el total realmente pagado (montoPagado) es mayor a lo que suma
+  //    el detalle pagos[] — pago histórico que quedó fuera del detalle (mismo caso que en CxC).
+  // Sin esto, "Pendiente" (calculado desde el detalle) puede no coincidir con la realidad aunque
+  // montoPagado/montoPendiente estén correctos.
   let cambioCXP=false;
   [...(DB.gastosVehiculos||[]),...(DB.cxp||[])].forEach(g=>{
-    if(!g.pagos||g.pagos.length<2)return;
-    const vistos=new Set();
-    const dedup=g.pagos.filter(p=>{
-      if(!p.cajaId)return true;
-      const yaVisto=vistos.has(p.cajaId);
-      if(!yaVisto)vistos.add(p.cajaId);
-      // Si dos pagos comparten cajaId, se descarta el marcado como legacy (el reconstruido).
-      return !(yaVisto&&p.legacy);
-    });
-    if(dedup.length!==g.pagos.length){
-      // Si sigue habiendo más de un pago con el mismo cajaId tras quitar los legacy, no tocar
-      // (para no borrar datos reales que no entendemos) — solo aplicar si quedó 1 por cajaId.
-      const cajaIds=dedup.filter(p=>p.cajaId).map(p=>p.cajaId);
-      if(new Set(cajaIds).size===cajaIds.length){
-        g.pagos=dedup;
-        g.montoPagado=g.pagos.reduce((a,p)=>a+parseFloat(p.monto||0),0);
-        g.montoPendiente=Math.max(0,parseFloat(g.montoFactura||0)-g.montoPagado);
-        cambioCXP=true;
+    if(g.pagos&&g.pagos.length>1){
+      const vistos=new Set();
+      const dedup=g.pagos.filter(p=>{
+        if(!p.cajaId)return true;
+        const yaVisto=vistos.has(p.cajaId);
+        if(!yaVisto)vistos.add(p.cajaId);
+        // Si dos pagos comparten cajaId, se descarta el marcado como legacy (el reconstruido).
+        return !(yaVisto&&p.legacy);
+      });
+      if(dedup.length!==g.pagos.length){
+        // Si sigue habiendo más de un pago con el mismo cajaId tras quitar los legacy, no tocar
+        // (para no borrar datos reales que no entendemos) — solo aplicar si quedó 1 por cajaId.
+        const cajaIds=dedup.filter(p=>p.cajaId).map(p=>p.cajaId);
+        if(new Set(cajaIds).size===cajaIds.length){
+          g.pagos=dedup;
+          cambioCXP=true;
+        }
       }
+    }
+    const montoPagadoReal=parseFloat(g.montoPagado||0);
+    const sumaPagos=(g.pagos||[]).reduce((a,p)=>a+parseFloat(p.monto||0),0);
+    const gap=montoPagadoReal-sumaPagos;
+    if(gap>0.01){
+      if(!g.pagos)g.pagos=[];
+      g.pagos.unshift({id:uid(),fecha:g.fecha||today(),monto:gap,nota:'Ajuste — pago histórico no registrado en el detalle',legacy:true});
+      cambioCXP=true;
+    }
+    const pendienteReal=Math.max(0,parseFloat(g.montoFactura||0)-montoPagadoReal);
+    if(Math.abs(parseFloat(g.montoPendiente||0)-pendienteReal)>0.01){
+      g.montoPendiente=pendienteReal;
+      cambioCXP=true;
     }
   });
   if(cambioCXP){sDB('gastosVehiculos');sDB('cxp');}
@@ -10702,7 +10779,10 @@ function renderCXP(){
     </div>
 
     <div class="card">
-      <div class="search-wrap"><input class="search-input" placeholder="Buscar por suplidor, vehículo, tipo de gasto..." oninput="filterTable('cxp-tbl',this.value)"></div>
+      <div class="search-wrap" style="display:flex;gap:8px;align-items:center">
+        <input class="search-input" placeholder="Buscar por suplidor, vehículo, tipo de gasto..." oninput="filterTable('cxp-tbl',this.value)" style="flex:1">
+        ${currentUser?.role==='admin'?`<button class="btn btn-secondary btn-sm" title="Corrige el detalle de pagos que no coincida con el total realmente pagado" onclick="repararHistorialPagos()">🔧 Reparar Historial</button>`:''}
+      </div>
       <div class="table-wrap"><table id="cxp-tbl">
         <thead><tr>
           <th>Fecha</th>
@@ -12166,7 +12246,10 @@ function renderCXC(){
       <span>Las cuentas por cobrar se generan automáticamente al registrar ventas con saldo pendiente. También puedes agregar cuentas manualmente con el botón <strong>➕ Nueva CxC</strong>. El saldo es "a la fecha Hasta" e incluye cuentas anteriores que sigan sin cobrarse. "Desde" solo filtra qué filas se listan abajo — no resta del total ni del Total General.</span>
     </div>
     <div class="card">
-      <div class="search-wrap"><input class="search-input" placeholder="Buscar por factura, cliente, vehículo..." oninput="filterTable('cxc-tbl',this.value)"></div>
+      <div class="search-wrap" style="display:flex;gap:8px;align-items:center">
+        <input class="search-input" placeholder="Buscar por factura, cliente, vehículo..." oninput="filterTable('cxc-tbl',this.value)" style="flex:1">
+        ${currentUser?.role==='admin'?`<button class="btn btn-secondary btn-sm" title="Corrige el detalle de pagos que no coincida con el total realmente cobrado" onclick="repararHistorialPagos()">🔧 Reparar Historial</button>`:''}
+      </div>
       <div class="table-wrap"><table id="cxc-tbl">
         <thead><tr>
           <th style="width:36px"></th>
