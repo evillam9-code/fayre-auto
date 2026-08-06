@@ -7666,7 +7666,7 @@ function confirmarAbonoGastoVeh(i){
     referencia:bancoCajaAbGV&&cuentaCajaAbGV?bancoCajaAbGV+' / '+cuentaCajaAbGV:cuentaCajaAbGV,
     formaPago:formaPagoAbGV,numeroCheque:numeroChequeAbGV,
     responsable:currentUser?.nombre||''});
-  if(!DB.gastosVehiculos[i].pagos)DB.gastosVehiculos[i].pagos=asegurarPagosGastoVeh(DB.gastosVehiculos[i]);
+  if(!DB.gastosVehiculos[i].pagos)DB.gastosVehiculos[i].pagos=[];
   DB.gastosVehiculos[i].pagos.push({id:uid(),fecha:fechaCajaAbGV,monto,banco:bancoCajaAbGV,cuenta:cuentaCajaAbGV,moneda:monedaCajaAbGV,formaPago:formaPagoAbGV,numeroCheque:numeroChequeAbGV,cajaId:cajaIdAbGV});
   sDB('gastosVehiculos');
   sDB('caja');
@@ -9019,7 +9019,7 @@ function confirmarVenta(nf){
   // Si hay pendiente → CxC automática
   if(pendiente>0){
     const abonadoInicial=inicial+montoRecibido;
-    DB.cxc.push({id:uid(),ventaId:venta.id,factura:nf,cliente:cliNombre,clienteId:cliId,vehiculo:`${v.codigo} ${v.marca} ${v.modelo}`,concepto:'Pendiente de venta',moneda:monedaVenta,total:precio,abonado:abonadoInicial,saldo:pendiente,fecha:venta.fecha,fechaVence:'',status:pendiente<=0?'SALDADO':abonadoInicial>0?'PARCIAL':'PENDIENTE',pagos:[]});
+    DB.cxc.push({id:uid(),ventaId:venta.id,factura:nf,cliente:cliNombre,clienteId:cliId,vehiculo:`${v.codigo} ${v.marca} ${v.modelo}`,concepto:'Pendiente de venta',moneda:monedaVenta,total:precio,abonado:abonadoInicial,saldo:pendiente,fecha:venta.fecha,fechaVence:'',status:pendiente<=0?'SALDADO':abonadoInicial>0?'PARCIAL':'PENDIENTE',pagos:abonadoInicial>0.01?[{id:uid(),fecha:venta.fecha,monto:abonadoInicial,nota:'Inicial de venta',legacy:true}]:[]});
     sDB('cxc');
   }
   // ═══ ENDOSO → CXP al gestor (empresa lo paga) ═══
@@ -9476,7 +9476,7 @@ function guardarEditarVenta(vid){
     DB.cxc[ci].status=pendiente<=0?'SALDADO':(inicial+montoRecibido)>0?'PARCIAL':'PENDIENTE';
     sDB('cxc');
   } else if(pendiente>0){
-    DB.cxc.push({id:uid(),ventaId:vid,factura:DB.ventas[i].factura,cliente:cliNombre,clienteId:cliId,vehiculo:`${veh.codigo} ${veh.marca} ${veh.modelo}`,concepto:'Pendiente de venta',moneda:monedaVenta,total:precio,abonado:inicial+montoRecibido,saldo:pendiente,fecha:DB.ventas[i].fecha,fechaVence:'',status:(inicial+montoRecibido)>0?'PARCIAL':'PENDIENTE',pagos:[]});
+    DB.cxc.push({id:uid(),ventaId:vid,factura:DB.ventas[i].factura,cliente:cliNombre,clienteId:cliId,vehiculo:`${veh.codigo} ${veh.marca} ${veh.modelo}`,concepto:'Pendiente de venta',moneda:monedaVenta,total:precio,abonado:inicial+montoRecibido,saldo:pendiente,fecha:DB.ventas[i].fecha,fechaVence:'',status:(inicial+montoRecibido)>0?'PARCIAL':'PENDIENTE',pagos:(inicial+montoRecibido)>0.01?[{id:uid(),fecha:DB.ventas[i].fecha,monto:inicial+montoRecibido,nota:'Inicial de venta',legacy:true}]:[]});
     sDB('cxc');
   }
 
@@ -10548,6 +10548,35 @@ function renderCXP(){
   const filtroVeh=document.getElementById('cxp-filtro-veh')?.value||'';
   const filtroMoneda=document.getElementById('cxp-filtro-moneda')?.value||'';
   const filtroHasta=document.getElementById('cxp-filtro-hasta')?.value||'';
+
+  // Reconciliar pagos[] — quita duplicados dejados por un bug anterior donde el primer abono
+  // de un gasto quedaba registrado dos veces (una vez "legacy" reconstruida + una vez real,
+  // ambas con el mismo cajaId). Eso podía dejar el pendiente calculado en 0 o negativo y hacer
+  // que el gasto desapareciera de la lista aunque todavía se debiera dinero.
+  let cambioCXP=false;
+  [...(DB.gastosVehiculos||[]),...(DB.cxp||[])].forEach(g=>{
+    if(!g.pagos||g.pagos.length<2)return;
+    const vistos=new Set();
+    const dedup=g.pagos.filter(p=>{
+      if(!p.cajaId)return true;
+      const yaVisto=vistos.has(p.cajaId);
+      if(!yaVisto)vistos.add(p.cajaId);
+      // Si dos pagos comparten cajaId, se descarta el marcado como legacy (el reconstruido).
+      return !(yaVisto&&p.legacy);
+    });
+    if(dedup.length!==g.pagos.length){
+      // Si sigue habiendo más de un pago con el mismo cajaId tras quitar los legacy, no tocar
+      // (para no borrar datos reales que no entendemos) — solo aplicar si quedó 1 por cajaId.
+      const cajaIds=dedup.filter(p=>p.cajaId).map(p=>p.cajaId);
+      if(new Set(cajaIds).size===cajaIds.length){
+        g.pagos=dedup;
+        g.montoPagado=g.pagos.reduce((a,p)=>a+parseFloat(p.monto||0),0);
+        g.montoPendiente=Math.max(0,parseFloat(g.montoFactura||0)-g.montoPagado);
+        cambioCXP=true;
+      }
+    }
+  });
+  if(cambioCXP){sDB('gastosVehiculos');sDB('cxp');}
 
   // Pendiente/Pagado reconstruidos "a la fecha Hasta" (hoy si no se especifica), igual que el
   // Informe de Cierre: no restan pagos posteriores a esa fecha, y SIEMPRE incluyen deudas de
@@ -11867,7 +11896,7 @@ function guardarAbonoExtraPO(cxcId,poId,idxCuota){
   DB.cxc[ci].saldo=nuevoSaldo;
   DB.cxc[ci].status=nuevoSaldo<=0?'SALDADO':capitalAbono>0?'PARCIAL':'PENDIENTE';
   if(!DB.cxc[ci].pagos)DB.cxc[ci].pagos=[];
-  DB.cxc[ci].pagos.push({id:uid(),fecha,monto,banco,cuenta,moneda:monedaCobro,referencia:ref});
+  DB.cxc[ci].pagos.push({id:uid(),fecha,monto:capitalAbono,montoTotal:monto,interes:interesACobrar,banco,cuenta,moneda:monedaCobro,referencia:ref});
   if(capitalAbono>0)DB.caja.push({id:uid(),fecha,tipo:'ENTRADA',categoria:'Abono Extra Capital Préstamo',descripcion:`Abono extra capital — préstamo ${escHtml(po.cliente)}`,monto:capitalAbono,moneda:monedaCobro,banco,cuenta,referencia:ref,responsable:currentUser?.nombre||''});
   if(interesACobrar>0)DB.caja.push({id:uid(),fecha,tipo:'ENTRADA',categoria:'Interés Cobrado Préstamo',descripcion:`Interés abono extra — préstamo ${escHtml(po.cliente)}`,monto:interesACobrar,moneda:monedaCobro,banco,cuenta,referencia:ref,responsable:currentUser?.nombre||''});
   sDB('cxc');sDB('caja');sDB('prestamosOtorgados');
@@ -11970,7 +11999,7 @@ function guardarCobroCuotaPO(cxcId,poId,idxCuota){
   DB.cxc[ci].saldo=nuevoSaldo;
   DB.cxc[ci].status=nuevoSaldo<=0?'SALDADO':capitalCobrado>0?'PARCIAL':'PENDIENTE';
   if(!DB.cxc[ci].pagos)DB.cxc[ci].pagos=[];
-  DB.cxc[ci].pagos.push({id:uid(),fecha,monto,banco,cuenta,moneda:monedaCobro,referencia:ref});
+  DB.cxc[ci].pagos.push({id:uid(),fecha,monto:capitalCobrado,montoTotal:monto,interes:interesACobrar,banco,cuenta,moneda:monedaCobro,referencia:ref});
   if(capitalCobrado>0)DB.caja.push({id:uid(),fecha,tipo:'ENTRADA',categoria:'Cobro Capital Préstamo',descripcion:`Capital cobrado — préstamo ${escHtml(po.cliente)}`,monto:capitalCobrado,moneda:monedaCobro,banco,cuenta,referencia:ref,responsable:currentUser?.nombre||''});
   if(interesACobrar>0)DB.caja.push({id:uid(),fecha,tipo:'ENTRADA',categoria:'Interés Cobrado Préstamo',descripcion:`Interés cobrado — préstamo ${escHtml(po.cliente)}`,monto:interesACobrar,moneda:monedaCobro,banco,cuenta,referencia:ref,responsable:currentUser?.nombre||''});
   sDB('cxc');sDB('caja');sDB('prestamosOtorgados');
@@ -12001,6 +12030,34 @@ function renderCXC(){
     const abonadoCorrecto=parseFloat(x.total||0)-parseFloat(x.saldo||0);
     if(Math.abs((x.abonado||0)-abonadoCorrecto)>0.01){
       DB.cxc[i].abonado=abonadoCorrecto;
+      cambio=true;
+    }
+  });
+  // Reconciliar pagos[] contra el abonado real — auto-repara CxC donde un abono (ej. el
+  // inicial de la venta) quedó fuera del detalle de pagos, o donde el detalle de un préstamo
+  // contó el interés como si fuera capital. Sin esto, el saldo "a la fecha" (saldoCXCAFecha)
+  // puede quedar mal calculado aunque el total/abonado/saldo reales estén correctos.
+  (DB.cxc||[]).forEach((x,i)=>{
+    if(x.esPrestamo&&x.prestamoId){
+      const po=(DB.prestamosOtorgados||[]).find(p=>p.id===x.prestamoId);
+      if(po&&po.pagos&&po.pagos.length){
+        const pagosCapital=po.pagos.map(p=>({id:p.id,fecha:p.fecha,monto:parseFloat(p.capital||0),banco:p.banco||'',cuenta:p.cuenta||'',moneda:p.moneda||x.moneda||'RD$',referencia:p.referencia||''})).filter(p=>p.monto>0.01);
+        const sumaCap=pagosCapital.reduce((a,p)=>a+p.monto,0);
+        const abonadoActual=parseFloat(DB.cxc[i].abonado||0);
+        const yaCorrecto=x.pagos&&x.pagos.length&&Math.abs((x.pagos.reduce((a,p)=>a+parseFloat(p.monto||0),0))-sumaCap)<0.01;
+        if(!yaCorrecto&&Math.abs(sumaCap-abonadoActual)<0.01){
+          DB.cxc[i].pagos=pagosCapital;
+          cambio=true;
+        }
+      }
+      return;
+    }
+    const abonadoActual=parseFloat(DB.cxc[i].abonado||0);
+    const sumaPagos=(DB.cxc[i].pagos||[]).reduce((a,p)=>a+parseFloat(p.monto||0),0);
+    const gap=abonadoActual-sumaPagos;
+    if(gap>0.01){
+      if(!DB.cxc[i].pagos)DB.cxc[i].pagos=[];
+      DB.cxc[i].pagos.unshift({id:uid(),fecha:x.fecha||today(),monto:gap,nota:'Ajuste — abono histórico no registrado en el detalle',legacy:true});
       cambio=true;
     }
   });
