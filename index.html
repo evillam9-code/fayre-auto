@@ -7889,10 +7889,16 @@ function exportarHojaCostos(){
   }
   const gastos=(DB.gastosVehiculos||[]).filter(g=>g.vehiculoId===filtroVeh);
   if(!gastos.length){toast('Este vehículo no tiene gastos registrados','error');return;}
-  _generarHojaCostosPDF(gastos,filtroVeh);
+  // Pedir la tasa del dólar a considerar ANTES de generar la hoja — se usa para estimar los
+  // montos USD pendientes y para el Total General combinado, y queda impresa en la hoja.
+  const tasaActual=parseFloat(DB.config.tasaCambio||60);
+  const tasaStr=prompt('💱 Ingresa la tasa del dólar a considerar (RD$ por 1 USD) para esta Hoja de Costos:',tasaActual);
+  if(tasaStr===null)return;
+  const tasaElegida=parseFloat(tasaStr)||tasaActual;
+  _generarHojaCostosPDF(gastos,filtroVeh,tasaElegida);
 }
 
-function _generarHojaCostosPDF(gastos,filtroVeh){
+function _generarHojaCostosPDF(gastos,filtroVeh,tasaElegida){
   const empresa=DB.config.empresa||'JEYCO AUTO';
   const logo=DB.config.logoData||'';
   const rnc=DB.config.rnc||'';
@@ -7911,7 +7917,7 @@ function _generarHojaCostosPDF(gastos,filtroVeh){
   const subtotUSD=gastosUSD.reduce((a,g)=>a+parseFloat(g.montoFactura||0),0);
   const subtotPagUSD=gastosUSD.reduce((a,g)=>a+parseFloat(g.montoPagado||0),0);
   const subtotPendUSD=gastosUSD.reduce((a,g)=>a+parseFloat(g.montoPendiente||0),0);
-  const tasaFallback=parseFloat(DB.config.tasaCambio||60);
+  const tasaFallback=parseFloat(tasaElegida||DB.config.tasaCambio||60);
   // Para gastos USD: usar los RD$ reales de cada pago (tasa por pago)
   // Si hay pendiente, estimarlo con la tasa actual
   const calcRDReal=(g)=>{
@@ -7932,10 +7938,10 @@ function _generarHojaCostosPDF(gastos,filtroVeh){
   const totalRD=gastos.reduce((a,g)=>a+calcRDReal(g).factura,0);
   const totalPagRD=gastos.reduce((a,g)=>a+calcRDReal(g).pagado,0);
   const totalPendRD=gastos.reduce((a,g)=>a+calcRDReal(g).pendiente,0);
-  const tasasUSD=gastosUSD.map(g=>parseFloat(g.tasaCambio||tasaFallback));
-  const tasaPromedio=hayUSD?tasasUSD.reduce((a,t)=>a+t,0)/tasasUSD.length:0;
-  const totalUS=hayUSD?(subtotUSD+(subtotRD/tasaPromedio)):0;
-  const totalPagUS=hayUSD?(subtotPagUSD+(subtotPagRD/tasaPromedio)):0;
+  // Total combinado en US$: se usa SIEMPRE la tasa elegida al generar la hoja (no un promedio
+  // de tasas históricas de cada pago), para que sea consistente con lo impreso en la hoja.
+  const totalUS=hayUSD?(subtotUSD+(subtotRD/tasaFallback)):0;
+  const totalPagUS=hayUSD?(subtotPagUSD+(subtotPagRD/tasaFallback)):0;
   const totalPendUS=hayUSD?(totalUS-totalPagUS):0;
   const veh=filtroVeh?DB.vehiculos.find(v=>v.id===filtroVeh):null;
   const filasRD=gastosRD.map((g,i)=>`<tr>
@@ -8012,7 +8018,7 @@ function _generarHojaCostosPDF(gastos,filtroVeh){
       </div>
     </div>
     <div><div class="hdr-titulo">Hoja de Costos</div>
-      <div class="hdr-sub">Fecha: ${fmtDate(today())} &nbsp;|&nbsp; ${gastos.length} gasto(s)</div>
+      <div class="hdr-sub">Fecha: ${fmtDate(today())} &nbsp;|&nbsp; ${gastos.length} gasto(s)${hayUSD?` &nbsp;|&nbsp; Tasa considerada: RD$ ${fN(tasaFallback)} x US$1`:''}</div>
     </div>
   </div>
   ${veh?`<div class="veh-box">
@@ -8047,7 +8053,7 @@ function _generarHojaCostosPDF(gastos,filtroVeh){
     </tbody>
   </table>
   <div class="res">
-    <div class="res-bar">📊 Resumen de Costos</div>
+    <div class="res-bar">📊 Resumen de Costos${hayUSD?` &nbsp;(Tasa aplicada: RD$ ${fN(tasaFallback)} x US$1)`:''}</div>
     <div class="res-top">
       ${hayRD?`<div class="rc">
         <div class="rl">Sub-Total en Pesos (RD$)</div>
@@ -10610,6 +10616,7 @@ function renderCXP(){
   const filtroVeh=document.getElementById('cxp-filtro-veh')?.value||'';
   const filtroMoneda=document.getElementById('cxp-filtro-moneda')?.value||'';
   const filtroHasta=document.getElementById('cxp-filtro-hasta')?.value||'';
+  const filtroEstado=document.getElementById('cxp-filtro-estado')?.value||'pendientes';
 
   // Reconciliar pagos[] contra montoPagado real:
   // 1) Quita duplicados dejados por un bug anterior donde el primer abono de un gasto quedaba
@@ -10660,7 +10667,7 @@ function renderCXP(){
   // antes de "Desde" que sigan pendientes en "Hasta" (una deuda pendiente no desaparece del
   // total solo porque su factura es de antes del rango elegido).
   const fechaCorte=filtroHasta||today();
-  const baseCompleta=[
+  const basePreEstado=[
     ...(DB.gastosVehiculos||[]).map(g=>({...g,_origen:'auto'})),
     ...(DB.cxp||[]).map(g=>({...g,_origen:'manual'}))
   ]
@@ -10669,16 +10676,21 @@ function renderCXP(){
       const montoPendiente=pendienteGastoAFecha(g,fechaCorte);
       const montoPagado=pagadoGastoAFecha(g,fechaCorte);
       return{...g,montoPendiente,montoPagado,statusGasto:estadoGastoAFecha(montoPendiente,montoPagado)};
-    })
-    .filter(g=>g.montoPendiente>0.01);
+    });
+  // baseCompleta se mantiene SIEMPRE "solo pendientes" — es la que cuadra 1 a 1 con el Informe
+  // de Cierre, sin importar el filtro de estado que se vea en pantalla.
+  const baseCompleta=basePreEstado.filter(g=>g.montoPendiente>0.01);
+  // basePorEstado es la que se muestra en la tabla — respeta el filtro Estado (por defecto,
+  // solo pendientes; "Todas"/"Pagadas" son solo para consultar, no afectan los totales de cierre).
+  const basePorEstado=filtroEstado==='todas'?basePreEstado:filtroEstado==='pagadas'?basePreEstado.filter(g=>g.montoPendiente<=0.01):basePreEstado.filter(g=>g.montoPendiente>0.01);
 
-  // Total General: SIN ningún filtro (ni Suplidor/Vehículo/Moneda/Desde) — el número que debe
+  // Total General: SIN ningún filtro (ni Suplidor/Vehículo/Moneda/Desde/Estado) — el número que debe
   // coincidir 1 a 1 con el "Total pendiente" del Informe de Cierre para el mismo "Hasta".
   const totalGeneralRD=baseCompleta.filter(g=>(g.moneda||'RD$')==='RD$').reduce((a,g)=>a+g.montoPendiente,0);
   const totalGeneralUSD=baseCompleta.filter(g=>g.moneda==='USD').reduce((a,g)=>a+g.montoPendiente,0);
 
-  // Suplidor/Vehículo/Moneda sí acotan el total y la tabla (el usuario los usa para acotar la consulta).
-  let gastosPend=baseCompleta;
+  // Suplidor/Vehículo/Moneda/Estado sí acotan el total y la tabla (el usuario los usa para acotar la consulta).
+  let gastosPend=basePorEstado;
   if(filtroSup)gastosPend=gastosPend.filter(g=>g.suplidor===filtroSup);
   if(filtroVeh)gastosPend=gastosPend.filter(g=>g.vehiculoId===filtroVeh||g.vehiculo===filtroVeh);
   if(filtroMoneda)gastosPend=gastosPend.filter(g=>(g.moneda||'RD$')===filtroMoneda);
@@ -10700,7 +10712,7 @@ function renderCXP(){
   document.getElementById('page-cxp').innerHTML=`
     <div class="page-header">
       <div><h1>📑 Cuentas por Pagar — Vehículos</h1>
-        <p>${gastosPend.length} pendiente(s) al ${fmtDate(fechaCorte)}</p>
+        <p>${gastosPend.length} ${filtroEstado==='pagadas'?'pagada(s)':filtroEstado==='todas'?'registro(s)':'pendiente(s)'} al ${fmtDate(fechaCorte)}</p>
       </div>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
         <button class="btn btn-secondary btn-sm" onclick="imprimirCXP()">📄 Exportar PDF</button>
@@ -10749,11 +10761,19 @@ function renderCXP(){
           </select>
         </div>
         <div style="display:flex;flex-direction:column;gap:4px">
+          <label style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--gray)">Estado</label>
+          <select id="cxp-filtro-estado" onchange="renderCXP()" style="padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
+            <option value="pendientes" ${filtroEstado==='pendientes'?'selected':''}>Pendientes</option>
+            <option value="todas" ${filtroEstado==='todas'?'selected':''}>Todas</option>
+            <option value="pagadas" ${filtroEstado==='pagadas'?'selected':''}>Pagadas</option>
+          </select>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px">
           <label style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--gray)">Saldo al (fecha de corte)</label>
           <input type="date" id="cxp-filtro-hasta" value="${filtroHasta}" onchange="renderCXP()" style="padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
         </div>
         <div>
-          <button class="btn btn-secondary" onclick="document.getElementById('cxp-filtro-sup').value='';document.getElementById('cxp-filtro-veh').value='';document.getElementById('cxp-filtro-moneda').value='';document.getElementById('cxp-filtro-hasta').value='';renderCXP()">🔄 Limpiar</button>
+          <button class="btn btn-secondary" onclick="document.getElementById('cxp-filtro-sup').value='';document.getElementById('cxp-filtro-veh').value='';document.getElementById('cxp-filtro-moneda').value='';document.getElementById('cxp-filtro-hasta').value='';document.getElementById('cxp-filtro-estado').value='pendientes';renderCXP()">🔄 Limpiar</button>
         </div>
       </div>
     </div>
@@ -10846,6 +10866,7 @@ function renderCXP(){
   const fv=document.getElementById('cxp-filtro-veh');if(fv)fv.value=filtroVeh;
   const fm=document.getElementById('cxp-filtro-moneda');if(fm)fm.value=filtroMoneda;
   const fh=document.getElementById('cxp-filtro-hasta');if(fh)fh.value=filtroHasta;
+  const fe=document.getElementById('cxp-filtro-estado');if(fe)fe.value=filtroEstado;
 }
 
 function eliminarRegistroCXP(id,origen){
