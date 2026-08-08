@@ -206,6 +206,7 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
 (function(){
   var VERSION='dealer_v14';
   var APP_BUILD='20260517-fayre';
+  window._APP_BUILD=APP_BUILD;
   var storedBuild=localStorage.getItem('fayre_build');
   if(storedBuild&&storedBuild!==APP_BUILD){
     var savedUsers=localStorage.getItem('fayre_users');
@@ -227,11 +228,34 @@ select:focus,input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 
 })();
 </script>
 <script>
-// AUTO VERSION CHECKER VIA FIREBASE
+// AUTO VERSION CHECKER \u2014 se actualiza SOLO, sin banner ni bot\u00F3n, cuando detecta una versi\u00F3n
+// m\u00E1s nueva. Dos se\u00F1ales, cualquiera dispara la actualizaci\u00F3n:
+// 1) El propio archivo index.html en el servidor cambi\u00F3 (compara APP_BUILD embebido en el
+//    HTML descargado en ese momento contra el que est\u00E1 corriendo) \u2014 se\u00F1al real, no depende
+//    de que un admin "publique" nada, as\u00ED que un cliente nunca se queda pegado en una
+//    versi\u00F3n vieja solo porque se subi\u00F3 el archivo nuevo y nadie avis\u00F3.
+// 2) Un admin forz\u00F3 una actualizaci\u00F3n con publicarNuevaVersion() (v\u00EDa Firestore).
+// Si hay un modal/formulario abierto no recarga (perder\u00EDa lo que el usuario est\u00E1 escribiendo);
+// simplemente lo reintenta en el siguiente ciclo.
 window._versionCheckInterval=null;
+function _actualizarSiEsSeguro(){
+  if(document.getElementById('modal-overlay')&&document.getElementById('modal-overlay').classList.contains('open'))return false;
+  location.href=location.pathname+'?_v='+Date.now();
+  return true;
+}
+async function _hayVersionNuevaEnServidor(){
+  try{
+    const resp=await fetch(location.pathname+'?_chk='+Date.now(),{cache:'no-store'});
+    if(!resp.ok)return false;
+    const text=await resp.text();
+    const m=text.match(/APP_BUILD='([^']+)'/);
+    return !!(m&&m[1]&&m[1]!==window._APP_BUILD);
+  }catch(e){return false;}
+}
 function iniciarVerificadorVersion(){
   if(window._versionCheckInterval)return;
   window._versionCheckInterval=setInterval(async function(){
+    if(await _hayVersionNuevaEnServidor()){_actualizarSiEsSeguro();return;}
     if(!window._fbActivo||!window._fbDB||!window._fbCol)return;
     try{
       const snap=await window._fbDB.collection(window._fbCol).doc('system_version').get();
@@ -241,16 +265,7 @@ function iniciarVerificadorVersion(){
       if(!remoteVersion)return;
       const localVersion=localStorage.getItem('fayre_version')||window._APP_VERSION;
       if(remoteVersion!==localVersion){
-        if(document.getElementById('_version-update-banner'))return;
-        const banner=document.createElement('div');
-        banner.id='_version-update-banner';
-        banner.style.cssText='position:fixed;bottom:0;left:0;right:0;z-index:999998;background:linear-gradient(135deg,#1d4ed8,#2563eb);color:#fff;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;gap:16px;box-shadow:0 -4px 20px rgba(0,0,0,.3);font-family:Outfit,sans-serif;';
-        banner.innerHTML='<div style="display:flex;align-items:center;gap:12px;"><span style="font-size:22px">\uD83D\uDD04</span><div><div style="font-weight:800;font-size:14px;">Nueva versi\u00F3n disponible</div><div style="font-size:12px;opacity:.85;">El administrador public\u00F3 una actualizaci\u00F3n del sistema.</div></div></div><button onclick="localStorage.setItem(\'fayre_version\',\''+remoteVersion+'\');location.reload(true);" style="background:#fff;color:#1d4ed8;border:none;border-radius:8px;padding:10px 20px;font-size:14px;font-weight:800;cursor:pointer;font-family:Outfit,sans-serif;white-space:nowrap;flex-shrink:0;">\u26A1 Actualizar ahora</button>';
-        document.body.appendChild(banner);
-        setTimeout(function(){
-          localStorage.setItem('fayre_version',remoteVersion);
-          location.reload(true);
-        },30000);
+        if(_actualizarSiEsSeguro())localStorage.setItem('fayre_version',remoteVersion);
       }
     }catch(e){}
   },30000);
@@ -1749,6 +1764,7 @@ let _consultasFiltro={search:'',cliente:'',propietario:'',suplidor:'',estado:''}
 function renderConsultas(){
   const pg=document.getElementById('page-consultas');
   if(!pg){setTimeout(renderConsultas,300);return;}
+  _corregirCostosUSD();
   const f=_consultasFiltro;
   // Listas dinámicas para los selects
   const clientesSet=new Set();
@@ -1826,7 +1842,7 @@ function _consultasDatos(){
     const cxcVenta=venta?(DB.cxc||[]).find(c=>c.ventaId===venta.id&&!c.esTraspaso):null;
     const cxcTrasp=venta?(DB.cxc||[]).find(c=>c.ventaId===venta.id&&c.esTraspaso):null;
     const gastosVeh=(DB.gastosVehiculos||[]).filter(g=>g.vehiculoId===v.id);
-    const totalCostos=gastosVeh.reduce((a,g)=>a+parseFloat(g.montoFactura||g.monto||0),0);
+    const totalCostos=costoVehiculoRD(v.id);
     const seguro=(DB.seguros||[]).find(s=>s.vehiculoId===v.id);
     const beneficio=venta?parseFloat(venta.precioVenta||0)-totalCostos:null;
     let estadoDinamico=v.status||'—';
@@ -1902,6 +1918,7 @@ function _renderConsultasTabla(){
 
 // ══ FICHA COMPLETA DE VEHÍCULO (imprimible/exportable) ══
 function abrirFichaVehiculo(vehiculoId){
+  _corregirCostosUSD();
   const v=DB.vehiculos.find(x=>x.id===vehiculoId);if(!v)return;
   const venta=DB.ventas.find(x=>x.vehiculoId===v.id);
   const cxcVenta=venta?(DB.cxc||[]).find(c=>c.ventaId===venta.id&&!c.esTraspaso):null;
@@ -1909,8 +1926,9 @@ function abrirFichaVehiculo(vehiculoId){
   const gastosVeh=(DB.gastosVehiculos||[]).filter(g=>g.vehiculoId===v.id);
   const cxpRel=(DB.cxp||[]).filter(g=>g.vehiculoId===v.id);
   const seguro=(DB.seguros||[]).find(s=>s.vehiculoId===v.id);
-  const totalCostos=gastosVeh.reduce((a,g)=>a+parseFloat(g.montoFactura||g.monto||0),0)+cxpRel.reduce((a,g)=>a+parseFloat(g.montoFactura||0),0);
-  const totalCostosPagado=gastosVeh.reduce((a,g)=>a+parseFloat(g.montoPagado||0),0)+cxpRel.reduce((a,g)=>a+parseFloat(g.montoPagado||0),0);
+  const _tasaFicha=parseFloat(DB.config.tasaCambio||60);
+  const totalCostos=gastosVeh.reduce((a,g)=>a+_montoGastoRD(g,_tasaFicha),0)+cxpRel.reduce((a,g)=>a+_montoGastoRD(g,_tasaFicha),0);
+  const totalCostosPagado=gastosVeh.reduce((a,g)=>a+_montoGastoRD(g,_tasaFicha,'montoPagado'),0)+cxpRel.reduce((a,g)=>a+_montoGastoRD(g,_tasaFicha,'montoPagado'),0);
   const totalCostosPend=totalCostos-totalCostosPagado;
   const beneficio=venta?parseFloat(venta.precioVenta||0)-totalCostos:null;
   const empresa=DB.config.empresa||'FAYRE';
@@ -2430,6 +2448,20 @@ function eliminarVehiculo(id){
      <button class="btn btn-red" onclick="DB.vehiculos=DB.vehiculos.filter(x=>x.id!=='${id}');sDB('vehiculos');logBit('inventario','Eliminó vehículo','${v?.codigo||''} ${v?.marca||''} ${v?.modelo||''}');closeModal();toast('Eliminado','success');renderInventario()">🗑 Eliminar</button>`);
 }
 
+// Convierte un campo de un gasto (gastosVehiculos o cxp) a RD$: si es USD usa la tasa
+// guardada en el propio gasto, y si no tiene, la tasa de respaldo (tasaFallback).
+// campo por defecto 'montoFactura' (también sirve para 'montoPagado'/'montoPendiente').
+function _montoGastoRD(g,tasaFallback,campo){
+  campo=campo||'montoFactura';
+  const raw=parseFloat((campo==='montoFactura'?(g.montoFactura||g.monto):g[campo])||0);
+  return g.moneda==='USD'?raw*parseFloat(g.tasaCambio||tasaFallback):raw;
+}
+// Costo total en RD$ de los gastos de un vehículo (gastosVehiculos), convirtiendo los que
+// están en USD — reemplaza sumar montoFactura crudo, que mezclaba RD$ y USD sin convertir.
+function costoVehiculoRD(vid,tasaFallback){
+  const tf=parseFloat(tasaFallback||DB.config.tasaCambio||60);
+  return (DB.gastosVehiculos||[]).filter(g=>g.vehiculoId===vid).reduce((a,g)=>a+_montoGastoRD(g,tf),0);
+}
 // ══ GASTOS DEL VEHÍCULO ══
 function gastosVehiculo(vid){
   const v=DB.vehiculos.find(x=>x.id===vid);if(!v)return;
@@ -4318,6 +4350,7 @@ function imprimirPagosNomina(){
 
 
 function renderInformes(){
+  _corregirCostosUSD();
   const mes=document.getElementById('inf-mes')?.value||today().slice(0,7);
   const ventasMes=DB.ventas.filter(v=>v.fecha?.startsWith(mes));
   const gastosMes=DB.gastos.filter(g=>g.fecha?.startsWith(mes));
@@ -7556,7 +7589,7 @@ function guardarNuevoGastoVeh(){
   // Actualizar costo acumulado del vehículo
   const iv=DB.vehiculos.findIndex(v=>v.id===vid);
   if(iv>=0){
-    const totalGastos=DB.gastosVehiculos.filter(x=>x.vehiculoId===vid).reduce((a,x)=>a+parseFloat(x.montoFactura||0),0);
+    const totalGastos=costoVehiculoRD(vid);
     DB.vehiculos[iv].costo=totalGastos;
     sDB('vehiculos');
   }
@@ -7790,7 +7823,7 @@ function guardarEditGastoVeh(i){
   const vid=DB.gastosVehiculos[i].vehiculoId;
   const iv=DB.vehiculos.findIndex(v=>v.id===vid);
   if(iv>=0){
-    const totalGastos=DB.gastosVehiculos.filter(x=>x.vehiculoId===vid).reduce((a,x)=>a+parseFloat(x.montoFactura||0),0);
+    const totalGastos=costoVehiculoRD(vid);
     DB.vehiculos[iv].costo=totalGastos;
     sDB('vehiculos');
   }
@@ -7918,22 +7951,14 @@ function _generarHojaCostosPDF(gastos,filtroVeh,tasaElegida){
   const subtotPagUSD=gastosUSD.reduce((a,g)=>a+parseFloat(g.montoPagado||0),0);
   const subtotPendUSD=gastosUSD.reduce((a,g)=>a+parseFloat(g.montoPendiente||0),0);
   const tasaFallback=parseFloat(tasaElegida||DB.config.tasaCambio||60);
-  // Para gastos USD: usar los RD$ reales de cada pago (tasa por pago)
-  // Si hay pendiente, estimarlo con la tasa actual
+  // Todo gasto en USD se convierte con la tasa elegida en la Hoja de Costos,
+  // sin importar la tasa que tenga guardada el gasto o cada pago individual.
   const calcRDReal=(g)=>{
     if((g.moneda||'RD$')==='RD$')return{factura:parseFloat(g.montoFactura||0),pagado:parseFloat(g.montoPagado||0),pendiente:parseFloat(g.montoPendiente||0),tasa:null};
-    // USD: sumar equivRD de cada pago registrado
-    const pagosConTasa=(g.pagos||[]).filter(p=>p.equivRD);
-    const rdPagado=pagosConTasa.length>0
-      ?pagosConTasa.reduce((a,p)=>a+parseFloat(p.equivRD||0),0)
-      :parseFloat(g.montoPagado||0)*parseFloat(g.tasaCambio||tasaFallback);
-    const tasaEstimado=parseFloat(g.tasaCambio||tasaFallback);
-    const rdPendiente=parseFloat(g.montoPendiente||0)*tasaEstimado;
+    const rdPagado=parseFloat(g.montoPagado||0)*tasaFallback;
+    const rdPendiente=parseFloat(g.montoPendiente||0)*tasaFallback;
     const rdFactura=rdPagado+rdPendiente;
-    // Tasa promedio real de los pagos
-    const tasasReales=(g.pagos||[]).filter(p=>p.tasa).map(p=>parseFloat(p.tasa));
-    const tasaProm=tasasReales.length>0?tasasReales.reduce((a,t)=>a+t,0)/tasasReales.length:tasaEstimado;
-    return{factura:rdFactura,pagado:rdPagado,pendiente:rdPendiente,tasa:tasaProm};
+    return{factura:rdFactura,pagado:rdPagado,pendiente:rdPendiente,tasa:tasaFallback};
   };
   const totalRD=gastos.reduce((a,g)=>a+calcRDReal(g).factura,0);
   const totalPagRD=gastos.reduce((a,g)=>a+calcRDReal(g).pagado,0);
@@ -7985,8 +8010,8 @@ function _generarHojaCostosPDF(gastos,filtroVeh,tasaElegida){
   .vc .v{font-weight:700;font-size:10px}
   table{width:100%;border-collapse:collapse}
   .th{background:#0f172a;color:#fff}
-  .th th{padding:4px 6px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.2px;white-space:nowrap}
-  td{padding:2px 5px;border-bottom:1px solid #e2e8f0;vertical-align:middle;font-size:11px}
+  .th th{padding:7px 8px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.2px;white-space:nowrap}
+  td{padding:6px 7px;border-bottom:1px solid #e2e8f0;vertical-align:middle;font-size:11px}
   tr:nth-child(even) td{background:#f8fafc}
   .urow td{background:#eff6ff!important}
   .num{width:20px;text-align:center;color:#94a3b8;font-size:9px}
@@ -7994,12 +8019,12 @@ function _generarHojaCostosPDF(gastos,filtroVeh,tasaElegida){
   .mon{text-align:center;font-size:9px;font-weight:700;color:#64748b;width:26px}
   .amt{text-align:right;font-family:'Courier New',monospace;white-space:nowrap;width:95px;font-size:11px}
   .ok{color:#1d4ed8}.nd{color:#dc2626;font-weight:700}.st{text-align:center;width:54px}
-  .sh td{background:#e2e8f0!important;font-weight:800;font-size:9px;text-transform:uppercase;color:#334155;letter-spacing:.4px;padding:2px 6px}
-  .sr td{background:#fef9c3!important;font-weight:800;font-size:10px}
-  .su td{background:#dbeafe!important;font-weight:800;font-size:10px}
+  .sh td{background:#e2e8f0!important;font-weight:800;font-size:9px;text-transform:uppercase;color:#334155;letter-spacing:.4px;padding:6px 7px;border-top:2px solid #94a3b8;border-bottom:2px solid #94a3b8}
+  .sr td{background:#fef9c3!important;font-weight:800;font-size:10px;border-bottom:2px solid #334155}
+  .su td{background:#dbeafe!important;font-weight:800;font-size:10px;border-bottom:2px solid #334155}
   .b{display:inline-block;padding:1px 5px;border-radius:6px;font-size:8px;font-weight:700}
   .g{background:#dbeafe;color:#1d4ed8}.r{background:#fee2e2;color:#dc2626}.a{background:#fef3c7;color:#d97706}
-  .res{margin-top:8px;border:1px solid #334155;border-radius:4px;overflow:hidden}
+  .res{margin-top:16px;border:1px solid #334155;border-radius:4px;overflow:hidden}
   .res-bar{background:#334155;color:#fff;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:3px 8px}
   .res-top{display:grid;grid-template-columns:${hayRD&&hayUSD?'1fr 1fr 1fr':'1fr 1fr'}}
   .rc{padding:6px 10px;border-right:1px solid #e2e8f0}.rc:last-child{border-right:none}
@@ -8862,7 +8887,7 @@ function llenarInfoVenta(vid){
   const v=DB.vehiculos.find(x=>x.id===vid);
   const el=document.getElementById('sv-veh-info');
   if(!v||!el){if(el)el.style.display='none';return;}
-  const totalGastos=(DB.gastosVehiculos||[]).filter(g=>g.vehiculoId===vid).reduce((a,g)=>a+parseFloat(g.montoFactura||0),0);
+  const totalGastos=costoVehiculoRD(vid);
   el.style.display='block';
   el.innerHTML=`<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">
     <div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--blue)">Vehículo</div><div style="font-weight:700">${escHtml(v.marca+' '+v.modelo+' '+v.anio)}</div></div>
@@ -8913,7 +8938,7 @@ function confirmarVenta(nf){
   const cuenta=document.getElementById('sv-cuenta')?.value||'Caja General';
   const monedaVenta=document.getElementById('sv-moneda')?.value||'RD$';
   const tasa=parseFloat(DB.config.tasaCambio||60);
-  const totalGastos=(DB.gastosVehiculos||[]).filter(g=>g.vehiculoId===vid).reduce((a,g)=>a+parseFloat(g.montoFactura||0),0);
+  const totalGastos=costoVehiculoRD(vid,tasa);
   // Estado automático según pendiente
   const estadoAuto='TRÁNSITO'; // Siempre TRÁNSITO hasta que se registre la entrega
   const tipoTransferencia=document.getElementById('sv-tipo-transferencia')?.value||'endoso';
@@ -9416,7 +9441,7 @@ function guardarEditarVenta(vid){
     const viAnt=DB.vehiculos.findIndex(x=>x.id===vehiculoAnteriorId);
     if(viAnt>=0){DB.vehiculos[viAnt].status='ACTIVO';}
   }
-  const totalGastos=(DB.gastosVehiculos||[]).filter(g=>g.vehiculoId===vehId).reduce((a,g)=>a+parseFloat(g.montoFactura||0),0);
+  const totalGastos=costoVehiculoRD(vehId,tasa);
 
   DB.ventas[i].vehiculoId=vehId;
   DB.ventas[i].vehiculo=`${veh.marca} ${veh.modelo} ${veh.anio}`;
@@ -10548,6 +10573,28 @@ function supAccionDirecta(accion,id){
   }
 }
 
+// Corrige en silencio vehiculo.costo y venta.costoVehiculo/ganancia usando costoVehiculoRD
+// (que sí convierte los gastos en USD a RD$). Se llama automáticamente al abrir Consultas,
+// la Ficha del vehículo y el Informe Mensual — sin botón ni confirmación — para que los
+// registros guardados antes de este arreglo (costo por debajo del real, ganancia inflada
+// en vehículos con gastos en USD) queden al día solos, sin acción manual del usuario.
+function _corregirCostosUSD(){
+  let n=0;
+  DB.vehiculos.forEach(v=>{
+    const costoReal=costoVehiculoRD(v.id);
+    if(Math.abs(parseFloat(v.costo||0)-costoReal)>0.01){v.costo=costoReal;n++;}
+  });
+  DB.ventas.forEach(venta=>{
+    const tasaVenta=parseFloat(venta.tasaCambio||DB.config.tasaCambio||60);
+    const costoReal=costoVehiculoRD(venta.vehiculoId,tasaVenta);
+    const gananciaReal=parseFloat(venta.precioVenta||0)-costoReal;
+    if(Math.abs(parseFloat(venta.costoVehiculo||0)-costoReal)>0.01||Math.abs(parseFloat(venta.ganancia||0)-gananciaReal)>0.01){
+      venta.costoVehiculo=costoReal;venta.ganancia=gananciaReal;n++;
+    }
+  });
+  if(n>0){sDB('vehiculos');sDB('ventas');}
+  return n;
+}
 // Reparación manual del historial de pagos (botón en CxC/CxP) — hace lo mismo que la
 // reconciliación automática de renderCXC/renderCXP, pero de una sola vez y a demanda,
 // mostrando cuántos registros corrigió. Segura: nunca borra pagos reales, solo agrega
@@ -16112,7 +16159,7 @@ function imprimirHojaSalida(vid){
   const logo=DB.config.logoData||'';
   const tasa=parseFloat(DB.config.tasaCambio||60);
   const gastos=(DB.gastosVehiculos||[]).filter(g=>g.vehiculoId===vid);
-  const totalGastos=gastos.reduce((a,g)=>a+parseFloat(g.montoFactura||0),0);
+  const totalGastos=costoVehiculoRD(vid,tasa);
   const win=window.open('','_blank','width=820,height=700');
   win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Hoja de Salida — ${escHtml(v.codigo)}</title>
   <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',Arial,sans-serif;font-size:12px;color:#0f172a;background:#fff}
