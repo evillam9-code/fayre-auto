@@ -4421,15 +4421,29 @@ function renderInformes(){
   const fmtUSD=n=>'USD '+parseFloat(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
   // Resumen por cuenta en el mes — normaliza banco/cuenta para no duplicar la misma
   // cuenta en dos filas cuando el nombre del banco quedó guardado con distinta mayúscula
+  const fechaCorteInf=ultimoDiaMes(mes);
   const infCuentas={};
+  const _infKeyInit=()=>({entRD:0,salRD:0,entUSD:0,salUSD:0,entAcumRD:0,salAcumRD:0,entAcumUSD:0,salAcumUSD:0});
   cajaFiltInf.forEach(c=>{
     const bancoInf=normalizarBancoGlobal(c.banco||'');
     const cuentaInf=limpiarCuenta(c.cuenta||'');
     const key=(bancoInf&&cuentaInf)?`${bancoInf} / ${cuentaInf}`:(bancoInf||'Sin cuenta');
     const mon=c.moneda||'RD$';
-    if(!infCuentas[key])infCuentas[key]={entRD:0,salRD:0,entUSD:0,salUSD:0};
+    if(!infCuentas[key])infCuentas[key]=_infKeyInit();
     if(c.tipo==='ENTRADA'){if(mon==='USD')infCuentas[key].entUSD+=parseFloat(c.monto||0);else infCuentas[key].entRD+=parseFloat(c.monto||0);}
     else{if(mon==='USD')infCuentas[key].salUSD+=parseFloat(c.monto||0);else infCuentas[key].salRD+=parseFloat(c.monto||0);}
+  });
+  // Cuadre real de cada cuenta: acumulado de TODOS los movimientos históricos hasta el
+  // cierre del mes seleccionado (no solo lo que entró/salió ese mes) — mismo criterio que
+  // "Acumulado (cuadre)" en Resumen de Todas las Cuentas, para que ambos coincidan.
+  DB.caja.filter(c=>c.fecha&&c.fecha<=fechaCorteInf).forEach(c=>{
+    const bancoInf=normalizarBancoGlobal(c.banco||'');
+    const cuentaInf=limpiarCuenta(c.cuenta||'');
+    const key=(bancoInf&&cuentaInf)?`${bancoInf} / ${cuentaInf}`:(bancoInf||'Sin cuenta');
+    const mon=c.moneda||'RD$';
+    if(!infCuentas[key])infCuentas[key]=_infKeyInit();
+    if(c.tipo==='ENTRADA'){if(mon==='USD')infCuentas[key].entAcumUSD+=parseFloat(c.monto||0);else infCuentas[key].entAcumRD+=parseFloat(c.monto||0);}
+    else{if(mon==='USD')infCuentas[key].salAcumUSD+=parseFloat(c.monto||0);else infCuentas[key].salAcumRD+=parseFloat(c.monto||0);}
   });
   const totalV=ventasMes.reduce((a,v)=>a+parseFloat(v.precioVenta||0),0);
   const totalG=ventasMes.reduce((a,v)=>a+parseFloat(v.ganancia||0),0);
@@ -4471,17 +4485,20 @@ function renderInformes(){
           <tr style="background:var(--blue3)"><td style="font-weight:700">Balance Neto</td><td style="font-weight:800;color:${cajaERD-cajaSRD>=0?'var(--blue)':'var(--red)'}">${fmt(cajaERD-cajaSRD)}</td><td style="font-weight:800;color:${cajaEUSD-cajaSUSD>=0?'var(--blue)':'var(--red)'}">${cajaEUSD-cajaSUSD!==0?fmtUSD(cajaEUSD-cajaSUSD):'—'}</td></tr>
         </tbody></table>
         ${Object.keys(infCuentas).length>0?`
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--gray);margin:12px 0 6px">Por cuenta bancaria</div>
-        <table><thead><tr><th>Cuenta</th><th>Ent. RD$</th><th>Sal. RD$</th><th>Bal. RD$</th><th>Ent. USD</th><th>Sal. USD</th></tr></thead><tbody>
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--gray);margin:12px 0 6px">Por cuenta bancaria — Cuadre al ${fmtDate(fechaCorteInf)}</div>
+        <div class="table-wrap"><table><thead><tr><th>Cuenta</th><th>Ent. RD$ (mes)</th><th>Sal. RD$ (mes)</th><th>Bal. RD$ (mes)</th><th>Cuadre RD$</th><th>Ent. USD (mes)</th><th>Sal. USD (mes)</th><th>Bal. USD (mes)</th><th>Cuadre USD</th></tr></thead><tbody>
           ${Object.entries(infCuentas).map(([nombre,v])=>`<tr>
             <td style="font-size:11px;font-weight:600">${escHtml(nombre)}</td>
             <td style="color:var(--green);font-size:12px">${v.entRD>0?fmt(v.entRD):'—'}</td>
             <td style="color:var(--red);font-size:12px">${v.salRD>0?fmt(v.salRD):'—'}</td>
             <td style="font-weight:700;color:${v.entRD-v.salRD>=0?'var(--green)':'var(--red)'};font-size:12px">${fmt(v.entRD-v.salRD)}</td>
+            <td style="font-weight:800;color:${v.entAcumRD-v.salAcumRD>=0?'var(--green)':'var(--red)'};font-size:12px">${fmt(v.entAcumRD-v.salAcumRD)}</td>
             <td style="color:var(--blue);font-size:12px">${v.entUSD>0?fmtUSD(v.entUSD):'—'}</td>
             <td style="color:var(--red);font-size:12px">${v.salUSD>0?fmtUSD(v.salUSD):'—'}</td>
+            <td style="font-weight:700;color:${v.entUSD-v.salUSD>=0?'var(--green)':'var(--red)'};font-size:12px">${v.entUSD||v.salUSD?fmtUSD(v.entUSD-v.salUSD):'—'}</td>
+            <td style="font-weight:800;color:${v.entAcumUSD-v.salAcumUSD>=0?'var(--green)':'var(--red)'};font-size:12px">${v.entAcumUSD||v.salAcumUSD?fmtUSD(v.entAcumUSD-v.salAcumUSD):'—'}</td>
           </tr>`).join('')}
-        </tbody></table>`:''}
+        </tbody></table></div>`:''}
       </div>
       <div class="card"><div class="card-title">👷 Nómina Mensual</div>
         <table><thead><tr><th>Empleado</th><th>Cargo</th><th>Salario</th></tr></thead><tbody>
