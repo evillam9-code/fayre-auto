@@ -1926,11 +1926,20 @@ function abrirFichaVehiculo(vehiculoId){
   const gastosVeh=(DB.gastosVehiculos||[]).filter(g=>g.vehiculoId===v.id);
   const cxpRel=(DB.cxp||[]).filter(g=>g.vehiculoId===v.id);
   const seguro=(DB.seguros||[]).find(s=>s.vehiculoId===v.id);
-  const _tasaFicha=parseFloat(DB.config.tasaCambio||60);
+  const _tasaDefault=parseFloat(DB.config.tasaCambio||60);
+  const _tasaInput=prompt('Tasa de cambio (RD$ por US$1) a usar para esta consulta:',_tasaDefault);
+  const _tasaFicha=(_tasaInput!==null&&!isNaN(parseFloat(_tasaInput))&&parseFloat(_tasaInput)>0)?parseFloat(_tasaInput):_tasaDefault;
+  const fUSD=n=>'US$ '+parseFloat(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const itemsCostos=[...gastosVeh.map(g=>({...g,_col:'gastosVehiculos'})),...cxpRel.map(g=>({...g,_col:'cxp'}))];
+  const costosRD=itemsCostos.filter(g=>g.moneda!=='USD');
+  const costosUSD=itemsCostos.filter(g=>g.moneda==='USD');
+  const totalCostosRDNativo=costosRD.reduce((a,g)=>a+parseFloat(g.montoFactura||g.monto||0),0);
+  const totalCostosUSDNativo=costosUSD.reduce((a,g)=>a+parseFloat(g.montoFactura||g.monto||0),0);
   const totalCostos=gastosVeh.reduce((a,g)=>a+_montoGastoRD(g,_tasaFicha),0)+cxpRel.reduce((a,g)=>a+_montoGastoRD(g,_tasaFicha),0);
   const totalCostosPagado=gastosVeh.reduce((a,g)=>a+_montoGastoRD(g,_tasaFicha,'montoPagado'),0)+cxpRel.reduce((a,g)=>a+_montoGastoRD(g,_tasaFicha,'montoPagado'),0);
   const totalCostosPend=totalCostos-totalCostosPagado;
-  const beneficio=venta?parseFloat(venta.precioVenta||0)-totalCostos:null;
+  const ventaRD=venta?(venta.moneda==='USD'?parseFloat(venta.precioVenta||0)*_tasaFicha:parseFloat(venta.precioVenta||0)):null;
+  const beneficio=venta?ventaRD-totalCostos:null;
   const empresa=DB.config.empresa||'FAYRE';
   const logo=DB.config.logoData||DB.config.logo||'';
   const sc={ACTIVO:'#16a34a',VENDIDO:'#2563eb',ADUANA:'#d97706','TRÁNSITO':'#7c3aed','EN EEUU':'#64748b'};
@@ -1957,17 +1966,44 @@ function abrirFichaVehiculo(vehiculoId){
     </div>`;
   };
   const tabCostos=()=>{
-    const items=[...gastosVeh.map(g=>({...g,_col:'gastosVehiculos'})),...cxpRel.map(g=>({...g,_col:'cxp'}))];
+    const items=itemsCostos;
     return`<div class="sec">
       <div class="sec-titulo" style="background:#0f172a">🧾 Costos / Gastos del Vehículo</div>
       <div class="resumen">
-        <div class="resumen-row"><span>Total Costos</span><span style="font-weight:700">${fmt(totalCostos)}</span></div>
+        <div class="resumen-row"><span>Gastos en RD$</span><span style="font-weight:700">${fmt(totalCostosRDNativo)}</span></div>
+        <div class="resumen-row"><span>Gastos en US$</span><span style="font-weight:700">${fUSD(totalCostosUSDNativo)}${totalCostosUSDNativo>0?` <span style="color:#64748b;font-weight:400">(≈ ${fmt(totalCostosUSDNativo*_tasaFicha)})</span>`:''}</span></div>
+        <div class="resumen-row"><span>Total Costos (convertido a RD$)</span><span style="font-weight:800">${fmt(totalCostos)}</span></div>
         <div class="resumen-row"><span>Pagado</span><span style="color:#16a34a;font-weight:700">${fmt(totalCostosPagado)}</span></div>
         <div class="resumen-row"><span>${totalCostosPend>0?'⏳ Gastos Pendientes por Pagar':'✅ Gastos Saldados'}</span><span style="font-weight:800;color:${totalCostosPend>0?'#dc2626':'#16a34a'}">${fmt(totalCostosPend)}</span></div>
       </div>
-      ${items.length?`<table style="margin-top:6px"><thead><tr><th>Tipo/Descripción</th><th>Suplidor</th><th>Factura</th><th>Pagado</th><th>Pendiente</th><th>Estado</th></tr></thead><tbody>
-        ${items.map(g=>`<tr><td>${escHtml(g.tipo||g.descripcion||'—')}</td><td>${escHtml(g.suplidor||'—')}</td><td style="font-weight:700">${fmt(g.montoFactura||g.monto||0)}</td><td style="color:#16a34a">${fmt(g.montoPagado||0)}</td><td style="color:${parseFloat(g.montoPendiente||0)>0?'#dc2626':'#16a34a'}">${fmt(g.montoPendiente||0)}</td><td>${g.statusGasto||'—'}</td></tr>`).join('')}
+      ${items.length?`<table style="margin-top:6px"><thead><tr><th>Tipo/Descripción</th><th>Suplidor</th><th>Moneda</th><th>Factura</th><th>Pagado</th><th>Pendiente</th><th>Estado</th></tr></thead><tbody>
+        ${items.map(g=>{const esUSD=g.moneda==='USD';const fN=n=>esUSD?fUSD(n):fmt(n);return`<tr><td>${escHtml(g.tipo||g.descripcion||'—')}</td><td>${escHtml(g.suplidor||'—')}</td><td style="text-align:center;font-weight:700;color:${esUSD?'#0e7490':'#64748b'}">${esUSD?'US$':'RD$'}</td><td style="font-weight:700">${fN(g.montoFactura||g.monto||0)}</td><td style="color:#16a34a">${fN(g.montoPagado||0)}</td><td style="color:${parseFloat(g.montoPendiente||0)>0?'#dc2626':'#16a34a'}">${fN(g.montoPendiente||0)}</td><td>${g.statusGasto||'—'}</td></tr>`}).join('')}
       </tbody></table>`:'<div style="font-size:11px;color:#94a3b8;padding:6px">Sin costos registrados para este vehículo</div>'}
+    </div>`;
+  };
+  const tabTraspasoPlaca=()=>{
+    if(!venta||!venta.tipoTransferencia)return'';
+    const esEndoso=venta.tipoTransferencia==='endoso';
+    const esTraspaso=venta.tipoTransferencia==='traspaso';
+    const tipoLbl=esEndoso?'📋 Endoso (empresa paga placa)':esTraspaso?'🔄 Traspaso (cliente paga matrícula)':'—';
+    let filas='';
+    if(esEndoso){
+      filas+=`<div class="resumen-row"><span>Monto Endoso</span><span style="font-weight:700">${fmt(venta.montoEndoso||0)}</span></div>
+        <div class="resumen-row"><span>Placa Original</span><span style="font-weight:800;color:${venta.placaOriginalRecibida?'#16a34a':'#dc2626'}">${venta.placaOriginalRecibida?'✅ Recibida':'⏳ Pendiente por entregar'}</span></div>`;
+      if(venta.placaExhibicion?.vencimiento||venta.placaExhibicion?.fecha){
+        filas+=`<div class="resumen-row"><span>Placa Exhibición vence</span><span>${fmtDate(venta.placaExhibicion.vencimiento||addDays(venta.placaExhibicion.fecha,90))}</span></div>`;
+      }
+    }else if(esTraspaso){
+      const pagado=venta.traspasoPagadoCliente!==false;
+      filas+=`<div class="resumen-row"><span>Monto Traspaso</span><span style="font-weight:700">${fmt(venta.montoTraspaso||0)}</span></div>
+        <div class="resumen-row"><span>Traspaso</span><span style="font-weight:800;color:${pagado?'#16a34a':'#dc2626'}">${pagado?'✅ Pagado por el cliente':'⏳ Pendiente de cobro'}</span></div>`;
+    }
+    return`<div class="sec">
+      <div class="sec-titulo" style="background:#7c3aed">🚗 Traspaso / Placa</div>
+      <div class="resumen">
+        <div class="resumen-row"><span>Tipo</span><span style="font-weight:700">${tipoLbl}</span></div>
+        ${filas}
+      </div>
     </div>`;
   };
   const tabSeguro=()=>{
@@ -2017,6 +2053,7 @@ function abrirFichaVehiculo(vehiculoId){
     <div style="text-align:right">
       <span class="badge-estado" style="background:${sc[estadoFicha]||'#64748b'}">${estadoFicha==='TRÁNSITO'?'EN TRÁNSITO':estadoFicha}</span>
       <div class="veh-sub" style="margin-top:4px">Generado: ${fmtDate(today())}</div>
+      <div class="veh-sub" style="margin-top:2px">Tasa US$ aplicada: RD$ ${_tasaFicha.toLocaleString('es-DO',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
     </div>
   </div>
 
@@ -2029,7 +2066,7 @@ function abrirFichaVehiculo(vehiculoId){
   ${venta?`
   <div class="grid3">
     <div class="stat" style="background:#fef3c7"><div style="font-size:9px;color:#92400e;font-weight:700">TOTAL GASTOS</div><div style="font-weight:800;font-size:13px;color:#92400e">${fmt(totalCostos)}</div></div>
-    <div class="stat" style="background:#eff6ff"><div style="font-size:9px;color:#1d4ed8;font-weight:700">PRECIO VENTA</div><div style="font-weight:800;font-size:13px">${fmt(venta.precioVenta||0)}</div></div>
+    <div class="stat" style="background:#eff6ff"><div style="font-size:9px;color:#1d4ed8;font-weight:700">PRECIO VENTA</div><div style="font-weight:800;font-size:13px">${venta.moneda==='USD'?fUSD(venta.precioVenta||0):fmt(venta.precioVenta||0)}</div>${venta.moneda==='USD'?`<div style="font-size:10px;color:#64748b;margin-top:2px">≈ ${fmt(ventaRD)}</div>`:''}</div>
     <div class="stat" style="background:${beneficio>=0?'#f0fdf4':'#fef2f2'}"><div style="font-size:9px;color:${beneficio>=0?'#16a34a':'#dc2626'};font-weight:700">BENEFICIO (Venta - Costos)</div><div style="font-weight:900;font-size:15px;color:${beneficio>=0?'#16a34a':'#dc2626'}">${fmt(beneficio)}</div></div>
   </div>
   <div class="veh-sub" style="margin-bottom:10px">Factura: <strong style="font-family:monospace">${escHtml(venta.factura||'—')}</strong> · Fecha de venta: <strong>${fmtDate(venta.fecha)}</strong></div>
@@ -2047,6 +2084,7 @@ function abrirFichaVehiculo(vehiculoId){
       ${tabSeguro()}
     </div>
     <div>
+      ${tabTraspasoPlaca()}
       ${tabPagos(cxcVenta,'💰 Cuenta por Cobrar — Venta','#1d4ed8')}
       ${tabPagos(cxcTrasp,'🔄 Cuenta por Cobrar — Traspaso/Matrícula','#c2410c')}
     </div>
