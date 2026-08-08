@@ -7984,10 +7984,10 @@ function _generarHojaCostosPDF(gastos,filtroVeh,tasaElegida){
     return`<tr class="urow">
     <td class="num">${gastosRD.length+i+1}</td><td class="desc">${escHtml(g.tipo||'—')}</td>
     <td class="sup">${escHtml(g.suplidor||'—')}</td><td class="mon">US$</td>
-    <td class="amt">${fN(g.montoFactura)}<br><span style="font-size:7px;color:#2563eb">=RD$ ${fN(rd.factura)}${pendEst}</span></td>
-    <td class="amt ok">${parseFloat(g.montoPagado||0)>0?fN(g.montoPagado)+'<br><span style="font-size:7px;color:#1d4ed8">RD$ '+fN(rd.pagado)+'</span>':''}</td>
+    <td class="amt">${fN(g.montoFactura)}<br><span style="font-size:7px;color:#1e3a8a;font-weight:700">=RD$ ${fN(rd.factura)}${pendEst}</span></td>
+    <td class="amt ok">${parseFloat(g.montoPagado||0)>0?fN(g.montoPagado)+'<br><span style="font-size:7px;color:#1e3a8a;font-weight:700">RD$ '+fN(rd.pagado)+'</span>':''}</td>
     <td class="amt nd">${parseFloat(g.montoPendiente||0)>0?fN(g.montoPendiente)+'<br><span style="font-size:7px;color:#dc2626">RD$ '+fN(rd.pendiente)+'</span>':''}</td>
-    <td class="st"><span class="b ${g.statusGasto==='PAGADO'?'g':g.statusGasto==='ABONADO'?'a':'r'}">${g.statusGasto||'PEND.'}</span>${tasasStr?`<br><span style="font-size:7px;color:#6b7280">${tasasStr}</span>`:''}</td>
+    <td class="st"><span class="b ${g.statusGasto==='PAGADO'?'g':g.statusGasto==='ABONADO'?'a':'r'}">${g.statusGasto||'PEND.'}</span>${tasasStr?`<br><span style="font-size:7px;color:#000">${tasasStr}</span>`:''}</td>
   </tr>`;}).join('');
   const win=window.open('','_blank','width=820,height=750');
   win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
@@ -7997,16 +7997,16 @@ function _generarHojaCostosPDF(gastos,filtroVeh,tasaElegida){
   body{font-family:Arial,sans-serif;font-size:10px;color:#0f172a;background:#fff;padding:10px 14px}
   .hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0f172a;padding-bottom:7px;margin-bottom:7px}
   .hdr img{max-height:44px;max-width:110px;object-fit:contain;display:block;margin-bottom:3px}
-  .hdr-emp{font-size:9px;color:#475569;line-height:1.5}
+  .hdr-emp{font-size:9px;color:#000;line-height:1.5}
   .hdr-emp strong{font-size:11px;color:#0f172a;display:block;margin-bottom:1px}
   .hdr-titulo{font-size:18px;font-weight:900;color:#dc2626;letter-spacing:1px;text-align:right;line-height:1}
-  .hdr-sub{font-size:9px;color:#6b7280;text-align:right;margin-top:3px}
+  .hdr-sub{font-size:9px;color:#000;font-weight:600;text-align:right;margin-top:3px}
   .veh-box{border:1px solid #334155;border-radius:4px;margin-bottom:8px;overflow:hidden}
   .veh-bar{background:#334155;color:#fff;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:3px 8px;display:flex;justify-content:space-between;align-items:center}
   .veh-bar span.cod{background:#f59e0b;color:#0f172a;padding:1px 8px;border-radius:8px;font-size:9px;font-weight:800}
   .veh-grid{display:grid;grid-template-columns:repeat(6,1fr)}
   .vc{padding:4px 7px;border-right:1px solid #e2e8f0}.vc:last-child{border-right:none}
-  .vc .l{font-size:8px;font-weight:700;text-transform:uppercase;color:#6b7280;margin-bottom:1px}
+  .vc .l{font-size:8px;font-weight:700;text-transform:uppercase;color:#000;margin-bottom:1px}
   .vc .v{font-weight:700;font-size:10px}
   table{width:100%;border-collapse:collapse}
   .th{background:#0f172a;color:#fff}
@@ -8014,9 +8014,9 @@ function _generarHojaCostosPDF(gastos,filtroVeh,tasaElegida){
   td{padding:6px 7px;border-bottom:1px solid #e2e8f0;vertical-align:middle;font-size:11px}
   tr:nth-child(even) td{background:#f8fafc}
   .urow td{background:#eff6ff!important}
-  .num{width:20px;text-align:center;color:#94a3b8;font-size:9px}
-  .desc{font-weight:600;font-size:11px}.sup{color:#64748b;font-size:10px}
-  .mon{text-align:center;font-size:9px;font-weight:700;color:#64748b;width:26px}
+  .num{width:20px;text-align:center;color:#000;font-size:9px}
+  .desc{font-weight:600;font-size:11px}.sup{color:#000;font-size:10px}
+  .mon{text-align:center;font-size:9px;font-weight:700;color:#000;width:26px}
   .amt{text-align:right;font-family:'Courier New',monospace;white-space:nowrap;width:95px;font-size:11px}
   .ok{color:#1d4ed8}.nd{color:#dc2626;font-weight:700}.st{text-align:center;width:54px}
   .sh td{background:#e2e8f0!important;font-weight:800;font-size:9px;text-transform:uppercase;color:#334155;letter-spacing:.4px;padding:6px 7px;border-top:2px solid #94a3b8;border-bottom:2px solid #94a3b8}
@@ -8028,12 +8028,12 @@ function _generarHojaCostosPDF(gastos,filtroVeh,tasaElegida){
   .res-bar{background:#334155;color:#fff;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:3px 8px}
   .res-top{display:grid;grid-template-columns:${hayRD&&hayUSD?'1fr 1fr 1fr':'1fr 1fr'}}
   .rc{padding:6px 10px;border-right:1px solid #e2e8f0}.rc:last-child{border-right:none}
-  .rl{font-size:8px;font-weight:700;text-transform:uppercase;color:#6b7280;margin-bottom:3px}
-  .rv{font-size:13px;font-weight:900}.rs{font-size:8px;margin-top:1px}
+  .rl{font-size:8px;font-weight:700;text-transform:uppercase;color:#000;margin-bottom:3px}
+  .rv{font-size:13px;font-weight:900}.rs{font-size:8px;margin-top:1px;color:#000}
   .res-bot{display:grid;grid-template-columns:${hayUSD?'1fr 1fr':'1fr'};border-top:2px solid #334155}
   .tc{padding:7px 10px;border-right:1px solid #e2e8f0}.tc:last-child{border-right:none}
   .tl{font-size:8px;font-weight:700;text-transform:uppercase;margin-bottom:3px}
-  .tv{font-size:16px;font-weight:900}.ts{font-size:8px;margin-top:2px;color:#6b7280}
+  .tv{font-size:16px;font-weight:900}.ts{font-size:8px;margin-top:2px;color:#000}
   @media print{.noprint{display:none}@page{size:letter;margin:8mm}}
   </style></head><body>
   <div class="hdr">
@@ -8088,7 +8088,7 @@ function _generarHojaCostosPDF(gastos,filtroVeh,tasaElegida){
       </div>`:''}
       ${hayUSD?`<div class="rc">
         <div class="rl">Sub-Total en Dólares (US$)</div>
-        <div class="rv" style="color:#2563eb">${fUS(subtotUSD)}</div>
+        <div class="rv" style="color:#1e3a8a">${fUS(subtotUSD)}</div>
         <div class="rs" style="color:#1d4ed8">Pagado: ${fUS(subtotPagUSD)}</div>
         ${subtotPendUSD>0?`<div class="rs" style="color:#dc2626">Pendiente: ${fUS(subtotPendUSD)}</div>`:'<div class="rs" style="color:#1d4ed8">✅ Sin pendiente</div>'}
       </div>`:''}
@@ -8107,7 +8107,7 @@ function _generarHojaCostosPDF(gastos,filtroVeh,tasaElegida){
       </div>
       ${hayUSD?`<div class="tc" style="background:#eff6ff">
         <div class="tl" style="color:#1e40af">TOTAL GENERAL EN DÓLARES (US$)</div>
-        <div class="tv" style="color:#2563eb">${fUS(totalUS)}</div>
+        <div class="tv" style="color:#1e3a8a">${fUS(totalUS)}</div>
         ${totalPendUS>0?`<div class="ts" style="color:#dc2626;font-weight:700;margin-top:3px">Pendiente: ${fUS(totalPendUS)}</div>`:'<div class="ts" style="color:#1d4ed8;font-weight:700;margin-top:3px">✅ Todo pagado</div>'}
       </div>`:''}
     </div>
