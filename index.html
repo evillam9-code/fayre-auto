@@ -675,30 +675,6 @@ function getBancoCuentas(){return DB.config.bancoCuentas||[];}
 function esCuentaUSD(tipo){return (tipo||'').includes('USD')||(tipo||'').includes('Dólares');}
 // Helper: genera <option> planos desde bancoCuentas para dropdowns simples de cuenta
 
-// Helper: genera bloque Moneda→Banco→Cuenta con filtrado por moneda
-function getMonedaBancoCuentaFields(prefix, monedaSel, bancoSel, cuentaSel){
-  const bcs=DB.config.bancoCuentas||[];
-  // Filtrar bancos con cuentas compatibles con la moneda seleccionada
-  function bancosParaMoneda(moneda){
-    return bcs.filter(b=>(b.cuentas||[]).some(c=>
-      moneda==='USD'?c.tipo.includes('USD'):!c.tipo.includes('USD')
-    ));
-  }
-  function cuentasParaBanco(banco, moneda){
-    const b=bcs.find(x=>x.banco===banco);
-    if(!b)return[];
-    return (b.cuentas||[]).filter(c=>
-      moneda==='USD'?c.tipo.includes('USD'):!c.tipo.includes('USD')
-    );
-  }
-  const moneda=monedaSel||'RD$';
-  const bancosDisp=bancosParaMoneda(moneda);
-  const bancoPre=bancoSel&&bancosDisp.find(b=>b.banco===bancoSel)?bancoSel:(bancosDisp[0]?.banco||'');
-  const cuentasDisp=cuentasParaBanco(bancoPre,moneda);
-  const bancoOpts=bancosDisp.map(b=>`<option value="${escHtml(b.banco)}" ${b.banco===bancoPre?'selected':''}>${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos</option>';
-  const cuentaOpts=cuentasDisp.map(c=>{const v=c.tipo+' — '+c.numero;return`<option value="${escHtml(v)}" ${v===cuentaSel?'selected':''}>${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('')||'<option value="">Sin cuentas</option>';
-  return {bancoOpts, cuentaOpts, moneda, bancoPre};
-}
 function filtrarBancosPrestamoOtorgado(){
   const moneda=document.getElementById('po2-pago-moneda')?.value||'RD$';
   const bancoEl=document.getElementById('po2-banco');
@@ -763,37 +739,6 @@ function getCuentasFlat(selected){
     const val=c.tipo+' — '+c.numero;
     return '<option value="'+escHtml(val)+'"'+(val===selected?' selected':'')+'>'+escHtml(b.banco+' | '+c.tipo+' — '+c.numero)+'</option>';
   })).join('')||'<option value="">Sin cuentas configuradas</option>';
-}
-
-function getBancoOptions(selectedBanco){
-  const bcs=getBancoCuentas();
-  return bcs.map(b=>`<option value="${escHtml(b.banco)}" ${b.banco===selectedBanco?'selected':''}>${escHtml(b.banco)}</option>`).join('');
-}
-function getCuentasDeSelBanco(bancoSelId,selectedCuenta){
-  const bancoEl=document.getElementById(bancoSelId);
-  if(!bancoEl)return;
-  const cuentaSelId=bancoSelId.replace('banco','cuenta');
-  const cuentaEl=document.getElementById(cuentaSelId);
-  if(!cuentaEl)return;
-  const bcs=getBancoCuentas();
-  const b=bcs.find(x=>x.banco===bancoEl.value);
-  const cuentas=b?b.cuentas:[];
-  cuentaEl.innerHTML=cuentas.map(c=>`<option value="${escHtml(c.numero+' — '+c.tipo)}" ${(c.numero+' — '+c.tipo)===selectedCuenta?'selected':''}>${escHtml(c.banco||'')} ${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`).join('')||'<option value="">Sin cuentas configuradas</option>';
-}
-function bancoCuentaHTML(bancoId,cuentaId,selectedBanco,selectedCuenta){
-  const bcs=getBancoCuentas();
-  const bancoOpts=bcs.map(b=>`<option value="${escHtml(b.banco)}" ${b.banco===selectedBanco?'selected':''}>${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos configurados</option>';
-  const b=bcs.find(x=>x.banco===selectedBanco);
-  const cuentas=b?b.cuentas:[];
-  const cuentaOpts=cuentas.map(c=>`<option value="${escHtml(c.tipo+' — '+c.numero)}" ${(c.tipo+' — '+c.numero)===selectedCuenta?'selected':''}>${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`).join('')||'<option value="">Seleccione banco primero</option>';
-  return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-    <div class="form-field" style="margin:0"><label style="font-size:10px">Banco</label>
-      <select id="${bancoId}" onchange="getCuentasDeSelBanco('${bancoId}','${cuentaId}')">${bancoOpts}</select>
-    </div>
-    <div class="form-field" style="margin:0"><label style="font-size:10px">Cuenta</label>
-      <select id="${cuentaId}">${cuentaOpts}</select>
-    </div>
-  </div>`;
 }
 
 const titleCase=s=>s?s.replace(/\b\w/g,l=>l.toUpperCase()):'';
@@ -3079,9 +3024,6 @@ function renderCaja(){
 function editarCaja(i){
   const c=DB.caja[i];
   if(!c)return;
-  const bcs=DB.config.bancoCuentas||[];
-  const bancoOpts=bcs.map(b=>`<option value="${escHtml(b.banco)}" ${b.banco===c.banco?'selected':''}>${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos</option>';
-  const cuentaOpts=bcs.length?(()=>{const b=bcs.find(x=>x.banco===c.banco)||bcs[0];return(b?b.cuentas:[]).map(ct=>`<option value="${escHtml(ct.tipo+' — '+ct.numero)}" ${(ct.tipo+' — '+ct.numero)===c.cuenta?'selected':''}>${escHtml(ct.tipo)} — ${escHtml(ct.numero)}</option>`).join('');})():'';
   const defCatE=DB.config.categoriasEntrada||['Venta de Vehículo','Abono de Cliente','Préstamo Recibido','Capital','Otra Entrada'];
   const defCatS=DB.config.categoriasSalida||['Nómina/Salario','Gasto de Vehículo','Gasto de Empresa','Pago a Suplidor','Alquiler','Servicios/Utilidades','Publicidad','Impuestos','Otra Salida'];
   const allCats=[...new Set([...defCatE,...defCatS])];
@@ -3090,7 +3032,7 @@ function editarCaja(i){
     <div class="form-row c2">
       <div class="form-field"><label class="required">Fecha</label><input type="date" id="ec-fecha" value="${c.fecha||today()}"></div>
       <div class="form-field"><label class="required">Tipo</label>
-        <select id="ec-tipo" onchange="actualizarCuentasCajaEdit()">
+        <select id="ec-tipo">
           <option value="ENTRADA" ${c.tipo==='ENTRADA'?'selected':''}>📥 Entrada</option>
           <option value="SALIDA" ${c.tipo==='SALIDA'?'selected':''}>📤 Salida</option>
         </select>
@@ -3102,16 +3044,7 @@ function editarCaja(i){
     </div>
     <div class="form-field"><label>Descripción</label><input type="text" id="ec-desc" value="${escHtml(c.descripcion||'')}"></div>
     <div class="form-field"><label>Nombre de quien realiza la transacción</label><input type="text" id="ec-resp" value="${escHtml(c.responsable||currentUser?.nombre||'')}"></div>
-    <div class="form-row c2">
-      <div class="form-field"><label>Banco</label><select id="ec-banco" onchange="actualizarCuentasCajaEdit()">${bancoOpts}</select></div>
-      <div class="form-field"><label>Cuenta</label><select id="ec-cuenta">${cuentaOpts}</select></div>
-    </div>
-    <div class="form-field"><label class="required">Moneda</label>
-      <select id="ec-moneda">
-        <option value="RD$" ${(c.moneda||'RD$')==='RD$'?'selected':''}>RD$ — Pesos</option>
-        <option value="USD" ${c.moneda==='USD'?'selected':''}>USD — Dólares</option>
-      </select>
-    </div>
+    ${htmlMonedaBancoCuenta('ec',c.moneda||'RD$',c.banco,c.cuenta)}
     <div class="form-field"><label>Forma de Pago</label>
       <select id="ec-forma" data-prev="${c.formaPago&&c.formaPago!=='CHEQUE'?c.formaPago:'EFECTIVO'}" onchange="onFormaPagoChange(this,'ec',true)">
         <option value="EFECTIVO" ${(c.formaPago||'EFECTIVO')==='EFECTIVO'?'selected':''}>Efectivo</option>
@@ -3123,14 +3056,6 @@ function editarCaja(i){
     </div>
   `,`<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
      <button class="btn btn-primary" onclick="guardarEditCaja(${i})">💾 Guardar</button>`);
-}
-function actualizarCuentasCajaEdit(){
-  const banco=document.getElementById('ec-banco')?.value;
-  const sel=document.getElementById('ec-cuenta');
-  if(!sel)return;
-  const bcs=DB.config.bancoCuentas||[];
-  const b=bcs.find(x=>x.banco===banco);
-  sel.innerHTML=(b?b.cuentas:[]).map(c=>`<option value="${escHtml(c.tipo+' — '+c.numero)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`).join('')||'<option value="">Sin cuentas</option>';
 }
 async function guardarEditCaja(i){
   if(!validarChequeAntesDeGuardar('ec',true))return;
@@ -3537,17 +3462,23 @@ function exportarResumenTodasCuentas(){
 }
 
 // ══ FUNCIÓN GLOBAL MONEDA→BANCO→CUENTA ══
-function htmlMonedaBancoCuenta(prefix, monedaVal){
+// Orden obligatorio en TODO el sistema: Moneda primero (filtra bancos con cuentas en esa
+// moneda), Banco después (filtra cuentas de ese banco en esa moneda). bancoSel/cuentaSel
+// son opcionales — se usan para preseleccionar el valor actual en formularios de "editar".
+function htmlMonedaBancoCuenta(prefix, monedaVal, bancoSel, cuentaSel, extraOnchange){
   const m=monedaVal||'RD$';
   const bcs=DB.config.bancoCuentas||[];
-  const bancosDisp=bcs.filter(b=>(b.cuentas||[]).some(c=>m==='USD'?(c.tipo.includes('USD')||c.tipo.includes('Dólares')):(!c.tipo.includes('USD')&&!c.tipo.includes('Dólares'))));
-  const primerBanco=bancosDisp[0];
-  const cuentas=primerBanco?(primerBanco.cuentas||[]).filter(c=>m==='USD'?(c.tipo.includes('USD')||c.tipo.includes('Dólares')):(!c.tipo.includes('USD')&&!c.tipo.includes('Dólares'))):[];
-  const bancoOpts=bancosDisp.map(b=>`<option value="${escHtml(b.banco)}">${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos</option>';
-  const cuentaOpts=cuentas.map(c=>`<option value="${escHtml(c.tipo+' — '+c.numero)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`).join('')||'<option value="">Sin cuentas</option>';
+  const filtroMoneda=c=>m==='USD'?esCuentaUSD(c.tipo):!esCuentaUSD(c.tipo);
+  const bancosDisp=bcs.filter(b=>(b.cuentas||[]).some(filtroMoneda));
+  const bancoPre=bancoSel&&bancosDisp.some(b=>b.banco===bancoSel)?bancoSel:(bancosDisp[0]?.banco||'');
+  const bancoObj=bancosDisp.find(b=>b.banco===bancoPre);
+  const cuentas=bancoObj?(bancoObj.cuentas||[]).filter(filtroMoneda):[];
+  const bancoOpts=bancosDisp.map(b=>`<option value="${escHtml(b.banco)}" ${b.banco===bancoPre?'selected':''}>${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos</option>';
+  const cuentaOpts=cuentas.map(c=>{const v=c.tipo+' — '+c.numero;return`<option value="${escHtml(v)}" ${v===cuentaSel?'selected':''}>${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('')||'<option value="">Sin cuentas</option>';
+  const monedaOnchange=`actualizarCuentasGenerico('${prefix}')${extraOnchange?';'+extraOnchange:''}`;
   return `<div class="form-row c3">
     <div class="form-field"><label>Moneda</label>
-      <select id="${prefix}-moneda" onchange="actualizarCuentasGenerico('${prefix}')">
+      <select id="${prefix}-moneda" onchange="${escHtml(monedaOnchange)}">
         <option value="RD$" ${m==='RD$'?'selected':''}>RD$ — Pesos</option>
         <option value="USD" ${m==='USD'?'selected':''}>USD — Dólares</option>
       </select>
@@ -3567,15 +3498,48 @@ function actualizarCuentasGenerico(prefix){
   if(!cuentaEl)return;
   const m=monedaEl?.value||'RD$';
   const bcs=DB.config.bancoCuentas||[];
+  const filtroMoneda=c=>m==='USD'?esCuentaUSD(c.tipo):!esCuentaUSD(c.tipo);
   // Actualizar bancos si cambió la moneda (preservando el banco seleccionado si sigue siendo válido)
   if(bancoEl){
     const bancoPrevio=bancoEl.value;
-    const bancosDisp=bcs.filter(b=>(b.cuentas||[]).some(c=>m==='USD'?(c.tipo.includes('USD')||c.tipo.includes('Dólares')):(!c.tipo.includes('USD')&&!c.tipo.includes('Dólares'))));
+    const bancosDisp=bcs.filter(b=>(b.cuentas||[]).some(filtroMoneda));
     bancoEl.innerHTML=bancosDisp.map(b=>`<option value="${escHtml(b.banco)}" ${b.banco===bancoPrevio?'selected':''}>${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos</option>';
   }
   const banco=bancoEl?.value;
   const b=bcs.find(x=>x.banco===banco);
-  const cuentas=(b?b.cuentas:[]).filter(c=>m==='USD'?(c.tipo.includes('USD')||c.tipo.includes('Dólares')):(!c.tipo.includes('USD')&&!c.tipo.includes('Dólares')));
+  const cuentas=(b?b.cuentas:[]).filter(filtroMoneda);
+  cuentaEl.innerHTML=cuentas.map(c=>`<option value="${escHtml(c.tipo+' — '+c.numero)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`).join('')||'<option value="">Sin cuentas</option>';
+}
+// Variante para formularios donde la moneda viene fija/heredada de un registro existente
+// (no es seleccionable ahí) pero Banco→Cuenta igual deben quedar filtrados por esa moneda.
+function htmlBancoCuentaFiltrado(prefix, moneda, bancoSel, cuentaSel){
+  const m=moneda==='USD'?'USD':'RD$';
+  const bcs=DB.config.bancoCuentas||[];
+  const filtroMoneda=c=>m==='USD'?esCuentaUSD(c.tipo):!esCuentaUSD(c.tipo);
+  const bancosDisp=bcs.filter(b=>(b.cuentas||[]).some(filtroMoneda));
+  const bancoPre=bancoSel&&bancosDisp.some(b=>b.banco===bancoSel)?bancoSel:(bancosDisp[0]?.banco||'');
+  const bancoObj=bancosDisp.find(b=>b.banco===bancoPre);
+  const cuentas=bancoObj?(bancoObj.cuentas||[]).filter(filtroMoneda):[];
+  const bancoOpts=bancosDisp.map(b=>`<option value="${escHtml(b.banco)}" ${b.banco===bancoPre?'selected':''}>${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos</option>';
+  const cuentaOpts=cuentas.map(c=>{const v=c.tipo+' — '+c.numero;return`<option value="${escHtml(v)}" ${v===cuentaSel?'selected':''}>${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('')||'<option value="">Sin cuentas</option>';
+  return `<div class="form-row c2">
+    <div class="form-field"><label>Banco (${m==='USD'?'US$':'RD$'})</label>
+      <select id="${prefix}-banco" onchange="actualizarCuentasFiltrado('${prefix}','${m}')">${bancoOpts}</select>
+    </div>
+    <div class="form-field"><label>Cuenta</label>
+      <select id="${prefix}-cuenta">${cuentaOpts}</select>
+    </div>
+  </div>`;
+}
+function actualizarCuentasFiltrado(prefix, moneda){
+  const bancoEl=document.getElementById(prefix+'-banco');
+  const cuentaEl=document.getElementById(prefix+'-cuenta');
+  if(!cuentaEl)return;
+  const m=moneda==='USD'?'USD':'RD$';
+  const bcs=DB.config.bancoCuentas||[];
+  const filtroMoneda=c=>m==='USD'?esCuentaUSD(c.tipo):!esCuentaUSD(c.tipo);
+  const b=bcs.find(x=>x.banco===bancoEl?.value);
+  const cuentas=(b?b.cuentas:[]).filter(filtroMoneda);
   cuentaEl.innerHTML=cuentas.map(c=>`<option value="${escHtml(c.tipo+' — '+c.numero)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`).join('')||'<option value="">Sin cuentas</option>';
 }
 
@@ -3985,14 +3949,6 @@ function nuevoGasto(){
     </div>`,
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
      <button class="btn btn-primary" onclick="guardarGasto()">💾 Guardar</button>`);
-}
-function actualizarCuentasGasto(){
-  const bancoEl=document.getElementById('g-banco');
-  const cuentaEl=document.getElementById('g-cuenta');
-  if(!bancoEl||!cuentaEl)return;
-  const bcs=DB.config.bancoCuentas||[];
-  const b=bcs.find(x=>x.banco===bancoEl.value);
-  cuentaEl.innerHTML=(b?b.cuentas:[]).map(c=>`<option value="${escHtml(c.tipo+' — '+c.numero)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`).join('')||'<option value="">Sin cuentas</option>';
 }
 function agregarCatGasto(){
   const nueva=prompt('Nueva categoría de gasto:');
@@ -7472,13 +7428,6 @@ function renderGastosVeh(){
 }
 
 function nuevoGastoVeh(){
-  // Generar opciones de banco+cuenta
-  const bancoCuentas=DB.config.bancoCuentas||[];
-  const opcionesBanco=bancoCuentas.length
-    ?bancoCuentas.flatMap(b=>b.cuentas&&b.cuentas.length
-      ?b.cuentas.map(ct=>`<option value="${escHtml(b.banco+' — '+ct.numero+' ('+ct.tipo+')')}">${escHtml(b.banco+' — '+ct.numero)}</option>`)
-      :[`<option value="${escHtml(b.banco)}">${escHtml(b.banco)}</option>`])
-    :getCuentasFlat();
   // Tipos de gasto con botón +
   const tiposGasto=DB.config.tiposGastoVeh&&DB.config.tiposGastoVeh.length?DB.config.tiposGastoVeh:['Compra Vehículo','Aduana','Flete','Otros'];
   openModal('➕ Nuevo Gasto de Vehículo',`
@@ -7497,7 +7446,7 @@ function nuevoGastoVeh(){
         </select>
       </div>
     </div>
-    <div class="form-row c3">
+    <div class="form-row c2">
       <div class="form-field"><label class="required">Tipo de Gasto</label>
         <div style="display:flex;gap:6px">
           <select id="ngv-tipo" style="flex:1">
@@ -7510,28 +7459,11 @@ function nuevoGastoVeh(){
       <div class="form-field"><label>No. Factura</label>
         <input type="text" id="ngv-nofactura" placeholder="Ej: FAC-0001">
       </div>
-      <div class="form-field"><label class="required">Moneda</label>
-        <select id="ngv-moneda" onchange="toggleGVehMoneda();calcPendienteGVeh()">
-          <option value="RD$">RD$ — Pesos</option>
-          <option value="USD">USD — Dólares</option>
-        </select>
-      </div>
-      <div class="form-field" id="ngv-tasa-wrap" style="display:none">
-        <label class="required">Tasa de Cambio (RD$ x USD)</label>
-        <input type="number" id="ngv-tasa" value="${DB.config.tasaCambio||60}" step="0.01" placeholder="Ej: 60.50" oninput="calcPendienteGVeh()">
-      </div>
     </div>
-    <div class="form-row c2" id="ngv-banco-wrap">
-      <div class="form-field"><label class="required">Banco</label>
-        <select id="ngv-banco" onchange="actualizarCuentasNGV()">
-          ${(DB.config.bancoCuentas||[]).map(b=>`<option value="${escHtml(b.banco)}">${escHtml(b.banco)}</option>`).join('')||'<option value="Caja General">Caja General</option>'}
-        </select>
-      </div>
-      <div class="form-field"><label class="required">Cuenta de Salida</label>
-        <select id="ngv-cuenta">
-          ${(()=>{const bcs=DB.config.bancoCuentas||[];const b=bcs[0];return b?(b.cuentas||[]).map(c=>`<option value="${escHtml(c.tipo+' — '+c.numero)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`).join(''):'<option value="Caja General">Caja General</option>';})()}
-        </select>
-      </div>
+    ${htmlMonedaBancoCuenta('ngv','RD$','','','toggleGVehMoneda();calcPendienteGVeh()')}
+    <div class="form-field" id="ngv-tasa-wrap" style="display:none">
+      <label class="required">Tasa de Cambio (RD$ x USD)</label>
+      <input type="number" id="ngv-tasa" value="${DB.config.tasaCambio||60}" step="0.01" placeholder="Ej: 60.50" oninput="calcPendienteGVeh()">
     </div>
     <div class="form-row c3">
       <div class="form-field"><label class="required">Monto Factura</label>
@@ -7575,14 +7507,6 @@ function toggleGVehMoneda(){
   const moneda=document.getElementById('ngv-moneda')?.value;
   const tasaWrap=document.getElementById('ngv-tasa-wrap');
   if(tasaWrap)tasaWrap.style.display=moneda==='USD'?'block':'none';
-}
-function actualizarCuentasNGV(){
-  const bancoEl=document.getElementById('ngv-banco');
-  const cuentaEl=document.getElementById('ngv-cuenta');
-  if(!bancoEl||!cuentaEl)return;
-  const bcs=DB.config.bancoCuentas||[];
-  const b=bcs.find(x=>x.banco===bancoEl.value);
-  cuentaEl.innerHTML=(b&&b.cuentas&&b.cuentas.length)?b.cuentas.map(c=>`<option value="${escHtml(c.tipo+' — '+c.numero)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`).join(''):'<option value="Caja General">Caja General</option>';
 }
 function mostrarTipoSuplidor(nombre,infoId){
   const inf=document.getElementById(infoId);if(!inf)return;
@@ -11032,14 +10956,6 @@ function eliminarRegistroCXP(id,origen){
   renderCXP();
 }
 
-function actualizarCuentasCXPP(){
-  const bancoEl=document.getElementById('cxpp-banco');
-  const cuentaEl=document.getElementById('cxpp-cuenta');
-  if(!bancoEl||!cuentaEl)return;
-  const bcs=DB.config.bancoCuentas||[];
-  const b=bcs.find(x=>x.banco===bancoEl.value);
-  cuentaEl.innerHTML=(b?b.cuentas:[]).map(c=>`<option value="${escHtml(c.tipo+' — '+c.numero)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`).join('')||'<option value="Caja General">Caja General</option>';
-}
 function calcEquivCXP(){
   const m=parseFloat((document.getElementById('cxpp-monto')?.value||'0').replace(/,/g,''))||0;
   const t=parseFloat(document.getElementById('cxpp-tasa')?.value||0)||0;
@@ -11070,39 +10986,20 @@ function editarCXP(gid, origen){
         </select>
       </div>
     </div>
-    <div class="form-row c2">
+    <div class="form-row c3">
       <div class="form-field"><label>Tipo de Gasto / Descripción</label>
         <input type="text" id="ecxp-tipo" value="${escHtml(g.descripcion||g.tipo||'')}">
       </div>
-      <div class="form-field"><label>Moneda</label>
-        <select id="ecxp-moneda" onchange="toggleEquivEditCXP()">
-          <option value="RD$" ${(g.moneda||'RD$')==='RD$'?'selected':''}>RD$ — Pesos</option>
-          <option value="USD" ${g.moneda==='USD'?'selected':''}>USD — Dólares</option>
-        </select>
-      </div>
-    </div>
-    <div class="form-row c3">
       <div class="form-field"><label>Monto Factura</label>
         <input type="text" id="ecxp-factura" value="${fmtMoneyDisplay(g.montoFactura||0)}" oninput="fmtMoneyInput(this);calcEquivEditCXP()" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
       </div>
       <div class="form-field"><label>Monto Pagado</label>
         <input type="text" id="ecxp-pagado" value="${fmtMoneyDisplay(g.montoPagado||0)}" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
       </div>
-      <div class="form-field"><label>Fecha</label>
-        <input type="date" id="ecxp-fecha" value="${g.fecha||today()}">
-      </div>
     </div>
-    <div class="form-row c2">
-      <div class="form-field"><label>Banco</label>
-        <select id="ecxp-banco" onchange="actualizarCuentasEditCXP()">
-          ${(DB.config.bancoCuentas||[]).map(b=>`<option value="${escHtml(b.banco)}" ${b.banco===g.banco?'selected':''}>${escHtml(b.banco)}</option>`).join('')||'<option value="Caja General">Caja General</option>'}
-        </select>
-      </div>
-      <div class="form-field"><label>Cuenta</label>
-        <select id="ecxp-cuenta">
-          ${(()=>{const bcs=DB.config.bancoCuentas||[];const b=bcs.find(bb=>bb.banco===g.banco)||bcs[0];return b&&b.cuentas&&b.cuentas.length?b.cuentas.map(c=>`<option value="${escHtml(c.tipo+' — '+c.numero)}" ${(c.tipo+' — '+c.numero)===g.cuenta?'selected':''}>${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`).join(''):'<option value="Caja General">Caja General</option>';})()}
-        </select>
-      </div>
+    ${htmlMonedaBancoCuenta('ecxp',g.moneda||'RD$',g.banco,g.cuenta,'toggleEquivEditCXP()')}
+    <div class="form-field"><label>Fecha</label>
+      <input type="date" id="ecxp-fecha" value="${g.fecha||today()}">
     </div>
     <div class="form-row c2" id="ecxp-equiv-wrap" style="${g.moneda==='USD'?'':'display:none'}">
       <div class="form-field"><label>Tasa del día (RD$ por 1 USD)</label>
@@ -11122,14 +11019,6 @@ function editarCXP(gid, origen){
     </div>`,
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
      <button class="btn btn-primary" onclick="guardarEditCXP('${gid}','${origen}')">💾 Actualizar</button>`);
-}
-function actualizarCuentasEditCXP(){
-  const bancoEl=document.getElementById('ecxp-banco');
-  const cuentaEl=document.getElementById('ecxp-cuenta');
-  if(!bancoEl||!cuentaEl)return;
-  const bcs=DB.config.bancoCuentas||[];
-  const b=bcs.find(x=>x.banco===bancoEl.value);
-  cuentaEl.innerHTML=(b&&b.cuentas&&b.cuentas.length)?b.cuentas.map(c=>`<option value="${escHtml(c.tipo+' — '+c.numero)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`).join(''):'<option value="Caja General">Caja General</option>';
 }
 function toggleEquivEditCXP(){
   const moneda=document.getElementById('ecxp-moneda')?.value;
@@ -11223,10 +11112,6 @@ function guardarEditCXP(gid, origen){
 
 function nuevaCXPManual(){
   const sups=(DB.suplidores||[]).map(s=>`<option value="${escHtml(s.empresa||s.nombre)}">${escHtml(s.empresa||s.nombre)}</option>`).join('');
-  const bcs=DB.config.bancoCuentas||[];
-  const bancoOpts=bcs.map(b=>`<option value="${escHtml(b.banco)}">${escHtml(b.banco)}</option>`).join('')||'<option value="Caja General">Caja General</option>';
-  const primerBanco=bcs[0];
-  const cuentaOpts=primerBanco?(primerBanco.cuentas||[]).map(c=>`<option value="${escHtml(c.tipo+' — '+c.numero)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`).join(''):'<option value="">Sin cuentas</option>';
   openModal('➕ Nueva Cuenta por Pagar Manual',`
     <div style="background:var(--amber2);border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:#92400e">
       ℹ️ Las CXP se generan automáticamente desde Gastos de Vehículos. Use esto solo para cuentas que no vienen de gastos de vehículo.
@@ -11250,23 +11135,8 @@ function nuevaCXPManual(){
         <input type="text" id="cxpm-pend" readonly value="0" style="background:#f8fafc;font-weight:700;color:var(--red)">
       </div>
     </div>
-    <div class="form-row c2">
-      <div class="form-field"><label>Moneda</label>
-        <select id="cxpm-moneda">
-          <option value="RD$">🇩🇴 Pesos (RD$)</option>
-          <option value="USD">🇺🇸 Dólares (USD)</option>
-        </select>
-      </div>
-      <div class="form-field"><label>Banco</label>
-        <select id="cxpm-banco" onchange="actualizarCuentasCXPM()">${bancoOpts}</select>
-      </div>
-    </div>
-    <div class="form-row c2">
-      <div class="form-field"><label>Cuenta de Pago</label>
-        <select id="cxpm-cuenta">${cuentaOpts}</select>
-      </div>
-      <div class="form-field"><label>Fecha</label><input type="date" id="cxpm-fecha" value="${today()}"></div>
-    </div>
+    ${htmlMonedaBancoCuenta('cxpm','RD$')}
+    <div class="form-field"><label>Fecha</label><input type="date" id="cxpm-fecha" value="${today()}"></div>
     <div class="form-row c2">
       <div class="form-field"><label>Fecha Límite Pago</label><input type="date" id="cxpm-flim"></div>
       <div class="form-field"><label>No. Factura</label>
@@ -11294,14 +11164,6 @@ function calcCXPMPend(){
   const a=parseFloat((document.getElementById('cxpm-abono')?.value||'0').replace(/,/g,''));
   const p=document.getElementById('cxpm-pend');
   if(p)p.value=fmtMoneyDisplay(Math.max(0,m-a));
-}
-function actualizarCuentasCXPM(){
-  const bancoEl=document.getElementById('cxpm-banco');
-  const cuentaEl=document.getElementById('cxpm-cuenta');
-  if(!bancoEl||!cuentaEl)return;
-  const bcs=DB.config.bancoCuentas||[];
-  const b=bcs.find(x=>x.banco===bancoEl.value);
-  cuentaEl.innerHTML=(b?b.cuentas:[]).map(c=>`<option value="${escHtml(c.tipo+' — '+c.numero)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`).join('')||'<option value="">Sin cuentas</option>';
 }
 function guardarCXPManual(){
   const sup=document.getElementById('cxpm-sup')?.value;
@@ -11351,8 +11213,6 @@ function abonarCXPManual(gid){
   const g=DB.cxp[i];
   const esUSD=(g.moneda||'RD$')==='USD';
   const fV=(n)=>esUSD?'$'+parseFloat(n||0).toLocaleString('en-US',{minimumFractionDigits:2})+' USD':fmt(n);
-  const bcs=DB.config.bancoCuentas||[];
-  const bancoOpts=bcs.map(b=>`<option value="${escHtml(b.banco)}">${escHtml(b.banco)}</option>`).join('')||'<option value="Caja General">Caja General</option>';
   openModal('\u{1F4B5} Pagar CXP Manual \u2014 '+escHtml(g.descripcion),`
     <div style="background:var(--blue3);border-radius:8px;padding:10px;margin-bottom:14px;font-size:13px">
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;text-align:center">
@@ -11383,17 +11243,10 @@ function abonarCXPManual(gid){
         </div>
       </div>
     </div>`:''}
-    <div class="form-row c3">
-      <div class="form-field"><label>Moneda</label>
-        <input type="text" readonly style="background:var(--gray2)" value="${esUSD?'USD \u2014 D\u00f3lares':'RD$ \u2014 Pesos'}">
-      </div>
-      <div class="form-field"><label>Banco</label>
-        <select id="cxpm-pay-banco" onchange="actualizarCuentasPagoManual()">${bancoOpts}</select>
-      </div>
-      <div class="form-field"><label>Cuenta de Salida</label>
-        <select id="cxpm-pay-cuenta">${bcs[0]?(bcs[0].cuentas||[]).map(c=>`<option value="${escHtml(c.tipo+' \u2014 '+c.numero)}">${escHtml(c.tipo)} \u2014 ${escHtml(c.numero)}</option>`).join(''):'<option value="Caja General">Caja General</option>'}</select>
-      </div>
+    <div class="form-field"><label>Moneda</label>
+      <input type="text" readonly style="background:var(--gray2)" value="${esUSD?'USD \u2014 D\u00f3lares':'RD$ \u2014 Pesos'}">
     </div>
+    ${htmlBancoCuentaFiltrado('cxpm-pay',esUSD?'USD':'RD$')}
     <div class="form-field"><label>Forma de Pago</label>
       <select id="cxpm-pay-forma" data-prev="EFECTIVO" onchange="onFormaPagoChange(this,'cxpm-pay',false)">
         <option value="EFECTIVO">Efectivo</option>
@@ -11405,14 +11258,6 @@ function abonarCXPManual(gid){
     </div>`,
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
      <button class="btn btn-green" onclick="confirmarPagoCXPManual(${i})">\u2705 Confirmar Pago</button>`);
-}
-function actualizarCuentasPagoManual(){
-  const bancoEl=document.getElementById('cxpm-pay-banco');
-  const cuentaEl=document.getElementById('cxpm-pay-cuenta');
-  if(!bancoEl||!cuentaEl)return;
-  const bcs=DB.config.bancoCuentas||[];
-  const b=bcs.find(x=>x.banco===bancoEl.value);
-  cuentaEl.innerHTML=(b?b.cuentas:[]).map(c=>`<option value="${escHtml(c.tipo+' \u2014 '+c.numero)}">${escHtml(c.tipo)} \u2014 ${escHtml(c.numero)}</option>`).join('')||'<option value="Caja General">Caja General</option>';
 }
 function calcEquivCXPM(){
   const m=parseFloat((document.getElementById('cxpm-pay-monto')?.value||'0').replace(/,/g,''))||0;
@@ -11469,17 +11314,12 @@ function abonarDesdeCXP(gid){
         <div><div style="font-size:10px;color:var(--gray);font-weight:700;text-transform:uppercase">Pendiente</div><div style="font-weight:700;color:var(--red)">${fV(g.montoPendiente||0)}</div></div>
       </div>
     </div>
-    <div class="form-row c3">
+    <div class="form-row c2">
       <div class="form-field"><label class="required">Monto a Pagar (${esUSD?'USD':'RD$'})</label>
         <input type="text" id="cxpp-monto" value="${fmtMoneyDisplay(g.montoPendiente||0)}" oninput="fmtMoneyInput(this);${esUSD?'calcEquivCXP();':''}" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)" placeholder="0.00">
       </div>
       <div class="form-field"><label>Moneda</label>
         <input type="text" readonly style="background:var(--gray2)" value="${esUSD?'USD — Dólares':'RD$ — Pesos'}">
-      </div>
-      <div class="form-field"><label>Banco</label>
-        <select id="cxpp-banco" onchange="actualizarCuentasCXPP()">
-          ${(DB.config.bancoCuentas||[]).map(b=>`<option value="${escHtml(b.banco)}">${escHtml(b.banco)}</option>`).join('')||'<option value="Caja General">Caja General</option>'}
-        </select>
       </div>
     </div>
     ${esUSD?`
@@ -11496,12 +11336,7 @@ function abonarDesdeCXP(gid){
         </div>
       </div>
     </div>`:''}
-    <div class="form-row c2">
-      <div class="form-field"><label>Cuenta Bancaria de Salida</label>
-        <select id="cxpp-cuenta">
-          ${(()=>{const bcs=DB.config.bancoCuentas||[];const b=bcs.find(x=>x.banco===g.banco)||bcs[0];return b?(b.cuentas||[]).map(c=>`<option value="${escHtml(c.tipo+' — '+c.numero)}" ${(c.tipo+' — '+c.numero)===g.cuenta?'selected':''}>${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`).join(''):'<option value="Caja General">Caja General</option>';})()}
-        </select>
-      </div>
+    ${htmlBancoCuentaFiltrado('cxpp',esUSD?'USD':'RD$',g.banco,g.cuenta)}
     <div class="form-row c2">
       <div class="form-field"><label>Fecha de Pago</label>
         <input type="date" id="cxpp-fecha" value="${today()}">
@@ -11632,32 +11467,17 @@ function editarPagoGastoVeh(gid,pi){
   const pagosArr=r.col==='cxp'?asegurarPagosCXPManual(g):asegurarPagosGastoVeh(g);
   const p=pagosArr[pi];if(!p)return;
   const esUSDEPGV=(g.moneda||'RD$')==='USD';
-  const bcs=DB.config.bancoCuentas||[];
-  const bancoAct=p.banco||(bcs[0]?bcs[0].banco:'');
-  const bancoOpts=bcs.map(b=>`<option value="${escHtml(b.banco)}" ${b.banco===bancoAct?'selected':''}>${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos</option>';
-  const bActual=bcs.find(b=>b.banco===bancoAct)||bcs[0];
-  const cuentaOpts=(bActual?bActual.cuentas:[]).map(c=>`<option value="${escHtml(c.tipo+' — '+c.numero)}" ${(c.tipo+' — '+c.numero)===p.cuenta?'selected':''}>${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`).join('')||'<option value="">Sin cuentas</option>';
   openModal('✏️ Editar Pago — '+escHtml(g.suplidor||''),`
     <input type="hidden" id="epgv-gid" value="${escHtml(gid)}"><input type="hidden" id="epgv-pi" value="${pi}">
     <div class="form-row c2">
       <div class="form-field"><label class="required">Fecha</label><input type="date" id="epgv-fecha" value="${p.fecha||''}"></div>
       <div class="form-field"><label class="required">Monto</label><input type="text" id="epgv-monto" value="${fmtMoneyDisplay(p.monto)}" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)"></div>
     </div>
-    <div class="form-row c2">
-      <div class="form-field"><label>Banco</label><select id="epgv-banco" onchange="actualizarCuentasEditPagoGV()">${bancoOpts}</select></div>
-      <div class="form-field"><label>Cuenta</label><select id="epgv-cuenta">${cuentaOpts}</select></div>
-    </div>
     <div class="form-field"><label>Moneda</label><input type="text" readonly style="background:var(--gray2)" value="${esUSDEPGV?'USD — Dólares':'RD$ — Pesos'}"></div>
+    ${htmlBancoCuentaFiltrado('epgv',esUSDEPGV?'USD':'RD$',p.banco,p.cuenta)}
     <div class="form-field"><label>Nota</label><input type="text" id="epgv-nota" value="${escHtml(p.nota||'')}"></div>`,
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
      <button class="btn btn-green" onclick="guardarEditPagoGastoVeh()">💾 Guardar</button>`);
-}
-function actualizarCuentasEditPagoGV(){
-  const bancoEl=document.getElementById('epgv-banco');const cuentaEl=document.getElementById('epgv-cuenta');
-  if(!bancoEl||!cuentaEl)return;
-  const bcs=DB.config.bancoCuentas||[];
-  const b=bcs.find(x=>x.banco===bancoEl.value);
-  cuentaEl.innerHTML=(b&&b.cuentas&&b.cuentas.length)?b.cuentas.map(c=>`<option value="${escHtml(c.tipo+' — '+c.numero)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`).join(''):'<option value="">Sin cuentas</option>';
 }
 function guardarEditPagoGastoVeh(){
   const gid=document.getElementById('epgv-gid').value;
@@ -11956,6 +11776,7 @@ function nuevaPrestamoOtorgado(){
       <div class="form-field"><label>Notas</label><input type="text" id="po2-notas" placeholder="Referencia, contrato..."></div>
     </div>
     <div class="form-row c3">
+      ${(()=>{const bcs=DB.config.bancoCuentas||[];const bancosDisp=bcs.filter(b=>(b.cuentas||[]).some(c=>!esCuentaUSD(c.tipo)));const primerBanco=bancosDisp[0];const cuentas=primerBanco?(primerBanco.cuentas||[]).filter(c=>!esCuentaUSD(c.tipo)):[];return`
       <div class="form-field"><label class="required">Moneda Desembolso</label>
         <select id="po2-pago-moneda" onchange="filtrarBancosPrestamoOtorgado()">
           <option value="RD$">RD$ — Pesos</option>
@@ -11963,11 +11784,11 @@ function nuevaPrestamoOtorgado(){
         </select>
       </div>
       <div class="form-field"><label class="required">Banco Desembolso</label>
-        <select id="po2-banco" onchange="filtrarCuentasPorBanco('po2')">${(DB.config.bancoCuentas||[]).map(b=>`<option value="${escHtml(b.banco)}">${escHtml(b.banco)}</option>`).join('')}</select>
+        <select id="po2-banco" onchange="filtrarCuentasPorBanco('po2')">${bancosDisp.map(b=>`<option value="${escHtml(b.banco)}">${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos</option>'}</select>
       </div>
       <div class="form-field"><label class="required">Cuenta Desembolso</label>
-        <select id="po2-cuenta">${((DB.config.bancoCuentas||[])[0]?.cuentas||[]).map(c=>`<option value="${escHtml(c.tipo+' — '+c.numero)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`).join('')}</select>
-      </div>
+        <select id="po2-cuenta">${cuentas.map(c=>`<option value="${escHtml(c.tipo+' — '+c.numero)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`).join('')||'<option value="">Sin cuentas</option>'}</select>
+      </div>`;})()}
     </div>`,
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
      <button class="btn btn-green" onclick="guardarPrestamoOtorgado()">🤝 Registrar Préstamo</button>`);
@@ -12508,32 +12329,9 @@ function nuevaCXCManual(){
         <input type="text" id="ncxc-saldo" readonly style="background:#f1f5f9;font-weight:700">
       </div>
     </div>
-    <div class="form-row c3">
-      <div class="form-field"><label>Moneda</label>
-        <select id="ncxc-moneda" onchange="toggleTasaCXC()">
-          <option value="RD$">RD$ — Pesos</option>
-          <option value="USD">USD — Dólares</option>
-        </select>
-      </div>
-      <div class="form-field" id="ncxc-tasa-wrap" style="display:none">
-        <input type="hidden" id="ncxc-tasa" value="${DB.config.tasaCambio||60}">
-      </div>
-      <div class="form-field" id="ncxc-tasa-eq" style="display:none">
-        <input type="hidden" id="ncxc-equiv" value="">
-      </div>
-    </div>
-    <div class="form-row c2">
-      <div class="form-field"><label>Banco</label>
-        <select id="ncxc-banco" onchange="actualizarCuentasCXCManual()">
-          ${(DB.config.bancoCuentas||[]).map(b=>`<option value="${escHtml(b.banco)}">${escHtml(b.banco)}</option>`).join('')||'<option value="Caja General">Caja General</option>'}
-        </select>
-      </div>
-      <div class="form-field"><label>Cuenta de Entrada</label>
-        <select id="ncxc-cuenta">
-          ${(()=>{const bcs=DB.config.bancoCuentas||[];const b=bcs[0];return b&&b.cuentas&&b.cuentas.length?b.cuentas.map(c=>`<option value="${escHtml(c.tipo+' — '+c.numero)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`).join(''):'<option value="Caja General">Caja General</option>';})()}
-        </select>
-      </div>
-    </div>`,
+    <input type="hidden" id="ncxc-tasa" value="${DB.config.tasaCambio||60}">
+    <input type="hidden" id="ncxc-equiv" value="">
+    ${htmlMonedaBancoCuenta('ncxc','RD$','','','toggleTasaCXC()')}`,
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
      <button class="btn btn-primary" onclick="guardarCXCManual()">💾 Guardar</button>`);
 }
@@ -12551,14 +12349,6 @@ function calcEquivCXC(){
   const equiv=document.getElementById('ncxc-equiv');
   if(equiv&&moneda==='USD'&&total>0)equiv.value='RD$ '+fmt(total*tasa);
   else if(equiv)equiv.value='';
-}
-function actualizarCuentasCXCManual(){
-  const bancoEl=document.getElementById('ncxc-banco');
-  const cuentaEl=document.getElementById('ncxc-cuenta');
-  if(!bancoEl||!cuentaEl)return;
-  const bcs=DB.config.bancoCuentas||[];
-  const b=bcs.find(x=>x.banco===bancoEl.value);
-  cuentaEl.innerHTML=(b&&b.cuentas&&b.cuentas.length)?b.cuentas.map(c=>`<option value="${escHtml(c.tipo+' — '+c.numero)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`).join(''):'<option value="Caja General">Caja General</option>';
 }
 function calcSaldoCXC(){
   const total=parseFloat((document.getElementById('ncxc-total')?.value||'0').replace(/,/g,''));
@@ -12807,32 +12597,13 @@ function editarCXC(id){
         <input type="text" id="ecxc-saldo" readonly style="background:#f1f5f9;font-weight:700" value="${fmtMoneyDisplay(x.saldo||0)}">
       </div>
     </div>
-    <div class="form-row c3">
-      <div class="form-field"><label>Moneda</label>
-        <select id="ecxc-moneda" onchange="toggleEquivEditCXC()">
-          <option value="RD$" ${(x.moneda||'RD$')==='RD$'?'selected':''}>RD$ — Pesos</option>
-          <option value="USD" ${x.moneda==='USD'?'selected':''}>USD — Dólares</option>
-        </select>
-      </div>
-    </div>
+    ${htmlMonedaBancoCuenta('ecxc',x.moneda||'RD$',x.banco,x.cuenta,'toggleEquivEditCXC()')}
     <div class="form-row c2" id="ecxc-equiv-wrap" style="${x.moneda==='USD'?'':'display:none'}">
       <div class="form-field"><label>Tasa del día (RD$ por 1 USD)</label>
         <input type="number" id="ecxc-tasa" value="${DB.config.tasaCambio||60}" step="0.01" placeholder="Ej: 62.50" oninput="calcEquivEditCXC()">
       </div>
       <div class="form-field"><label>Equivalente en RD$ <span style="color:var(--green);font-size:11px">(calculado)</span></label>
         <input type="text" id="ecxc-equiv" readonly style="background:var(--gray2);color:var(--green);font-weight:700" value="${x.moneda==='USD'?fmtMoneyDisplay((x.total||0)*(DB.config.tasaCambio||60)):''}">
-      </div>
-    </div>
-    <div class="form-row c2">
-      <div class="form-field"><label>Banco</label>
-        <select id="ecxc-banco" onchange="actualizarCuentasEditCXC()">
-          ${(DB.config.bancoCuentas||[]).map(b=>`<option value="${escHtml(b.banco)}" ${b.banco===x.banco?'selected':''}>${escHtml(b.banco)}</option>`).join('')||'<option value="Caja General">Caja General</option>'}
-        </select>
-      </div>
-      <div class="form-field"><label>Cuenta de Entrada</label>
-        <select id="ecxc-cuenta">
-          ${(()=>{const bcs=DB.config.bancoCuentas||[];const b=bcs.find(bb=>bb.banco===x.banco)||bcs[0];return b&&b.cuentas&&b.cuentas.length?b.cuentas.map(c=>`<option value="${escHtml(c.tipo+' — '+c.numero)}" ${(c.tipo+' — '+c.numero)===x.cuenta?'selected':''}>${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`).join(''):'<option value="Caja General">Caja General</option>';})()}
-        </select>
       </div>
     </div>
   `,`<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
@@ -12857,14 +12628,6 @@ function calcEquivEditCXC(){
   const tasa=parseFloat(document.getElementById('ecxc-tasa')?.value||0)||0;
   const equiv=document.getElementById('ecxc-equiv');
   if(equiv)equiv.value=(moneda==='USD'&&total>0&&tasa>0)?fmt(total*tasa):'';
-}
-function actualizarCuentasEditCXC(){
-  const bancoEl=document.getElementById('ecxc-banco');
-  const cuentaEl=document.getElementById('ecxc-cuenta');
-  if(!bancoEl||!cuentaEl)return;
-  const bcs=DB.config.bancoCuentas||[];
-  const b=bcs.find(x=>x.banco===bancoEl.value);
-  cuentaEl.innerHTML=(b&&b.cuentas&&b.cuentas.length)?b.cuentas.map(c=>`<option value="${escHtml(c.tipo+' — '+c.numero)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`).join(''):'<option value="Caja General">Caja General</option>';
 }
 
 function guardarEditCXC(id){
@@ -12975,21 +12738,10 @@ function abonarCXC(id){
         </div>
       </div>
     </div>`:''}
-    <div class="form-row c3">
-      <div class="form-field"><label>Moneda</label>
-        <input type="text" readonly style="background:var(--gray2)" value="${esUSD?'USD — Dólares':'RD$ — Pesos'}">
-      </div>
-      <div class="form-field"><label>Banco</label>
-        <select id="cxca-banco" onchange="actualizarCuentasCXCA()">
-          ${(DB.config.bancoCuentas||[]).map(b=>`<option value="${escHtml(b.banco)}">${escHtml(b.banco)}</option>`).join('')||'<option value="Caja General">Caja General</option>'}
-        </select>
-      </div>
-      <div class="form-field"><label>Cuenta Bancaria</label>
-        <select id="cxca-cuenta">
-          ${(()=>{const bcs=DB.config.bancoCuentas||[];const b=bcs[0];return b?(b.cuentas||[]).map(c=>`<option value="${escHtml(c.tipo+' — '+c.numero)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`).join(''):'<option value="Caja General">Caja General</option>';})()}
-        </select>
-      </div>
+    <div class="form-field"><label>Moneda</label>
+      <input type="text" readonly style="background:var(--gray2)" value="${esUSD?'USD — Dólares':'RD$ — Pesos'}">
     </div>
+    ${htmlBancoCuentaFiltrado('cxca',esUSD?'USD':'RD$')}
     <div class="form-field"><label>Nota</label>
       <input type="text" id="cxca-nota" placeholder="Descripción del cobro">
     </div>
@@ -13005,14 +12757,6 @@ function abonarCXC(id){
     </div>`,
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
      <button class="btn btn-green" onclick="confirmarAbonarCXC('${id}')">✅ Confirmar Cobro</button>`);
-}
-function actualizarCuentasCXCA(){
-  const bancoEl=document.getElementById('cxca-banco');
-  const cuentaEl=document.getElementById('cxca-cuenta');
-  if(!bancoEl||!cuentaEl)return;
-  const bcs=DB.config.bancoCuentas||[];
-  const b=bcs.find(x=>x.banco===bancoEl.value);
-  cuentaEl.innerHTML=(b?b.cuentas:[]).map(c=>`<option value="${escHtml(c.tipo+' — '+c.numero)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`).join('')||'<option value="Caja General">Caja General</option>';
 }
 function calcEquivCXCA(){
   const m=parseFloat((document.getElementById('cxca-monto')?.value||'0').replace(/,/g,''))||0;
@@ -13340,11 +13084,6 @@ function editarPagoCXC(cxcId,pagoIndex){
   const x=DB.cxc.find(c=>c.id===cxcId);if(!x)return;
   const p=(x.pagos||[])[pagoIndex];if(!p)return;
   const esUSD=(x.moneda||'RD$')==='USD';
-  const bcs=DB.config.bancoCuentas||[];
-  const bancoActual=p.banco||(bcs[0]?bcs[0].banco:'');
-  const bancoOpts=bcs.map(b=>`<option value="${escHtml(b.banco)}" ${b.banco===bancoActual?'selected':''}>${escHtml(b.banco)}</option>`).join('')||'<option value="Caja General">Caja General</option>';
-  const bActual=bcs.find(b=>b.banco===bancoActual)||bcs[0];
-  const cuentaOpts=(bActual?bActual.cuentas:[]).map(c=>`<option value="${escHtml(c.tipo+' — '+c.numero)}" ${(c.tipo+' — '+c.numero)===p.cuenta?'selected':''}>${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`).join('')||'<option value="Caja General">Caja General</option>';
   openModal('✏️ Editar Pago — '+escHtml(x.cliente),`
     <input type="hidden" id="epc-cxcid" value="${escHtml(cxcId)}">
     <input type="hidden" id="epc-idx" value="${pagoIndex}">
@@ -13354,22 +13093,11 @@ function editarPagoCXC(cxcId,pagoIndex){
         <input type="text" id="epc-monto" value="${fmtMoneyDisplay(p.monto)}" oninput="fmtMoneyInput(this)" onblur="fmtMoneyBlur(this)" onfocus="fmtMoneyFocus(this)">
       </div>
     </div>
-    <div class="form-row c2">
-      <div class="form-field"><label>Banco</label><select id="epc-banco" onchange="actualizarCuentasEditPagoCXC()">${bancoOpts}</select></div>
-      <div class="form-field"><label>Cuenta Bancaria</label><select id="epc-cuenta">${cuentaOpts}</select></div>
-    </div>
     <div class="form-field"><label>Moneda</label><input type="text" readonly style="background:var(--gray2)" value="${esUSD?'USD — Dólares':'RD$ — Pesos'}"></div>
+    ${htmlBancoCuentaFiltrado('epc',esUSD?'USD':'RD$',p.banco,p.cuenta)}
     <div class="form-field"><label>Nota</label><input type="text" id="epc-nota" value="${escHtml(p.nota||'')}" placeholder="Descripción del cobro"></div>`,
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
      <button class="btn btn-green" onclick="guardarEditPagoCXC()">💾 Guardar Cambios</button>`);
-}
-function actualizarCuentasEditPagoCXC(){
-  const bancoEl=document.getElementById('epc-banco');
-  const cuentaEl=document.getElementById('epc-cuenta');
-  if(!bancoEl||!cuentaEl)return;
-  const bcs=DB.config.bancoCuentas||[];
-  const b=bcs.find(x=>x.banco===bancoEl.value);
-  cuentaEl.innerHTML=(b&&b.cuentas&&b.cuentas.length)?b.cuentas.map(c=>`<option value="${escHtml(c.tipo+' — '+c.numero)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`).join(''):'<option value="Caja General">Caja General</option>';
 }
 function guardarEditPagoCXC(){
   const cxcId=document.getElementById('epc-cxcid').value;
@@ -15599,10 +15327,10 @@ function abonarSeguro(id){
     </div>
     <div class="form-row c2">
       <div class="form-field"><label>Banco</label>
-        <select id="sgp-banco" onchange="filtrarCuentasPorBanco('sgp')">${(()=>{const bcs=DB.config.bancoCuentas||[];const disp=bcs.filter(b=>(b.cuentas||[]).some(c=>!c.tipo.includes('USD')&&!c.tipo.includes('Dólares')));return disp.map(b=>`<option value="${escHtml(b.banco)}" ${b.banco===s.banco?'selected':''}>${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos</option>';})()}</select>
+        <select id="sgp-banco" onchange="filtrarCuentasPorBanco('sgp')">${(()=>{const bcs=DB.config.bancoCuentas||[];const esUSD=(s.moneda||'RD$')==='USD';const disp=bcs.filter(b=>(b.cuentas||[]).some(c=>esUSD?esCuentaUSD(c.tipo):!esCuentaUSD(c.tipo)));return disp.map(b=>`<option value="${escHtml(b.banco)}" ${b.banco===s.banco?'selected':''}>${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos</option>';})()}</select>
       </div>
       <div class="form-field"><label>Cuenta</label>
-        <select id="sgp-cuenta">${(()=>{const bcs=DB.config.bancoCuentas||[];const b=bcs.find(x=>x.banco===s.banco)||bcs.find(x=>(x.cuentas||[]).some(c=>!c.tipo.includes('USD')&&!c.tipo.includes('Dólares')));const cts=(b?b.cuentas:[]).filter(c=>!c.tipo.includes('USD')&&!c.tipo.includes('Dólares'));return cts.map(c=>{const v=c.tipo+' — '+c.numero;return`<option value="${escHtml(v)}" ${v===s.cuenta?'selected':''}>${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('')||'<option value="">Sin cuentas</option>';})()}</select>
+        <select id="sgp-cuenta">${(()=>{const bcs=DB.config.bancoCuentas||[];const esUSD=(s.moneda||'RD$')==='USD';const b=bcs.find(x=>x.banco===s.banco)||bcs.find(x=>(x.cuentas||[]).some(c=>esUSD?esCuentaUSD(c.tipo):!esCuentaUSD(c.tipo)));const cts=(b?b.cuentas:[]).filter(c=>esUSD?esCuentaUSD(c.tipo):!esCuentaUSD(c.tipo));return cts.map(c=>{const v=c.tipo+' — '+c.numero;return`<option value="${escHtml(v)}" ${v===s.cuenta?'selected':''}>${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('')||'<option value="">Sin cuentas</option>';})()}</select>
       </div>
     </div>
     <div class="form-field"><label>Fecha de Pago</label><input type="date" id="sgp-fecha" value="${today()}"></div>
@@ -15642,14 +15370,10 @@ function pagarCuotaSeguro(segId, cuotaIdx){
       </div>
       <input type="hidden" id="sgpc-quien" value="${s.quienPaga==='cliente'?'cliente':'empresa'}">
     </div>
-    <div class="form-row c2">
-      <div class="form-field"><label>Banco</label>
-        <select id="sgpc-banco" onchange="filtrarCuentasPorBanco('sgpc')">${(()=>{const bcs=DB.config.bancoCuentas||[];return bcs.map(b=>`<option value="${escHtml(b.banco)}" ${b.banco===s.banco?'selected':''}>${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos</option>';})()}</select>
-      </div>
-      <div class="form-field"><label>Cuenta</label>
-        <select id="sgpc-cuenta">${(()=>{const bcs=DB.config.bancoCuentas||[];const b=bcs.find(x=>x.banco===s.banco)||bcs[0];return(b?b.cuentas:[]).map(c=>{const v=c.tipo+' — '+c.numero;return`<option value="${escHtml(v)}" ${v===s.cuenta?'selected':''}>${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('')||'<option value="">Sin cuentas</option>';})()}</select>
-      </div>
+    <div class="form-field"><label>Moneda de la póliza</label>
+      <input type="text" readonly style="background:var(--gray2)" value="${(s.moneda||'RD$')==='USD'?'USD — Dólares':'RD$ — Pesos'}">
     </div>
+    ${htmlBancoCuentaFiltrado('sgpc',s.moneda||'RD$',s.banco,s.cuenta)}
     <div class="form-field"><label>Fecha de Pago</label><input type="date" id="sgpc-fecha" value="${today()}"></div>
     <div class="form-field"><label>Forma de Pago</label>
       <select id="sgpc-forma" data-prev="EFECTIVO" onchange="onFormaPagoChange(this,'sgpc',false)">
@@ -15917,12 +15641,6 @@ function renderFacturaExterna(){
     </div>`;
 }
 function _formFE(f){
-  const bcs=DB.config.bancoCuentas||[];
-  const bancoSel=f?.banco||'';
-  const cuentaSel=f?.cuenta||'';
-  const b=bcs.find(x=>x.banco===bancoSel)||bcs[0];
-  const bancoOpts=bcs.map(x=>`<option value="${escHtml(x.banco)}" ${x.banco===bancoSel?'selected':''}>${escHtml(x.banco)}</option>`).join('')||'<option value="">Sin bancos</option>';
-  const cuentaOpts=(b?b.cuentas:[]).map(c=>{const v=c.tipo+' — '+c.numero;return`<option value="${escHtml(v)}" ${v===cuentaSel?'selected':''}>${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('')||'<option value="">Sin cuentas</option>';
   const inclProp=!!(f?.propietario||f?.propietarioDoc);
   return`
     <div class="form-row c2">
@@ -15980,20 +15698,8 @@ function _formFE(f){
         <input type="text" id="fe-pendiente" readonly style="background:#f8fafc;font-weight:700;color:var(--red)" value="${fmtMoneyDisplay(Math.max(0,(f?.monto||0)-(f?.abono||0)))||'0'}">
       </div>
     </div>
-    <div class="form-row c2">
-      <div class="form-field"><label>Banco</label>
-        <select id="fe-banco" onchange="actualizarCuentasFE()">${bancoOpts}</select>
-      </div>
-      <div class="form-field"><label>Cuenta</label>
-        <select id="fe-cuenta">${cuentaOpts}</select>
-      </div>
-    </div>
-    <div class="form-row c2">
-      <div class="form-field"><label>Fecha</label><input type="date" id="fe-fecha" value="${f?.fecha||today()}"></div>
-      <div class="form-field"><label>Moneda</label>
-        <select id="fe-moneda"><option value="RD$" ${(!f?.moneda||f?.moneda==='RD$')?'selected':''}>RD$ — Pesos</option><option value="USD" ${f?.moneda==='USD'?'selected':''}>USD — Dólares</option></select>
-      </div>
-    </div>
+    ${htmlMonedaBancoCuenta('fe',f?.moneda||'RD$',f?.banco,f?.cuenta)}
+    <div class="form-field"><label>Fecha</label><input type="date" id="fe-fecha" value="${f?.fecha||today()}"></div>
     <div class="form-field"><label>Observaciones</label>
       <textarea id="fe-obs" rows="2" placeholder="Condiciones del vehículo, acuerdos, notas...">${escHtml(f?.obs||'')}</textarea>
     </div>`;
@@ -16001,13 +15707,6 @@ function _formFE(f){
 function togglePropFE(){
   const wrap=document.getElementById('fe-prop-wrap');
   if(wrap)wrap.style.display=document.getElementById('fe-incl-prop')?.checked?'block':'none';
-}
-function actualizarCuentasFE(){
-  const banco=document.getElementById('fe-banco')?.value;
-  const sel=document.getElementById('fe-cuenta');if(!sel)return;
-  const bcs=DB.config.bancoCuentas||[];
-  const b=bcs.find(x=>x.banco===banco);
-  sel.innerHTML=(b?b.cuentas:[]).map(c=>`<option value="${escHtml(c.tipo+' — '+c.numero)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`).join('')||'<option value="">Sin cuentas</option>';
 }
 function _leerCamposFE(){
   const inclProp=document.getElementById('fe-incl-prop')?.checked;
