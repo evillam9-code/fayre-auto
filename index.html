@@ -7993,7 +7993,7 @@ function _generarHojaCostosPDF(gastos,filtroVeh,tasaElegida){
   win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
   <title>Hoja de Costos${veh?' — '+veh.codigo:''}</title>
   <style>
-  *{box-sizing:border-box;margin:0;padding:0}
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;color-adjust:exact!important}
   body{font-family:Arial,sans-serif;font-size:10px;color:#0f172a;background:#fff;padding:10px 14px}
   .hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0f172a;padding-bottom:7px;margin-bottom:7px}
   .hdr img{max-height:44px;max-width:110px;object-fit:contain;display:block;margin-bottom:3px}
