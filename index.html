@@ -8099,12 +8099,17 @@ function _generarHojaCostosPDF(gastos,filtroVeh,tasaElegida){
         <div class="rs" style="color:${totalPendRD>0?'#dc2626':'#1d4ed8'};font-weight:700;margin-top:2px">${totalPendRD>0?'⚠️ Tiene pendientes':'✅ Todo pagado'}</div>
       </div>
     </div>
-    <div style="border-top:2px solid #334155">
+    <div class="res-bot">
       <div class="tc" style="background:#fff7ed">
         <div class="tl" style="color:#92400e">TOTAL GENERAL EN PESOS (RD$)</div>
         <div class="tv" style="color:#d97706">${fRD(totalRD)}</div>
         ${totalPendRD>0?`<div class="ts" style="color:#dc2626;font-weight:700;margin-top:3px">Pendiente: ${fRD(totalPendRD)}</div>`:'<div class="ts" style="color:#1d4ed8;font-weight:700;margin-top:3px">✅ Todo pagado</div>'}
       </div>
+      ${hayUSD?`<div class="tc" style="background:#eff6ff">
+        <div class="tl" style="color:#1e40af">TOTAL GENERAL EN DÓLARES (US$)</div>
+        <div class="tv" style="color:#2563eb">${fUS(totalUS)}</div>
+        ${totalPendUS>0?`<div class="ts" style="color:#dc2626;font-weight:700;margin-top:3px">Pendiente: ${fUS(totalPendUS)}</div>`:'<div class="ts" style="color:#1d4ed8;font-weight:700;margin-top:3px">✅ Todo pagado</div>'}
+      </div>`:''}
     </div>
   </div>
   <div class="noprint" style="margin-top:12px;text-align:center">
