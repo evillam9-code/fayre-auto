@@ -1966,9 +1966,23 @@ function abrirFichaVehiculo(vehiculoId){
     </div>`;
   };
   const tabCostos=()=>{
-    const items=itemsCostos;
+    const filaItem=(g)=>{
+      const esUSD=g.moneda==='USD';
+      const factura=parseFloat(g.montoFactura||g.monto||0),pagado=parseFloat(g.montoPagado||0),pendiente=parseFloat(g.montoPendiente||0);
+      if(!esUSD){
+        return`<tr><td>${escHtml(g.tipo||g.descripcion||'—')}</td><td>${escHtml(g.suplidor||'—')}</td><td style="font-weight:700">${fmt(factura)}</td><td style="color:#16a34a">${fmt(pagado)}</td><td style="color:${pendiente>0?'#dc2626':'#16a34a'}">${fmt(pendiente)}</td><td>${g.statusGasto||'—'}</td></tr>`;
+      }
+      return`<tr><td>${escHtml(g.tipo||g.descripcion||'—')}</td><td>${escHtml(g.suplidor||'—')}</td>
+        <td style="font-weight:700">${fUSD(factura)}<br><span style="font-size:9px;color:#64748b">≈ ${fmt(factura*_tasaFicha)}</span></td>
+        <td style="color:#16a34a">${fUSD(pagado)}<br><span style="font-size:9px;color:#64748b">≈ ${fmt(pagado*_tasaFicha)}</span></td>
+        <td style="color:${pendiente>0?'#dc2626':'#16a34a'}">${fUSD(pendiente)}<br><span style="font-size:9px;color:#64748b">≈ ${fmt(pendiente*_tasaFicha)}</span></td>
+        <td>${g.statusGasto||'—'}</td></tr>`;
+    };
+    const seccionRD=costosRD.length?`<tr style="background:#f1f5f9"><td colspan="6" style="font-weight:800;font-size:10px;padding-top:6px">💰 Gastos en Pesos (RD$)</td></tr>${costosRD.map(filaItem).join('')}`:'';
+    const seccionUSD=costosUSD.length?`<tr style="background:#ecfeff"><td colspan="6" style="font-weight:800;font-size:10px;padding-top:6px">💵 Gastos en Dólares (US$)</td></tr>${costosUSD.map(filaItem).join('')}`:'';
     return`<div class="sec">
       <div class="sec-titulo" style="background:#0f172a">🧾 Costos / Gastos del Vehículo</div>
+      <div style="font-size:10px;color:#64748b;margin:-2px 0 6px">💱 Tasa considerada: RD$ ${_tasaFicha.toLocaleString('es-DO',{minimumFractionDigits:2,maximumFractionDigits:2})} x US$1</div>
       <div class="resumen">
         <div class="resumen-row"><span>Gastos en RD$</span><span style="font-weight:700">${fmt(totalCostosRDNativo)}</span></div>
         <div class="resumen-row"><span>Gastos en US$</span><span style="font-weight:700">${fUSD(totalCostosUSDNativo)}${totalCostosUSDNativo>0?` <span style="color:#64748b;font-weight:400">(≈ ${fmt(totalCostosUSDNativo*_tasaFicha)})</span>`:''}</span></div>
@@ -1976,8 +1990,8 @@ function abrirFichaVehiculo(vehiculoId){
         <div class="resumen-row"><span>Pagado</span><span style="color:#16a34a;font-weight:700">${fmt(totalCostosPagado)}</span></div>
         <div class="resumen-row"><span>${totalCostosPend>0?'⏳ Gastos Pendientes por Pagar':'✅ Gastos Saldados'}</span><span style="font-weight:800;color:${totalCostosPend>0?'#dc2626':'#16a34a'}">${fmt(totalCostosPend)}</span></div>
       </div>
-      ${items.length?`<table style="margin-top:6px"><thead><tr><th>Tipo/Descripción</th><th>Suplidor</th><th>Moneda</th><th>Factura</th><th>Pagado</th><th>Pendiente</th><th>Estado</th></tr></thead><tbody>
-        ${items.map(g=>{const esUSD=g.moneda==='USD';const fN=n=>esUSD?fUSD(n):fmt(n);return`<tr><td>${escHtml(g.tipo||g.descripcion||'—')}</td><td>${escHtml(g.suplidor||'—')}</td><td style="text-align:center;font-weight:700;color:${esUSD?'#0e7490':'#64748b'}">${esUSD?'US$':'RD$'}</td><td style="font-weight:700">${fN(g.montoFactura||g.monto||0)}</td><td style="color:#16a34a">${fN(g.montoPagado||0)}</td><td style="color:${parseFloat(g.montoPendiente||0)>0?'#dc2626':'#16a34a'}">${fN(g.montoPendiente||0)}</td><td>${g.statusGasto||'—'}</td></tr>`}).join('')}
+      ${itemsCostos.length?`<table style="margin-top:6px"><thead><tr><th>Tipo/Descripción</th><th>Suplidor</th><th>Factura</th><th>Pagado</th><th>Pendiente</th><th>Estado</th></tr></thead><tbody>
+        ${seccionRD}${seccionUSD}
       </tbody></table>`:'<div style="font-size:11px;color:#94a3b8;padding:6px">Sin costos registrados para este vehículo</div>'}
     </div>`;
   };
@@ -2066,7 +2080,7 @@ function abrirFichaVehiculo(vehiculoId){
   ${venta?`
   <div class="grid3">
     <div class="stat" style="background:#fef3c7"><div style="font-size:9px;color:#92400e;font-weight:700">TOTAL GASTOS</div><div style="font-weight:800;font-size:13px;color:#92400e">${fmt(totalCostos)}</div></div>
-    <div class="stat" style="background:#eff6ff"><div style="font-size:9px;color:#1d4ed8;font-weight:700">PRECIO VENTA</div><div style="font-weight:800;font-size:13px">${venta.moneda==='USD'?fUSD(venta.precioVenta||0):fmt(venta.precioVenta||0)}</div>${venta.moneda==='USD'?`<div style="font-size:10px;color:#64748b;margin-top:2px">≈ ${fmt(ventaRD)}</div>`:''}</div>
+    <div class="stat" style="background:#eff6ff"><div style="font-size:9px;color:#1d4ed8;font-weight:700">PRECIO VENTA</div><div style="font-weight:800;font-size:13px">${venta.moneda==='USD'?fUSD(venta.precioVenta||0):fmt(venta.precioVenta||0)}</div>${venta.moneda==='USD'?`<div style="font-size:10px;color:#64748b;margin-top:2px">≈ ${fmt(ventaRD)} <span style="color:#94a3b8">(tasa RD$ ${_tasaFicha.toLocaleString('es-DO',{minimumFractionDigits:2,maximumFractionDigits:2})})</span></div>`:''}</div>
     <div class="stat" style="background:${beneficio>=0?'#f0fdf4':'#fef2f2'}"><div style="font-size:9px;color:${beneficio>=0?'#16a34a':'#dc2626'};font-weight:700">BENEFICIO (Venta - Costos)</div><div style="font-weight:900;font-size:15px;color:${beneficio>=0?'#16a34a':'#dc2626'}">${fmt(beneficio)}</div></div>
   </div>
   <div class="veh-sub" style="margin-bottom:10px">Factura: <strong style="font-family:monospace">${escHtml(venta.factura||'—')}</strong> · Fecha de venta: <strong>${fmtDate(venta.fecha)}</strong></div>
