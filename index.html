@@ -14226,7 +14226,7 @@ function calcResumenMesFAYRE(mesStr,tasa){
   const vm=DB.ventas.filter(v=>v.fecha?.startsWith(mesStr));
   const gm=DB.gastos.filter(g=>g.fecha?.startsWith(mesStr));
   const pm=(DB.nominaPagos||[]).filter(p=>p.mes===mesStr);
-  const beneficio=vm.reduce((a,v)=>a+(v.moneda==='USD'?parseFloat(v.ganancia||0)*tasa:parseFloat(v.ganancia||0)),0);
+  const beneficio=vm.reduce((a,v)=>a+(v.moneda==='USD'?parseFloat(v.ganancia||0)*(v.tasaCambio||tasa):parseFloat(v.ganancia||0)),0);
   const gastosBase=gm.reduce((a,g)=>a+parseFloat(g.monto||0),0);
   const nomina=pm.reduce((a,p)=>a+parseFloat(p.monto||0),0);
   const interesesMes=(DB.prestamos||[]).reduce((a,p)=>{
@@ -14330,8 +14330,8 @@ async function exportarInformeWord(){
   const ventasMes=DB.ventas.filter(v=>v.fecha?.startsWith(mes));
   const gastosMes=DB.gastos.filter(g=>g.fecha?.startsWith(mes));
   const pagosMes=(DB.nominaPagos||[]).filter(p=>p.mes===mes);
-  const totalVentas=ventasMes.reduce((a,v)=>a+(v.moneda==='USD'?parseFloat(v.precioVenta||0)*tasa:parseFloat(v.precioVenta||0)),0);
-  const totalGananciaVentas=ventasMes.reduce((a,v)=>a+(v.moneda==='USD'?parseFloat(v.ganancia||0)*tasa:parseFloat(v.ganancia||0)),0);
+  const totalVentas=ventasMes.reduce((a,v)=>a+(v.moneda==='USD'?parseFloat(v.precioVenta||0)*(v.tasaCambio||tasa):parseFloat(v.precioVenta||0)),0);
+  const totalGananciaVentas=ventasMes.reduce((a,v)=>a+(v.moneda==='USD'?parseFloat(v.ganancia||0)*(v.tasaCambio||tasa):parseFloat(v.ganancia||0)),0);
   const totalGastosMes=gastosMes.reduce((a,g)=>a+parseFloat(g.monto||0),0);
   const totalNominaMes=pagosMes.reduce((a,p)=>a+parseFloat(p.monto||0),0);
 
@@ -14557,8 +14557,10 @@ async function exportarInformeWord(){
         <thead><tr><th></th><th class="num">Pesos</th><th class="num">Dólar</th><th class="num">Total</th></tr></thead>
         <tbody>
           <tr><td>Por Cobrar</td><td class="num">${fmt(cxcPendRD)}</td><td class="num">${cxcPendUSD?fmtUSD(cxcPendUSD):'—'}</td><td class="num" style="font-weight:700">${fmt(cxcPendCombinado)}</td></tr>
-          <tr><td>Por Pagar (gastos vehículo)</td><td class="num">${fmt(totalCXPPendRD)}</td><td class="num">${totalCXPPendUSD?fmtUSD(totalCXPPendUSD):'—'}</td><td class="num" style="font-weight:700">${fmt(totalCXPCombinado)}</td></tr>
+          <tr><td>Por Pagar (gastos vehículo)</td><td class="num">${fmt(totalVehRD)}</td><td class="num">${totalVehUSD?fmtUSD(totalVehUSD):'—'}</td><td class="num" style="font-weight:700">${fmt(totalVehRD+totalVehUSD*tasa)}</td></tr>
+          <tr><td>Por Pagar (CXP Manual)</td><td class="num">${fmt(totalManRD)}</td><td class="num">${totalManUSD?fmtUSD(totalManUSD):'—'}</td><td class="num" style="font-weight:700">${fmt(totalManRD+totalManUSD*tasa)}</td></tr>
           <tr><td>Préstamos Pendientes</td><td class="num">${fmt(totalSaldoPrestamosRD)}</td><td class="num">${totalSaldoPrestamosUSD?fmtUSD(totalSaldoPrestamosUSD):'—'}</td><td class="num" style="font-weight:700">${fmt(totalSaldoPrestamosRD+totalSaldoPrestamosUSD*tasa)}</td></tr>
+          <tr class="total"><td>Total Cuentas por Pagar</td><td class="num">${fmt(totalManRD+totalVehRD+totalSaldoPrestamosRD)}</td><td class="num">${fmtUSD(totalManUSD+totalVehUSD+totalSaldoPrestamosUSD)}</td><td class="num">${fmt(totalCXPCombinado+totalSaldoPrestamosRD+totalSaldoPrestamosUSD*tasa)}</td></tr>
         </tbody>
       </table>
 
@@ -14598,7 +14600,7 @@ async function exportarInformeWord(){
       <div class="rep-sec-head"><h3>Ventas del mes — detalle por vehículo</h3><span class="rep-tag close">Del mes</span></div>
       <table class="rep-table">
         <thead><tr><th>Código</th><th>Vehículo</th><th class="num">Gastos</th><th class="num">Venta</th><th class="num">Beneficio</th></tr></thead>
-        <tbody>${ventasMes.map(v=>{const gastosVenta=parseFloat(v.precioVenta||0)-parseFloat(v.ganancia||0);return`<tr><td>${escHtml(v.codigo||'')}</td><td style="font-weight:700">${escHtml(v.vehiculo||'')}</td><td class="num">${fmt(gastosVenta)}</td><td class="num">${fmt(v.precioVenta)}</td><td class="num pos">${fmt(v.ganancia)}</td></tr>`;}).join('')||'<tr><td colspan="5">Sin ventas en este período</td></tr>'}
+        <tbody>${ventasMes.map(v=>{const esUSD=v.moneda==='USD';const tc=v.tasaCambio||tasa;const ventaRD=esUSD?parseFloat(v.precioVenta||0)*tc:parseFloat(v.precioVenta||0);const gananciaRD=esUSD?parseFloat(v.ganancia||0)*tc:parseFloat(v.ganancia||0);const gastosVenta=ventaRD-gananciaRD;return`<tr><td>${escHtml(v.codigo||'')}</td><td style="font-weight:700">${escHtml(v.vehiculo||'')}</td><td class="num">${fmt(gastosVenta)}</td><td class="num">${fmt(ventaRD)}${esUSD?`<br><span style="font-size:10px;color:#888">${fmtUSD(v.precioVenta)}</span>`:''}</td><td class="num pos">${fmt(gananciaRD)}</td></tr>`;}).join('')||'<tr><td colspan="5">Sin ventas en este período</td></tr>'}
         ${ventasMes.length?`<tr class="total"><td colspan="2">Total del mes</td><td class="num">${fmt(totalVentas-totalGananciaVentas)}</td><td class="num">${fmt(totalVentas)}</td><td class="num">${fmt(totalGananciaVentas)}</td></tr>`:''}</tbody>
       </table>
     </div>
