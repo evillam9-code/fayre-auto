@@ -14227,7 +14227,7 @@ function calcResumenMesFAYRE(mesStr,tasa){
   const vm=DB.ventas.filter(v=>v.fecha?.startsWith(mesStr));
   const gm=DB.gastos.filter(g=>g.fecha?.startsWith(mesStr));
   const pm=(DB.nominaPagos||[]).filter(p=>p.mes===mesStr);
-  const beneficio=vm.reduce((a,v)=>a+(v.moneda==='USD'?parseFloat(v.ganancia||0)*(v.tasaCambio||tasa):parseFloat(v.ganancia||0)),0);
+  const beneficio=vm.reduce((a,v)=>a+parseFloat(v.ganancia||0),0);
   const gastosBase=gm.reduce((a,g)=>a+parseFloat(g.monto||0),0);
   const nomina=pm.reduce((a,p)=>a+parseFloat(p.monto||0),0);
   const interesesMes=(DB.prestamos||[]).reduce((a,p)=>{
@@ -14337,7 +14337,7 @@ async function exportarInformeWord(){
   const gastosMes=DB.gastos.filter(g=>g.fecha?.startsWith(mes));
   const pagosMes=(DB.nominaPagos||[]).filter(p=>p.mes===mes);
   const totalVentas=ventasMes.reduce((a,v)=>a+(v.moneda==='USD'?parseFloat(v.precioVenta||0)*(v.tasaCambio||tasa):parseFloat(v.precioVenta||0)),0);
-  const totalGananciaVentas=ventasMes.reduce((a,v)=>a+(v.moneda==='USD'?parseFloat(v.ganancia||0)*(v.tasaCambio||tasa):parseFloat(v.ganancia||0)),0);
+  const totalGananciaVentas=ventasMes.reduce((a,v)=>a+parseFloat(v.ganancia||0),0);
   const totalGastosMes=gastosMes.reduce((a,g)=>a+parseFloat(g.monto||0),0);
   const totalNominaMes=pagosMes.reduce((a,p)=>a+parseFloat(p.monto||0),0);
 
@@ -14471,15 +14471,15 @@ async function exportarInformeWord(){
   const cxcPendUSD=cxcPend.filter(x=>x.moneda==='USD').reduce((a,x)=>a+parseFloat(x.saldo||0),0);
   const cxcPendCombinado=cxcPendRD+cxcPendUSD*tasa;
 
-  // Resumen ejecutivo — patrimonio (inventario + efectivo/cuentas + activos fijos)
+  // Resumen ejecutivo — patrimonio (inventario + efectivo/cuentas + activos fijos + por cobrar)
   const totalEfectivoCombinado=totalCuentasRD+totalCuentasUSD*tasa;
-  const totalPatrimonio=totalInvTotal+totalEfectivoCombinado+totalActivoLibros;
+  const totalPatrimonio=totalInvTotal+totalEfectivoCombinado+totalActivoLibros+cxcPendCombinado;
 
-  // Capital Neto — Patrimonio (inventario + efectivo y cuentas bancarias + activos fijos)
-  // + Cuentas por Cobrar - Cuentas por Pagar (CxP + Préstamos). El efectivo/cuentas bancarias
-  // se suma tal cual (con su signo), incluyendo cuentas con saldo negativo.
+  // Capital Neto — Patrimonio (inventario + efectivo y cuentas bancarias + activos fijos
+  // + Cuentas por Cobrar, ya incluidas en totalPatrimonio) - Cuentas por Pagar (CxP + Préstamos).
+  // El efectivo/cuentas bancarias se suma tal cual (con su signo), incluyendo cuentas con saldo negativo.
   const totalPorPagarGeneral=totalCXPCombinado+totalSaldoPrestamosRD+totalSaldoPrestamosUSD*tasa;
-  const capitalNeto=totalPatrimonio+cxcPendCombinado-totalPorPagarGeneral;
+  const capitalNeto=totalPatrimonio-totalPorPagarGeneral;
 
   // Tendencia — Enero a Diciembre del año del informe (meses futuros quedan en blanco)
   const NOMBRES_MES=['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
@@ -14573,7 +14573,6 @@ async function exportarInformeWord(){
       <table class="rep-table">
         <thead><tr><th></th><th class="num">Pesos</th><th class="num">Dólar</th><th class="num">Total</th></tr></thead>
         <tbody>
-          <tr><td>Por Cobrar</td><td class="num">${fmt(cxcPendRD)}</td><td class="num">${cxcPendUSD?fmtUSD(cxcPendUSD):'—'}</td><td class="num" style="font-weight:700">${fmt(cxcPendCombinado)}</td></tr>
           <tr><td>Por Pagar (gastos vehículo)</td><td class="num">${fmt(totalVehRD)}</td><td class="num">${totalVehUSD?fmtUSD(totalVehUSD):'—'}</td><td class="num" style="font-weight:700">${fmt(totalVehRD+totalVehUSD*tasa)}</td></tr>
           <tr><td>Por Pagar (CXP Manual)</td><td class="num">${fmt(totalManRD)}</td><td class="num">${totalManUSD?fmtUSD(totalManUSD):'—'}</td><td class="num" style="font-weight:700">${fmt(totalManRD+totalManUSD*tasa)}</td></tr>
           <tr><td>Préstamos Pendientes</td><td class="num">${fmt(totalSaldoPrestamosRD)}</td><td class="num">${totalSaldoPrestamosUSD?fmtUSD(totalSaldoPrestamosUSD):'—'}</td><td class="num" style="font-weight:700">${fmt(totalSaldoPrestamosRD+totalSaldoPrestamosUSD*tasa)}</td></tr>
@@ -14587,6 +14586,7 @@ async function exportarInformeWord(){
           <tr><td>Inversión en Vehículos</td><td class="num">${fmt(totalInvTotal)}</td></tr>
           <tr><td>Efectivo y Cuentas Bancarias</td><td class="num">${fmt(totalEfectivoCombinado)}</td></tr>
           <tr><td>Activos Fijos (valor en libros)</td><td class="num">${fmt(totalActivoLibros)}</td></tr>
+          <tr><td>Por Cobrar</td><td class="num">${fmt(cxcPendCombinado)}</td></tr>
           <tr class="total"><td>Sub Total Patrimonio</td><td class="num">${fmt(totalPatrimonio)}</td></tr>
         </tbody>
       </table>
@@ -14618,7 +14618,7 @@ async function exportarInformeWord(){
       <div class="rep-sec-head"><h3>Ventas del mes — detalle por vehículo</h3><span class="rep-tag close">Del mes</span></div>
       <table class="rep-table">
         <thead><tr><th>Código</th><th>Vehículo</th><th class="num">Gastos</th><th class="num">Venta</th><th class="num">Beneficio</th></tr></thead>
-        <tbody>${ventasMes.map(v=>{const esUSD=v.moneda==='USD';const tc=v.tasaCambio||tasa;const ventaRD=esUSD?parseFloat(v.precioVenta||0)*tc:parseFloat(v.precioVenta||0);const gananciaRD=esUSD?parseFloat(v.ganancia||0)*tc:parseFloat(v.ganancia||0);const gastosVenta=ventaRD-gananciaRD;return`<tr><td>${escHtml(v.codigo||'')}</td><td style="font-weight:700">${escHtml(v.vehiculo||'')}</td><td class="num">${fmt(gastosVenta)}</td><td class="num">${fmt(ventaRD)}${esUSD?`<br><span style="font-size:10px;color:#888">${fmtUSD(v.precioVenta)}</span>`:''}</td><td class="num pos">${fmt(gananciaRD)}</td></tr>`;}).join('')||'<tr><td colspan="5">Sin ventas en este período</td></tr>'}
+        <tbody>${ventasMes.map(v=>{const esUSD=v.moneda==='USD';const tc=v.tasaCambio||tasa;const ventaRD=esUSD?parseFloat(v.precioVenta||0)*tc:parseFloat(v.precioVenta||0);const gananciaRD=parseFloat(v.ganancia||0);const gastosVenta=ventaRD-gananciaRD;return`<tr><td>${escHtml(v.codigo||'')}</td><td style="font-weight:700">${escHtml(v.vehiculo||'')}</td><td class="num">${fmt(gastosVenta)}</td><td class="num">${fmt(ventaRD)}${esUSD?`<br><span style="font-size:10px;color:#888">${fmtUSD(v.precioVenta)}</span>`:''}</td><td class="num pos">${fmt(gananciaRD)}</td></tr>`;}).join('')||'<tr><td colspan="5">Sin ventas en este período</td></tr>'}
         ${ventasMes.length?`<tr class="total"><td colspan="2">Total del mes</td><td class="num">${fmt(totalVentas-totalGananciaVentas)}</td><td class="num">${fmt(totalVentas)}</td><td class="num">${fmt(totalGananciaVentas)}</td></tr>`:''}</tbody>
       </table>
     </div>
@@ -14742,15 +14742,15 @@ async function exportarInformeWord(){
 
     <div class="rep-sec">
       <div class="rep-sec-head"><h3>Resumen de Capital Neto</h3><span class="rep-tag close">Al cierre</span></div>
-      <p class="rep-note">Patrimonio (Inventario + Efectivo y Cuentas Bancarias + Activos Fijos) + Cuentas por Cobrar − Cuentas por Pagar (CxP + Préstamos Bancos), todo combinado a la tasa de Caja (${fmt(tasa)} por USD).</p>
+      <p class="rep-note">Patrimonio (Inventario + Efectivo y Cuentas Bancarias + Activos Fijos + Por Cobrar) − Cuentas por Pagar (CxP + Préstamos Bancos), todo combinado a la tasa de Caja (${fmt(tasa)} por USD).</p>
       ${tieneGraficoCapitalNeto?'<p align="center"><img src="cid:graficoCapitalNeto" width="680" height="220"></p>':''}
       <table class="rep-table">
         <tbody>
           <tr><td>Inversión en Vehículos</td><td class="num pos">${fmt(totalInvTotal)}</td></tr>
           <tr><td>Efectivo y Cuentas Bancarias</td><td class="num ${totalEfectivoCombinado>=0?'pos':'neg'}">${fmt(totalEfectivoCombinado)}</td></tr>
           <tr><td>Activos Fijos (valor en libros)</td><td class="num pos">${fmt(totalActivoLibros)}</td></tr>
+          <tr><td>Por Cobrar</td><td class="num pos">${fmt(cxcPendCombinado)}</td></tr>
           <tr class="total"><td>Sub Total Patrimonio</td><td class="num">${fmt(totalPatrimonio)}</td></tr>
-          <tr><td>Cuentas por Cobrar</td><td class="num pos">${fmt(cxcPendCombinado)}</td></tr>
           <tr><td>Cuentas por Pagar (CxP + Préstamos)</td><td class="num neg">${fmt(totalPorPagarGeneral)}</td></tr>
           <tr class="total"><td>Capital Neto</td><td class="num ${capitalNeto>=0?'pos':'neg'}" style="font-weight:800">${fmt(capitalNeto)}</td></tr>
         </tbody>
