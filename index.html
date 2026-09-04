@@ -10716,6 +10716,7 @@ function renderCXP(){
   const filtroVeh=document.getElementById('cxp-filtro-veh')?.value||'';
   const filtroMoneda=document.getElementById('cxp-filtro-moneda')?.value||'';
   const filtroHasta=document.getElementById('cxp-filtro-hasta')?.value||'';
+  const filtroMesAtajo=document.getElementById('cxp-filtro-mes')?.value||'';
   const filtroEstado=document.getElementById('cxp-filtro-estado')?.value||'pendientes';
 
   // Reconciliar pagos[] contra montoPagado real:
@@ -10870,7 +10871,7 @@ function renderCXP(){
         </div>
         <div style="display:flex;flex-direction:column;gap:4px">
           <label style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--gray)">Mes (atajo)</label>
-          <input type="month" id="cxp-filtro-mes" onchange="cxpFiltrarPorMes(this.value)" title="Selecciona un mes para poner 'Saldo al' en su último día — el mismo corte que usa el Informe de ese mes" style="padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
+          <input type="month" id="cxp-filtro-mes" value="${filtroMesAtajo}" onchange="cxpFiltrarPorMes(this.value)" title="Selecciona un mes para poner 'Saldo al' en su último día — el mismo corte que usa el Informe de ese mes" style="padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
         </div>
         <div style="display:flex;flex-direction:column;gap:4px">
           <label style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--gray)">Saldo al (fecha de corte)</label>
