@@ -10704,6 +10704,13 @@ function repararHistorialPagos(){
   }
 }
 // ══ CUENTAS POR PAGAR (CxP) ══
+// Atajo: elegir un mes pone "Saldo al" en el último día de ese mes, el mismo corte
+// que usa el Informe Mensual, para poder validar los totales de un mes específico.
+function cxpFiltrarPorMes(mes){
+  const fh=document.getElementById('cxp-filtro-hasta');
+  if(fh)fh.value=mes?ultimoDiaMes(mes):'';
+  renderCXP();
+}
 function renderCXP(){
   const filtroSup=document.getElementById('cxp-filtro-sup')?.value||'';
   const filtroVeh=document.getElementById('cxp-filtro-veh')?.value||'';
@@ -10862,11 +10869,15 @@ function renderCXP(){
           </select>
         </div>
         <div style="display:flex;flex-direction:column;gap:4px">
+          <label style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--gray)">Mes (atajo)</label>
+          <input type="month" id="cxp-filtro-mes" onchange="cxpFiltrarPorMes(this.value)" title="Selecciona un mes para poner 'Saldo al' en su último día — el mismo corte que usa el Informe de ese mes" style="padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px">
           <label style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--gray)">Saldo al (fecha de corte)</label>
-          <input type="date" id="cxp-filtro-hasta" value="${filtroHasta}" onchange="renderCXP()" style="padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
+          <input type="date" id="cxp-filtro-hasta" value="${filtroHasta}" onchange="document.getElementById('cxp-filtro-mes').value='';renderCXP()" style="padding:7px 10px;border:1.5px solid var(--gray3);border-radius:var(--radius-sm);font-size:13px">
         </div>
         <div>
-          <button class="btn btn-secondary" onclick="document.getElementById('cxp-filtro-sup').value='';document.getElementById('cxp-filtro-veh').value='';document.getElementById('cxp-filtro-moneda').value='';document.getElementById('cxp-filtro-hasta').value='';document.getElementById('cxp-filtro-estado').value='pendientes';renderCXP()">🔄 Limpiar</button>
+          <button class="btn btn-secondary" onclick="document.getElementById('cxp-filtro-sup').value='';document.getElementById('cxp-filtro-veh').value='';document.getElementById('cxp-filtro-moneda').value='';document.getElementById('cxp-filtro-hasta').value='';document.getElementById('cxp-filtro-mes').value='';document.getElementById('cxp-filtro-estado').value='pendientes';renderCXP()">🔄 Limpiar</button>
         </div>
       </div>
     </div>
