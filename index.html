@@ -4445,7 +4445,7 @@ function renderInformes(){
     if(c.tipo==='ENTRADA'){if(mon==='USD')infCuentas[key].entAcumUSD+=parseFloat(c.monto||0);else infCuentas[key].entAcumRD+=parseFloat(c.monto||0);}
     else{if(mon==='USD')infCuentas[key].salAcumUSD+=parseFloat(c.monto||0);else infCuentas[key].salAcumRD+=parseFloat(c.monto||0);}
   });
-  const totalV=ventasMes.reduce((a,v)=>a+parseFloat(v.precioVenta||0),0);
+  const totalV=ventasMes.reduce((a,v)=>a+(v.moneda==='USD'?parseFloat(v.precioVenta||0)*(v.tasaCambio||tasa):parseFloat(v.precioVenta||0)),0);
   const totalG=ventasMes.reduce((a,v)=>a+parseFloat(v.ganancia||0),0);
   const totalGastos=gastosMes.reduce((a,g)=>a+parseFloat(g.monto||0),0);
   const nominaMes=DB.nomina.filter(e=>e.activo).reduce((a,e)=>a+parseFloat(e.salario||0),0);
@@ -4469,7 +4469,7 @@ function renderInformes(){
     <div class="two-col">
       <div class="card"><div class="card-title">📦 Vehículos Vendidos</div>
         ${ventasMes.length?`<div class="table-wrap"><table><thead><tr><th>Código</th><th>Vehículo</th><th>Cliente</th><th>Venta</th><th>Ganancia</th></tr></thead><tbody>
-          ${ventasMes.map(v=>`<tr><td class="mono" style="font-size:11px">${escHtml(v.codigo||'—')}</td><td style="font-size:12px">${escHtml(v.vehiculo||'—')}</td><td>${escHtml(v.cliente||'—')}</td><td style="font-weight:700;color:var(--green)">${fmt(v.precioVenta)}</td><td style="font-weight:700;color:${parseFloat(v.ganancia)>=0?'var(--green)':'var(--red)'}">${fmt(v.ganancia)}</td></tr>`).join('')}
+          ${ventasMes.map(v=>{const esUSD=v.moneda==='USD';const ventaRD=esUSD?parseFloat(v.precioVenta||0)*(v.tasaCambio||tasa):parseFloat(v.precioVenta||0);return`<tr><td class="mono" style="font-size:11px">${escHtml(v.codigo||'—')}</td><td style="font-size:12px">${escHtml(v.vehiculo||'—')}</td><td>${escHtml(v.cliente||'—')}</td><td style="font-weight:700;color:var(--green)">${fmt(ventaRD)}${esUSD?`<br><span style="font-size:10px;color:#888">${fmtUSD(v.precioVenta)}</span>`:''}</td><td style="font-weight:700;color:${parseFloat(v.ganancia)>=0?'var(--green)':'var(--red)'}">${fmt(v.ganancia)}</td></tr>`;}).join('')}
           <tr style="background:var(--blue3)"><td colspan="3" style="font-weight:700">TOTAL</td><td style="font-weight:800;color:var(--blue)">${fmt(totalV)}</td><td style="font-weight:800;color:var(--green)">${fmt(totalG)}</td></tr>
         </tbody></table></div>`:'<div style="text-align:center;padding:24px;color:var(--gray)">Sin ventas este mes</div>'}
       </div>
@@ -9008,7 +9008,7 @@ function confirmarVenta(nf){
     cliente:cliNombre,clienteId:cliId,
     costoVehiculo:totalGastos,
     precioVenta:precio,
-    ganancia:precio-totalGastos,
+    ganancia:(monedaVenta==='USD'?precio*tasa:precio)-totalGastos,
     metodoPago:document.getElementById('sv-pago').value,
     banco,cuenta,inicial,pendiente,
     moneda:monedaVenta,
@@ -9495,7 +9495,7 @@ function guardarEditarVenta(vid){
   DB.ventas[i].clienteId=cliId;
   DB.ventas[i].costoVehiculo=totalGastos;
   DB.ventas[i].precioVenta=precio;
-  DB.ventas[i].ganancia=precio-totalGastos;
+  DB.ventas[i].ganancia=(monedaVenta==='USD'?precio*tasa:precio)-totalGastos;
   DB.ventas[i].metodoPago=document.getElementById('sv-pago').value;
   DB.ventas[i].banco=banco;DB.ventas[i].cuenta=cuenta;
   DB.ventas[i].inicial=inicial;DB.ventas[i].pendiente=pendiente;
@@ -10632,7 +10632,8 @@ function _corregirCostosUSD(){
   DB.ventas.forEach(venta=>{
     const tasaVenta=parseFloat(venta.tasaCambio||DB.config.tasaCambio||60);
     const costoReal=costoVehiculoRD(venta.vehiculoId,tasaVenta);
-    const gananciaReal=parseFloat(venta.precioVenta||0)-costoReal;
+    const precioVentaRD=venta.moneda==='USD'?parseFloat(venta.precioVenta||0)*tasaVenta:parseFloat(venta.precioVenta||0);
+    const gananciaReal=precioVentaRD-costoReal;
     if(Math.abs(parseFloat(venta.costoVehiculo||0)-costoReal)>0.01||Math.abs(parseFloat(venta.ganancia||0)-gananciaReal)>0.01){
       venta.costoVehiculo=costoReal;venta.ganancia=gananciaReal;n++;
     }
@@ -14234,8 +14235,13 @@ function calcResumenMesFAYRE(mesStr,tasa){
     const interesMes=pagosDelMes.reduce((s,pg)=>s+parseFloat(pg.interes||0),0);
     return a+(p.moneda==='USD'?interesMes*tasa:interesMes);
   },0);
+  const interesesCobradosMes=(DB.prestamosOtorgados||[]).reduce((a,p)=>{
+    const pagosDelMes=(p.pagos||[]).filter(pg=>pg.fecha?.startsWith(mesStr));
+    const interesMes=pagosDelMes.reduce((s,pg)=>s+parseFloat(pg.interes||0),0);
+    return a+(p.moneda==='USD'?interesMes*tasa:interesMes);
+  },0);
   const gastos=gastosBase+interesesMes;
-  return{beneficio,gastos,nomina,ganNeta:beneficio-gastos-nomina};
+  return{beneficio,gastos,nomina,ganNeta:beneficio+interesesCobradosMes-gastos-nomina};
 }
 function _redimensionarLogoParaWord(dataUri,targetDisplayPx){
   return new Promise(resolve=>{
@@ -14397,7 +14403,18 @@ async function exportarInformeWord(){
   // Intereses del mes convertidos a RD$ solo para el resumen ejecutivo (no se mezclan monedas en la tabla detallada)
   const totalInteresMesConvertido=totalInteresMesRD+totalInteresMesUSD*tasa;
   const totalGastosConIntereses=totalGastosMes+totalInteresMesConvertido;
-  const ganNeta=totalGananciaVentas-totalGastosConIntereses-totalNominaMes;
+
+  // Intereses cobrados del mes — préstamos otorgados a clientes (lado ingreso, no solo el gasto de los préstamos de la empresa)
+  const prestamosOtorgadosDetalle=(DB.prestamosOtorgados||[]).filter(p=>!p.fecha||p.fecha<=finMes).map(p=>{
+    const pagosDelMes=(p.pagos||[]).filter(pg=>pg.fecha?.startsWith(mes));
+    const interesMes=pagosDelMes.reduce((a,pg)=>a+parseFloat(pg.interes||0),0);
+    return{p,interesMes};
+  });
+  const totalInteresCobradoMesRD=prestamosOtorgadosDetalle.filter(x=>(x.p.moneda||'RD$')==='RD$').reduce((a,x)=>a+x.interesMes,0);
+  const totalInteresCobradoMesUSD=prestamosOtorgadosDetalle.filter(x=>x.p.moneda==='USD').reduce((a,x)=>a+x.interesMes,0);
+  const totalInteresCobradoMesConvertido=totalInteresCobradoMesRD+totalInteresCobradoMesUSD*tasa;
+
+  const ganNeta=totalGananciaVentas+totalInteresCobradoMesConvertido-totalGastosConIntereses-totalNominaMes;
 
   // Inventario — al cierre, con inversión acumulada por vehículo (activos + aduana + EEUU)
   const inventarioDetalle=[...vActivos,...vAduana,...vEEUU].map(v=>{
@@ -14587,10 +14604,11 @@ async function exportarInformeWord(){
       <div class="rep-subhead">Resultado del mes</div>
       <table class="rep-summary"><tr>
         <td class="first"><div class="l">Beneficio Ventas Mes</div><div class="v pos">${fmt(totalGananciaVentas)}</div></td>
-        <td><div class="l">Intereses Mensuales</div><div class="v neg">${fmt(totalInteresMesConvertido)}</div></td>
+        <td><div class="l">Intereses Pagados</div><div class="v neg">${fmt(totalInteresMesConvertido)}</div></td>
+        <td><div class="l">Intereses Cobrados</div><div class="v pos">${fmt(totalInteresCobradoMesConvertido)}</div></td>
         <td><div class="l">Beneficio Neto Mes</div><div class="v ${ganNeta>=0?'pos':'neg'}">${fmt(ganNeta)}</div></td>
       </tr></table>
-      <p class="rep-note" style="margin-top:8px">Beneficio de ventas del mes, menos gastos del mes (incluye intereses pagados de préstamos), menos nómina pagada.</p>
+      <p class="rep-note" style="margin-top:8px">Beneficio de ventas del mes, más intereses cobrados de préstamos otorgados, menos gastos del mes (incluye intereses pagados de préstamos), menos nómina pagada.</p>
     </div>
   </div>
 
