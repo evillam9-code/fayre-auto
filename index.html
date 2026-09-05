@@ -14616,9 +14616,9 @@ async function exportarInformeWord(){
 
       <div class="rep-subhead">Resultado del mes</div>
       <table class="rep-summary"><tr>
-        <td class="first"><div class="l">Beneficio Ventas Mes</div><div class="v pos">${fmt(totalGananciaVentas)}</div></td>
-        <td><div class="l">Gastos</div><div class="v brown">${fmt(totalGastosConIntereses+totalNominaMes)}</div></td>
-        <td><div class="l">Beneficio Neto Mes</div><div class="v ${ganNeta>=0?'pos':'neg'}">${fmt(ganNeta)}</div></td>
+        <td class="first"><div class="l">Beneficio Ventas Mes</div><div class="v" style="color:#3f6b4e">${fmt(totalGananciaVentas)}</div></td>
+        <td><div class="l">Gastos</div><div class="v" style="color:#6b4423">${fmt(totalGastosConIntereses+totalNominaMes)}</div></td>
+        <td><div class="l">Beneficio Neto Mes</div><div class="v" style="color:${ganNeta>=0?'#3f6b4e':'#9c3b32'}">${fmt(ganNeta)}</div></td>
       </tr></table>
       <p class="rep-note" style="margin-top:8px">Beneficio de ventas del mes, más intereses cobrados de préstamos otorgados, menos gastos del mes (incluye intereses pagados de préstamos), menos nómina pagada.</p>
     </div>
