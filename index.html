@@ -886,6 +886,7 @@ async function doLogin(){
   _loginEnCurso=true;
   if(btnL){btnL.disabled=true;btnL.textContent='Verificando...';}
   let user=null,errLogin=null;
+  window._loginDiag='';
   try{user=await _autenticar(u,p);}catch(e){errLogin=e;console.warn('Login:',e.code||e.message);}
   _loginEnCurso=false;
   if(btnL){btnL.disabled=false;btnL.textContent='Ingresar al sistema →';}
@@ -922,7 +923,7 @@ async function doLogin(){
         }
       },1000);
     } else {
-      err.textContent='Usuario o contraseña incorrectos.'+(restantes>0?' '+restantes+' intento'+(restantes===1?'':'s')+' restante'+(restantes===1?'':''+'s')+'.'  :'');
+      err.textContent=(window._loginDiag?'['+window._loginDiag+'] ':'')+'Usuario o contraseña incorrectos.'+(restantes>0?' '+restantes+' intento'+(restantes===1?'':'s')+' restante'+(restantes===1?'':''+'s')+'.'  :'');
       err.style.display='block';
     }
     return;
@@ -985,6 +986,7 @@ async function doLogin(){
     logBit('Sesión','Inició sesión','—');
     showPage('dashboard');
     setTimeout(checkAlerts,1500);
+    if(window._debeCambiarClave)setTimeout(()=>{cambiarMiContrasena();toast('Por seguridad debes cambiar tu contraseña','warning');},1500);
     // Iniciar presencia global al entrar (no depende del chat)
     _iniciarPresenciaGlobal();
     setTimeout(_verificarBackupAdmin,2500);
@@ -1190,8 +1192,8 @@ function cambiarMiContrasena(){
     <div class="form-field"><label>Contraseña actual</label><input type="password" id="cp-actual" placeholder="Contraseña actual" autocomplete="new-password"></div>
     <div class="form-field"><label>Nueva contraseña</label><input type="password" id="cp-nueva" placeholder="Nueva contraseña (mínimo 6 caracteres)" autocomplete="new-password"></div>
     <div class="form-field"><label>Confirmar nueva contraseña</label><input type="password" id="cp-confirmar" placeholder="Repite la nueva contraseña" autocomplete="new-password"></div>`,
-    `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
-     <button class="btn btn-primary" onclick="guardarCambioContrasena()">💾 Guardar</button>`);
+    (window._debeCambiarClave?'':`<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>`)+
+    `<button class="btn btn-primary" onclick="guardarCambioContrasena()">💾 Guardar</button>`);
 }
 async function guardarCambioContrasena(){
   const actual=document.getElementById('cp-actual').value;
@@ -1205,6 +1207,7 @@ async function guardarCambioContrasena(){
   catch(e){toast('La contraseña actual es incorrecta','error');return;}
   try{await au.updatePassword(_authPass(nueva));}
   catch(e){toast('No se pudo cambiar la contraseña: '+(e.code||e.message),'error');return;}
+  window._debeCambiarClave=false;
   closeModal();
   toast('Contraseña actualizada correctamente ✓','success');
 }
@@ -16378,10 +16381,10 @@ async function _autenticar(u,p){
     if(e.code==='auth/network-request-failed'||e.code==='auth/too-many-requests')throw e;
     // Migración única: usuario que aún no tiene cuenta segura
     let lista=[];
-    try{const sn=await _fbDB.collection(_fbCol).doc('users').get();if(sn.exists)lista=JSON.parse(sn.data().valor)||[];}catch(e2){return null;}
+    try{const sn=await _fbDB.collection(_fbCol).doc('users').get();if(sn.exists)lista=JSON.parse(sn.data().valor)||[];}catch(e2){window._loginDiag='M0 '+(e2.code||'');return null;}
     const leg=lista.find(x=>x.username===u&&x.password&&x.password===p&&x.activo);
-    if(!leg)return null;
-    try{cred=await _fbAuth.createUserWithEmailAndPassword(email,_authPass(p));}catch(e3){return null;}
+    if(!leg){window._loginDiag='M1'+(lista.some(x=>x.username===u)?'a':'b')+(lista.some(x=>x.username===u&&x.password)?'p':'');return null;}
+    try{cred=await _fbAuth.createUserWithEmailAndPassword(email,_authPass(p));}catch(e3){window._loginDiag='M2 '+(e3.code||'');return null;}
     leg.authUid=cred.user.uid;leg.authEmail=email;
     try{await _registrarAcceso(leg);}catch(e4){}
   }
@@ -16395,7 +16398,8 @@ async function _autenticar(u,p){
   try{const a=await _fbDB.collection('fayre_acceso').doc(uid).get();acc=a.exists?a.data():null;}catch(e){}
   const un=String(acc&&acc.username||u).toLowerCase();
   const user=(DB.users||[]).find(x=>x.authUid===uid)||(DB.users||[]).find(x=>String(x.username||'').toLowerCase()===un);
-  if(!user||!user.activo||(acc&&acc.activo===false)){await _fbAuth.signOut();return null;}
+  if(!user||!user.activo||(acc&&acc.activo===false)){window._loginDiag='M3';await _fbAuth.signOut();return null;}
+  if(p==='admin123')window._debeCambiarClave=true;
   if(!user.authUid){user.authUid=uid;user.authEmail=cred.user.email;}
   try{const pr=await _fbDB.collection('fayre_prefs').doc(uid).get();if(pr.exists&&pr.data().alertasPermitidas)user.alertasPermitidas=pr.data().alertasPermitidas;}catch(e){}
   return user;
