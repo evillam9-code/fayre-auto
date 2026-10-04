@@ -492,7 +492,7 @@ const defaultConfig={
   categoriasGastos:['Alquiler','Servicios','Salarios','Papelería','Mantenimiento','Publicidad','Combustible','Otros'],
   bancos:["Banreservas", "Banco Popular", "BANCO POPULAR - EMPRESA"],bancoCuentas:[{"banco": "Banreservas", "cuentas": [{"numero": "9601135173 - Personal", "tipo": "Corriente RD$", "banco": "Banreservas"}, {"numero": "9600627287 - Creditfayre", "tipo": "Corriente RD$", "banco": "Banreservas"}]}, {"banco": "Banco Popular", "cuentas": [{"numero": "801633066 - Personal", "tipo": "Ahorro USD", "banco": "Banco Popular"}, {"numero": "8219255930 - Credifayre", "tipo": "Corriente USD", "banco": "Banco Popular"}]}, {"banco": "BANCO POPULAR - EMPRESA", "cuentas": [{"numero": "832387831", "tipo": "Corriente RD$", "banco": "BANCO POPULAR - EMPRESA"}]}]
 };
-const defaultUsers=[{id:'u1',nombre:'Administrador',username:'admin',password:'admin123',role:'admin',activo:true}];
+const defaultUsers=[{id:'u1',nombre:'Administrador',username:'admin',role:'admin',activo:true}];
 
 const MARCAS=['Acura','Alfa Romeo','Audi','BMW','Buick','Cadillac','Chevrolet','Chrysler','Citroën','Dodge','Ferrari','Fiat','Ford','GMC','Honda','Hyundai','Infiniti','Isuzu','Jeep','Kia','Lamborghini','Land Rover','Lexus','Lincoln','Maserati','Mazda','Mercedes-Benz','Mitsubishi','Nissan','Peugeot','Pontiac','Porsche','Ram','Renault','Saturn','Subaru','Suzuki','Tesla','Toyota','Volkswagen','Volvo','Otro'];
 const COLORES=['Negro','Blanco','Plata','Gris','Rojo','Azul','Verde','Marrón','Beige','Dorado','Naranja','Amarillo','Morado','Vino','Champagne','Celeste','Otro'];
@@ -525,6 +525,8 @@ let DB={
   prestamos:ls('prestamos')||[],
   activosFijos:ls('activosFijos')||[]
 };
+// Seguridad: nunca guardar contraseñas en el navegador
+if((DB.users||[]).some(u=>u.password)){DB.users=DB.users.map(u=>{const c=Object.assign({},u);delete c.password;return c;});ss('users',DB.users);}
 function sDB(k){
   if(!window._fbActivo){
     // Mostrar mensaje de error prominente
@@ -864,6 +866,7 @@ function resetInactTimer(){
       document.getElementById('li-user').value='';
       document.getElementById('li-pass').value='';
       alert('Sesión cerrada por inactividad (30 min). Inicie sesión nuevamente.');
+      if(window._fbAuth)_fbAuth.signOut().finally(()=>location.reload());
     }
   },1800000);
 }
@@ -871,14 +874,28 @@ function resetInactTimer(){
 
 let currentUser=null;
 
-let _loginIntentos=0,_loginBloqueado=false,_loginTimer=null;
-function doLogin(){
+let _loginIntentos=0,_loginBloqueado=false,_loginTimer=null,_loginEnCurso=false;
+async function doLogin(){
   if(_loginBloqueado){document.getElementById('login-blocked').style.display='block';return;}
+  if(_loginEnCurso)return;
   const u=document.getElementById('li-user').value.trim();
   const p=document.getElementById('li-pass').value;
-  const user=DB.users.find(x=>x.username===u&&x.password===p&&x.activo);
   const err=document.getElementById('login-error');
   const blk=document.getElementById('login-blocked');
+  const btnL=document.querySelector('.btn-login');
+  _loginEnCurso=true;
+  if(btnL){btnL.disabled=true;btnL.textContent='Verificando...';}
+  let user=null,errLogin=null;
+  try{user=await _autenticar(u,p);}catch(e){errLogin=e;console.warn('Login:',e.code||e.message);}
+  _loginEnCurso=false;
+  if(btnL){btnL.disabled=false;btnL.textContent='Ingresar al sistema →';}
+  if(errLogin){
+    err.textContent=errLogin.code==='auth/too-many-requests'
+      ?'Demasiados intentos fallidos. Espere unos minutos e intente de nuevo.'
+      :'No se pudo conectar. Verifique su internet e intente de nuevo.';
+    err.style.display='block';
+    return;
+  }
   if(!user){
     _loginIntentos++;
     const restantes=3-_loginIntentos;
@@ -972,6 +989,7 @@ function doLogin(){
     _iniciarPresenciaGlobal();
     setTimeout(_verificarBackupAdmin,2500);
     setTimeout(_verificarCumpleanosHoy,3500);
+    if(user.role==='admin')setTimeout(()=>{if(typeof _asegurarUsuarios==='function')_asegurarUsuarios();},2000);
     // Si es admin, publicar nueva versión automáticamente al entrar
     if(user.role==='admin'){
       setTimeout(async function(){
@@ -1175,18 +1193,18 @@ function cambiarMiContrasena(){
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
      <button class="btn btn-primary" onclick="guardarCambioContrasena()">💾 Guardar</button>`);
 }
-function guardarCambioContrasena(){
+async function guardarCambioContrasena(){
   const actual=document.getElementById('cp-actual').value;
   const nueva=document.getElementById('cp-nueva').value;
   const confirmar=document.getElementById('cp-confirmar').value;
-  const i=DB.users.findIndex(u=>u.id===currentUser.id);
-  if(i<0){toast('Usuario no encontrado','error');return;}
-  if(DB.users[i].password!==actual){toast('La contraseña actual es incorrecta','error');return;}
   if(!nueva||nueva.length<6){toast('La nueva contraseña debe tener al menos 6 caracteres','error');return;}
   if(nueva!==confirmar){toast('Las contraseñas no coinciden','error');return;}
-  DB.users[i].password=nueva;
-  currentUser.password=nueva;
-  sDB('users');
+  const au=window._fbAuth&&_fbAuth.currentUser;
+  if(!au){toast('Sesión expirada, vuelva a iniciar sesión','error');return;}
+  try{await au.reauthenticateWithCredential(firebase.auth.EmailAuthProvider.credential(au.email,_authPass(actual)));}
+  catch(e){toast('La contraseña actual es incorrecta','error');return;}
+  try{await au.updatePassword(_authPass(nueva));}
+  catch(e){toast('No se pudo cambiar la contraseña: '+(e.code||e.message),'error');return;}
   closeModal();
   toast('Contraseña actualizada correctamente ✓','success');
 }
@@ -1202,6 +1220,7 @@ function doLogout(){
   document.getElementById('app').style.display='none';
   document.getElementById('li-user').value='';
   document.getElementById('li-pass').value='';
+  if(window._fbAuth)setTimeout(()=>_fbAuth.signOut().finally(()=>location.reload()),800);
 }
 
 /* ═══════════════════════════════════════════
@@ -6787,8 +6806,11 @@ function guardarMisNotificaciones(){
   if(idx!==-1){
     DB.users[idx].alertasPermitidas=seleccionadas;
     currentUser.alertasPermitidas=seleccionadas;
-    sDB('users');
-    if(typeof fbGuardar==='function'&&window._fbActivo)fbGuardar('users').catch(()=>{});
+    if(currentUser.role==='admin'){
+      sDB('users');
+    } else if(window._fbAuth&&_fbAuth.currentUser){
+      _fbDB.collection('fayre_prefs').doc(_fbAuth.currentUser.uid).set({alertasPermitidas:seleccionadas}).catch(()=>{});
+    }
     toast('Notificaciones guardadas \u2713','success');
   }
 }
@@ -16296,80 +16318,12 @@ document.addEventListener('DOMContentLoaded',()=>{
 // INIT
 document.getElementById('li-pass').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
 document.getElementById('li-user').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('li-pass').focus();});
-// Precargar Firebase al arrancar para que los usuarios estén disponibles antes del login
-window.addEventListener('load', ()=>{
-  if(typeof fbCargar==='function'){
-    // Mostrar indicador de carga en el login
-    const btn=document.querySelector('.btn-login');
-    if(btn){btn.textContent='Conectando...';btn.disabled=true;}
-    fbCargar().then(()=>{
-      window._fbActivo=true;
-      window._fbCargado=true;
-      // Auto-restore bancoCuentas si Firebase los tiene vacíos
-      if(!DB.config.bancoCuentas||DB.config.bancoCuentas.length===0){
-        DB.config.bancoCuentas=[{"banco": "Banreservas", "cuentas": [{"numero": "9601135173 - Personal", "tipo": "Corriente RD$", "banco": "Banreservas"}, {"numero": "9600627287 - Creditfayre", "tipo": "Corriente RD$", "banco": "Banreservas"}]}, {"banco": "Banco Popular", "cuentas": [{"numero": "801633066 - Personal", "tipo": "Ahorro USD", "banco": "Banco Popular"}, {"numero": "8219255930 - Credifayre", "tipo": "Corriente USD", "banco": "Banco Popular"}]}, {"banco": "BANCO POPULAR - EMPRESA", "cuentas": [{"numero": "832387831", "tipo": "Corriente RD$", "banco": "BANCO POPULAR - EMPRESA"}]}];
-        DB.config.bancos=DB.config.bancoCuentas.map(b=>b.banco);
-        if(typeof fbGuardar==='function')fbGuardar('config').catch(()=>{});
-      }
-      // Seed de caja: si está vacía, cargar movimientos corregidos del backup
-      if(!DB.caja||DB.caja.length===0){
-        DB.caja=[{"id": "id1777759907451ulrx", "fecha": "2026-05-02", "tipo": "ENTRADA", "categoria": "Cuadre a la cuenta", "descripcion": "Cuadre", "monto": 595607.44, "moneda": "RD$", "banco": "Banreservas", "cuenta": "Corriente RD$ — 9601135173 - Personal", "referencia": "Banreservas / Corriente RD$ — 9601135173 - Personal", "responsable": "Rangel Moronta"}, {"id": "id1777759985205jgiw", "fecha": "2026-05-02", "tipo": "ENTRADA", "categoria": "Cuadre a la cuenta", "descripcion": "Cuadre", "monto": 14714.38, "moneda": "USD", "banco": "Banco Popular", "cuenta": "Ahorro USD — 801633066 - Personal", "referencia": "Banco Popular / Ahorro USD — 801633066 - Personal", "responsable": "Rangel Moronta"}, {"id": "id177776006607025n6", "fecha": "2026-05-02", "tipo": "ENTRADA", "categoria": "Cuadre a la cuenta", "descripcion": "Cuadre", "monto": 51715.06, "moneda": "RD$", "banco": "Banreservas", "cuenta": "Corriente RD$ — 9600627287 - Creditfayre", "referencia": "Banreservas / Corriente RD$ — 9600627287 - Creditfayre", "responsable": "Rangel Moronta"}, {"id": "id1777760124247vx84", "fecha": "2026-05-02", "tipo": "ENTRADA", "categoria": "Cuadre a la cuenta", "descripcion": "Cuadre", "monto": 2889.49, "moneda": "USD", "banco": "Banco Popular", "cuenta": "Corriente USD — 8219255930 - Credifayre", "referencia": "Banco Popular / Corriente USD — 8219255930 - Credifayre", "responsable": "Rangel Moronta"}, {"id": "id1777760169976lpui", "fecha": "2026-05-02", "tipo": "ENTRADA", "categoria": "Cuadre a la cuenta", "descripcion": "Cuadre", "monto": 1069.45, "moneda": "RD$", "banco": "BANCO POPULAR - EMPRESA", "cuenta": "Corriente RD$ — 832387831", "referencia": "BANCO POPULAR - EMPRESA / Corriente RD$ — 832387831", "responsable": "Rangel Moronta"}, {"id": "id1779136633809pa7b", "fecha": "2026-05-18", "tipo": "SALIDA", "categoria": "CXP USD", "descripcion": "Pago CXP USD: undefined — TM autos sales LLC. (Tasa: 65.00)", "monto": 325000, "moneda": "RD$", "referencia": "Banreservas / Corriente RD$ — 9601135173 - Personal", "banco": "Banreservas", "responsable": "Administrador", "cuenta": "Corriente RD$ — 9601135173 - Personal"}, {"id": "id1779383937047njot", "fecha": "2024-02-26", "tipo": "ENTRADA", "categoria": "CxC Manual", "descripcion": "Abono CxC: PRESTAMO SOBRE VEHICULO — FRANCIS RAFAEL MARTE GENERE", "monto": 347350, "referencia": "Banreservas / Corriente RD$ — 9601135173 - Personal", "responsable": "Chanel Infante", "banco": "Banreservas", "cuenta": "Corriente RD$ — 9601135173 - Personal"}, {"id": "id17794552181854foo", "fecha": "2025-12-23", "tipo": "ENTRADA", "categoria": "CxC Manual", "descripcion": "Abono CxC: PRESTAMO SOBRE VEHICULO — NATANAEL MEDINA", "monto": 441950.6, "referencia": "Banreservas / Corriente RD$ — 9601135173 - Personal", "responsable": "Secretaria", "banco": "Banreservas", "cuenta": "Corriente RD$ — 9601135173 - Personal"}, {"id": "id1779456092931mvo1", "fecha": "2025-12-23", "tipo": "ENTRADA", "categoria": "CxC Manual", "descripcion": "Abono CxC: PRESTAMO DE VEHICULO — JOSE ESPINAL REYES", "monto": 237770.41, "referencia": "Banreservas / Corriente RD$ — 9601135173 - Personal", "responsable": "Secretaria", "banco": "Banreservas", "cuenta": "Corriente RD$ — 9601135173 - Personal"}, {"id": "id1779456949555wmke", "fecha": "2023-11-30", "tipo": "ENTRADA", "categoria": "CxC Manual", "descripcion": "Abono CxC: PRESTAMO — MARIO PEGUERO RODRIGUEZ", "monto": 13495.96, "referencia": "Banreservas / Corriente RD$ — 9601135173 - Personal", "responsable": "Secretaria", "banco": "Banreservas", "cuenta": "Corriente RD$ — 9601135173 - Personal"}, {"id": "id1779457604987f9fi", "fecha": "2024-07-15", "tipo": "ENTRADA", "categoria": "CxC Manual", "descripcion": "Abono CxC: PRESTAMO DE VEHICULO — MABEL STEPHANIE BARCELO VALDEZ", "monto": 164058.81, "referencia": "Banreservas / Corriente RD$ — 9601135173 - Personal", "responsable": "Secretaria", "banco": "Banreservas", "cuenta": "Corriente RD$ — 9601135173 - Personal"}, {"id": "id1779473708219xvb8", "fecha": "2024-07-15", "tipo": "ENTRADA", "categoria": "CxC Manual", "descripcion": "Abono CxC: CXC PRESTAMO SOBRE VEHICULO — MABEL STEPHANIE BARCELO VALDEZ", "monto": 388971.19, "referencia": "Banreservas / Corriente RD$ — 9601135173 - Personal", "responsable": "Chanel Infante", "banco": "Banreservas", "cuenta": "Corriente RD$ — 9601135173 - Personal"}, {"id": "id1779474099998k7bc", "fecha": "2025-01-23", "tipo": "ENTRADA", "categoria": "CxC Manual", "descripcion": "Abono CxC: CXC PRESTAMO SOBRE VEH. — NATANAEL MEDINA", "monto": 315689.56, "referencia": "Banreservas / Corriente RD$ — 9601135173 - Personal", "responsable": "Chanel Infante", "banco": "Banreservas", "cuenta": "Corriente RD$ — 9601135173 - Personal"}, {"id": "id1779475939315grfv", "fecha": "2025-09-11", "tipo": "ENTRADA", "categoria": "CxC Manual", "descripcion": "Abono CxC: PRESTAMO SOBRE VEHICULO — RAMON MORONTA REYES (AMBIORIX)", "monto": 39659.18, "referencia": "Banreservas / Corriente RD$ — 9601135173 - Personal", "responsable": "Chanel Infante", "banco": "Banreservas", "cuenta": "Corriente RD$ — 9601135173 - Personal"}, {"id": "id1779476377117qkpp", "fecha": "2026-11-12", "tipo": "ENTRADA", "categoria": "CxC Manual", "descripcion": "Abono CxC: PRESTAMO PERSONAL — RANGEL MORONTA", "monto": 268000, "referencia": "Banreservas / Corriente RD$ — 9601135173 - Personal", "responsable": "Chanel Infante", "banco": "Banreservas", "cuenta": "Corriente RD$ — 9601135173 - Personal"}, {"id": "id177947687683933l0", "fecha": "2024-07-05", "tipo": "ENTRADA", "categoria": "CxC Manual", "descripcion": "Abono CxC: PRESTAMO PERSONAL — RAMON MORONTA LORA (MOON)", "monto": 21811.08, "referencia": "Banreservas / Corriente RD$ — 9601135173 - Personal", "responsable": "Chanel Infante", "banco": "Banreservas", "cuenta": "Corriente RD$ — 9601135173 - Personal"}, {"id": "id1779477465091xg5u", "fecha": "2026-04-29", "tipo": "ENTRADA", "categoria": "CxC Manual", "descripcion": "Abono CxC: CXC VEH. TOYOTA HIGHLANDER BCO 20 V. 16689 — JUAN PABLO HERNMANDEZ", "monto": 33000, "referencia": "Banreservas / Corriente RD$ — 9601135173 - Personal", "responsable": "Chanel Infante", "banco": "Banreservas", "cuenta": "Corriente RD$ — 9601135173 - Personal"}, {"id": "id1779478344589395m", "fecha": "2025-07-07", "tipo": "ENTRADA", "categoria": "CxC Manual", "descripcion": "Abono CxC: CXC PRETAMO SOBRE VEH, — EDINSON NUÑEZ", "monto": 2454.01, "referencia": "Banreservas / Corriente RD$ — 9601135173 - Personal", "responsable": "Chanel Infante", "banco": "Banreservas", "cuenta": "Corriente RD$ — 9601135173 - Personal"}, {"id": "id1780342879842axia", "fecha": "2026-05-31", "tipo": "ENTRADA", "categoria": "Cuadre a la cuenta", "descripcion": "AJUSTE X CIERRE MES (INICIO DE MOV. SISTEMA)", "monto": 642453.32, "moneda": "RD$", "banco": "Banreservas", "cuenta": "Corriente RD$ — 9601135173 - Personal", "referencia": "Banreservas / Corriente RD$ — 9601135173 - Personal", "responsable": "Chanel Infante"}, {"id": "id17803429503250x1z", "fecha": "2026-06-01", "tipo": "SALIDA", "categoria": "Nómina/Salario", "descripcion": "MOV. CTA. 287 PAGO NOMINA", "monto": 48000, "moneda": "RD$", "banco": "Banreservas", "cuenta": "Corriente RD$ — 9601135173 - Personal", "referencia": "Banreservas / Corriente RD$ — 9601135173 - Personal", "responsable": "Chanel Infante"}, {"id": "id1780343161638tmmm", "fecha": "2026-06-01", "tipo": "ENTRADA", "categoria": "Cobro CxC", "descripcion": "Cobro CxC: NATANAEL MEDINA — CXC-ID1779", "monto": 21046, "banco": "Banreservas", "cuenta": "Corriente RD$ — 9601135173 - Personal", "referencia": "Banreservas / Corriente RD$ — 9601135173 - Personal", "responsable": "Chanel Infante"}, {"id": "id1780343461995ulof", "fecha": "2026-05-31", "tipo": "SALIDA", "categoria": "Ajuste Cuadre", "descripcion": "Ajuste para cuadre cta. (iniciar a reg mov)", "monto": 23623.12, "moneda": "RD$", "banco": "Banreservas", "cuenta": "Corriente RD$ — 9600627287 - Creditfayre", "referencia": "Banreservas / Corriente RD$ — 9600627287 - Creditfayre", "responsable": "Chanel Infante"}, {"id": "id1780343509518vzpa", "fecha": "2026-06-01", "tipo": "ENTRADA", "categoria": "Mov. Cta.", "descripcion": "Mov. Cta. para pago nomina", "monto": 48000, "moneda": "RD$", "banco": "Banreservas", "cuenta": "Corriente RD$ — 9600627287 - Creditfayre", "referencia": "Banreservas / Corriente RD$ — 9600627287 - Creditfayre", "responsable": "Chanel Infante"}, {"id": "id1780343555545vs7e", "fecha": "2026-06-01", "tipo": "SALIDA", "categoria": "Nómina/Salario", "descripcion": "Pago de Nomina Masivo", "monto": 47995.3, "moneda": "RD$", "banco": "Banreservas", "cuenta": "Corriente RD$ — 9600627287 - Creditfayre", "referencia": "Banreservas / Corriente RD$ — 9600627287 - Creditfayre", "responsable": "Chanel Infante"}, {"id": "id17803437238473t2u", "fecha": "2026-05-31", "tipo": "SALIDA", "categoria": "Ajuste Cuadre", "descripcion": "Ajuste (para iniciar sistema)", "monto": 450, "moneda": "RD$", "banco": "BANCO POPULAR - EMPRESA", "cuenta": "Corriente RD$ — 832387831", "referencia": "BANCO POPULAR - EMPRESA / Corriente RD$ — 832387831", "responsable": "Chanel Infante"}, {"id": "id1780343905333pywx", "fecha": "2026-05-31", "tipo": "ENTRADA", "categoria": "Ajuste Cuadre", "descripcion": "Ajuste", "monto": 1069.46, "moneda": "RD$", "banco": "BANCO POPULAR - EMPRESA", "cuenta": "Corriente RD$ — 832387831", "referencia": "BANCO POPULAR - EMPRESA / Corriente RD$ — 832387831", "responsable": ""}, {"id": "id1780343978556fpj0", "fecha": "2026-05-31", "tipo": "SALIDA", "categoria": "Ajuste Cuadre", "descripcion": "Ajuste cuadre", "monto": 1253.48, "moneda": "USD", "banco": "Banco Popular", "cuenta": "Corriente USD — 8219255930 - Credifayre", "referencia": "Banco Popular / Corriente USD — 8219255930 - Credifayre", "responsable": "Chanel Infante"}, {"id": "id1780344062619h6vl", "fecha": "2026-05-31", "tipo": "SALIDA", "categoria": "Ajuste Cuadre", "descripcion": "ajuste", "monto": 1253.43, "moneda": "USD", "banco": "Banco Popular", "cuenta": "Corriente USD — 8219255930 - Credifayre", "referencia": "Banco Popular / Corriente USD — 8219255930 - Credifayre", "responsable": "Chanel Infante"}, {"id": "id1780344152093taxf", "fecha": "2026-05-31", "tipo": "SALIDA", "categoria": "Ajuste Cuadre", "descripcion": "Ajuste", "monto": 14297, "moneda": "USD", "banco": "Banco Popular", "cuenta": "Ahorro USD — 801633066 - Personal", "referencia": "Banco Popular / Ahorro USD — 801633066 - Personal", "responsable": "Chanel Infante"}];
-        if(typeof fbGuardar==='function')fbGuardar('caja').catch(()=>{});
-      }
-      // Auto-corregir movimientos de caja con banco/cuenta incorrectos o vacíos
-      (()=>{
-        const BNR='Banreservas';
-        const RD_PERS='Corriente RD$ — 9601135173 - Personal';
-        const BP_EMP='BANCO POPULAR - EMPRESA';
-        const BP_EMP_CTA='Corriente RD$ — 832387831';
-        const BP='Banco Popular';
-        const USD_CRED='Corriente USD — 8219255930 - Credifayre';
-        let cajaFixed=false;
-        (DB.caja||[]).forEach(c=>{
-          const banco=c.banco||'';
-          const cuenta=c.cuenta||'';
-          const moneda=c.moneda||'RD$';
-          let changed=false;
-          // Sin banco ni cuenta → Banreservas RD$ personal
-          if(!banco&&!cuenta){
-            c.banco=BNR; c.cuenta=RD_PERS;
-            c.referencia=BNR+' / '+RD_PERS; changed=true;
-          }
-          // Tiene banco pero sin cuenta → asignar según banco y moneda
-          else if(banco&&!cuenta){
-            if(banco===BNR){c.cuenta=RD_PERS;c.referencia=BNR+' / '+RD_PERS;changed=true;}
-          }
-          // Cuenta fantasma: número 832387831 bajo Banreservas → mover a BP EMPRESA
-          else if(banco===BNR&&cuenta.includes('832387831')){
-            c.banco=BP_EMP; c.cuenta=BP_EMP_CTA;
-            c.referencia=BP_EMP+' / '+BP_EMP_CTA; changed=true;
-          }
-          // Cuenta USD con moneda RD$ → corregir moneda a USD
-          else if(cuenta.includes('USD')&&moneda==='RD$'){
-            c.moneda='USD';
-            c.referencia=c.banco+' / '+cuenta; changed=true;
-          }
-          if(changed)cajaFixed=true;
-        });
-        if(cajaFixed&&typeof fbGuardar==='function')fbGuardar('caja').catch(()=>{});
-      })();
-      if(typeof fbActivarListeners==='function') fbActivarListeners();
-      if(typeof iniciarMonitorConexion==='function') iniciarMonitorConexion();
-      if(btn){btn.textContent='Ingresar al sistema →';btn.disabled=false;}
-      // Actualizar indicador Firebase
-      const _dot=document.getElementById('fb-dot');
-      const _txt=document.getElementById('fb-text');
-      if(_dot)_dot.style.background='#22c55e';
-      if(_txt)_txt.textContent='✓ Firebase';
-    }).catch(()=>{
-      if(btn){btn.textContent='Ingresar al sistema →';btn.disabled=false;}
-    });
-  }
-});
+// Los datos se cargan después de iniciar sesión (Firebase Authentication)
 </script>
 <!-- ══ FIREBASE ══ -->
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script>
 const firebaseConfig = {
   apiKey: "AIzaSyC9Hi0ti_7vq6OGWErEKzn3UJCpUqFA8zo",
@@ -16384,6 +16338,117 @@ const _fbDB = firebase.firestore();
 const _fbCol = 'fayre';
 window._fbDB = _fbDB;
 window._fbCol = _fbCol;
+
+// ══ SEGURIDAD: Firebase Authentication ══
+const _fbAuth = firebase.auth();
+_fbAuth.setPersistence(firebase.auth.Auth.Persistence.SESSION).catch(()=>{});
+window._fbAuth = _fbAuth;
+const _AUTH_DOM = 'usuarios.fayre-auto.app';
+function _authEmail(username,sufijo){
+  let s=String(username||'').trim().toLowerCase();
+  if(!/^[a-z0-9][a-z0-9._-]{0,50}$/.test(s)||s.includes('..')||s.endsWith('.'))
+    s='u'+Array.from(new TextEncoder().encode(s)).map(b=>b.toString(16).padStart(2,'0')).join('').slice(0,50);
+  return s+(sufijo?'.'+sufijo:'')+'@'+_AUTH_DOM;
+}
+const _authPass = p=>'Fayre#'+p;
+const _loginKey = u=>'u_'+encodeURIComponent(String(u||'').trim().toLowerCase());
+async function _resolverEmail(u){
+  try{const d=await _fbDB.collection('fayre_login').doc(_loginKey(u)).get();if(d.exists&&d.data().email)return d.data().email;}catch(e){}
+  return _authEmail(u);
+}
+let _authSec=null;
+function _authSecundaria(){
+  if(!_authSec){
+    _authSec=firebase.initializeApp(firebaseConfig,'secundaria').auth();
+    _authSec.setPersistence(firebase.auth.Auth.Persistence.NONE).catch(()=>{});
+  }
+  return _authSec;
+}
+async function _registrarAcceso(u){
+  if(!u.authUid)return;
+  await _fbDB.collection('fayre_acceso').doc(u.authUid).set({username:u.username,role:u.role||'usuario',activo:u.activo!==false});
+  if(u.authEmail)await _fbDB.collection('fayre_login').doc(_loginKey(u.username)).set({email:u.authEmail});
+}
+async function _autenticar(u,p){
+  if(!u||!p)return null;
+  const email=await _resolverEmail(u);
+  let cred;
+  try{cred=await _fbAuth.signInWithEmailAndPassword(email,_authPass(p));}
+  catch(e){
+    if(e.code==='auth/network-request-failed'||e.code==='auth/too-many-requests')throw e;
+    // Migración única: usuario que aún no tiene cuenta segura
+    let lista=[];
+    try{const sn=await _fbDB.collection(_fbCol).doc('users').get();if(sn.exists)lista=JSON.parse(sn.data().valor)||[];}catch(e2){return null;}
+    const leg=lista.find(x=>x.username===u&&x.password&&x.password===p&&x.activo);
+    if(!leg)return null;
+    try{cred=await _fbAuth.createUserWithEmailAndPassword(email,_authPass(p));}catch(e3){return null;}
+    leg.authUid=cred.user.uid;leg.authEmail=email;
+    try{await _registrarAcceso(leg);}catch(e4){}
+  }
+  const uid=cred.user.uid;
+  await fbIniciar();
+  if(!window._fbCargado){
+    await _fbAuth.signOut();
+    const ex=new Error('No se pudieron cargar los datos');ex.code='auth/network-request-failed';throw ex;
+  }
+  let acc=null;
+  try{const a=await _fbDB.collection('fayre_acceso').doc(uid).get();acc=a.exists?a.data():null;}catch(e){}
+  const un=String(acc&&acc.username||u).toLowerCase();
+  const user=(DB.users||[]).find(x=>x.authUid===uid)||(DB.users||[]).find(x=>String(x.username||'').toLowerCase()===un);
+  if(!user||!user.activo||(acc&&acc.activo===false)){await _fbAuth.signOut();return null;}
+  if(!user.authUid){user.authUid=uid;user.authEmail=cred.user.email;}
+  try{const pr=await _fbDB.collection('fayre_prefs').doc(uid).get();if(pr.exists&&pr.data().alertasPermitidas)user.alertasPermitidas=pr.data().alertasPermitidas;}catch(e){}
+  return user;
+}
+// Convierte las contraseñas escritas por el admin en cuentas seguras y las borra de los datos
+async function _procesarPasswords(){
+  const sec=_authSecundaria();
+  for(const u of (DB.users||[])){
+    if(!u.password)continue;
+    const pw=u.password;
+    try{
+      if(u.authUid&&_fbAuth.currentUser&&u.authUid===_fbAuth.currentUser.uid){
+        await _fbAuth.currentUser.updatePassword(_authPass(pw));
+      } else {
+        let email=_authEmail(u.username),cred=null;
+        if(!u.authUid){
+          try{cred=await sec.createUserWithEmailAndPassword(email,_authPass(pw));}
+          catch(e){
+            if(e.code!=='auth/email-already-in-use')throw e;
+            try{cred=await sec.signInWithEmailAndPassword(email,_authPass(pw));}catch(e2){cred=null;}
+          }
+        }
+        if(!cred){
+          email=_authEmail(u.username,Date.now().toString(36));
+          cred=await sec.createUserWithEmailAndPassword(email,_authPass(pw));
+        }
+        u.authUid=cred.user.uid;u.authEmail=email;
+        await sec.signOut();
+      }
+    }catch(e){
+      console.warn('No se pudo asegurar usuario',u.username,e.code||e.message);
+      toast(e.code==='auth/requires-recent-login'
+        ?'Para cambiar tu propia contraseña usa el botón 🔑'
+        :'No se pudo guardar la contraseña de '+(u.nombre||u.username)+' ('+(e.code||e.message)+')','warning');
+    }
+    delete u.password;
+  }
+}
+// Sincroniza los permisos del servidor con la lista de usuarios (solo admin)
+async function _sincronizarAccesos(){
+  if(currentUser?.role!=='admin'||!_fbAuth.currentUser)return;
+  try{
+    const vivos=new Set();
+    for(const u of (DB.users||[])){if(u.authUid){vivos.add(u.authUid);await _registrarAcceso(u);}}
+    const snap=await _fbDB.collection('fayre_acceso').get();
+    for(const d of snap.docs){if(!vivos.has(d.id)&&d.id!==_fbAuth.currentUser.uid)await d.ref.delete();}
+  }catch(e){console.warn('Sync accesos:',e.code||e.message);}
+}
+async function _asegurarUsuarios(){
+  if(currentUser?.role!=='admin')return;
+  await _procesarPasswords();
+  window.sDB('users');
+}
 
 
 function _hacerBackup(){
@@ -16561,6 +16626,7 @@ async function fbGuardar(key){
   const _timeout = new Promise((_,reject)=>setTimeout(()=>reject(new Error('timeout: Firebase tardó demasiado')),12000));
   const _guardar = async ()=>{
     let val=DB[key]!==undefined?DB[key]:(key==='config'?{}:[]);
+    if(key==='users'&&Array.isArray(val))val=val.map(u=>{const c=Object.assign({},u);delete c.password;return c;});
     if(key==='config'&&typeof val==='object'&&val!==null){
       const logo=val.logoData||'';
       const sinLogo=Object.assign({},val,{logoData:''});
@@ -16582,6 +16648,7 @@ async function fbCargar(){
   const resultados = await Promise.allSettled(
     keys.map(key => _fbDB.collection(_fbCol).doc(key).get().then(snap=>({key,snap})))
   );
+  if(resultados.every(r=>r.status!=='fulfilled'))throw resultados[0].reason;
   for(const res of resultados){
     if(res.status!=='fulfilled')continue;
     const {key,snap}=res.value;
@@ -16623,6 +16690,11 @@ window._fbActivo = false;
 window._fbCargado = false;
 // Firebase OBLIGATORIO — sin Firebase no se guarda nada
 window.sDB = function(key){
+  if(key==='users'&&currentUser?.role==='admin'&&!window._procesandoUsers&&(DB.users||[]).some(u=>u.password)){
+    window._procesandoUsers=true;
+    _procesarPasswords().finally(()=>{window._procesandoUsers=false;window.sDB('users');});
+    return;
+  }
   try { _sDB_orig(key); } catch(e){}
   const dot=document.getElementById('fb-dot');
   const txt=document.getElementById('fb-text');
@@ -16635,13 +16707,17 @@ window.sDB = function(key){
   if(dot)dot.style.background='#f59e0b';
   if(txt)txt.textContent='Guardando...';
   fbGuardar(key).then(()=>{
+    if(key==='users'&&currentUser?.role==='admin')_sincronizarAccesos();
     if(dot)dot.style.background='#22c55e';
     if(txt)txt.textContent='✓ Guardado';
     clearTimeout(window._fbTxtTimer);
     window._fbTxtTimer=setTimeout(()=>{const t=document.getElementById('fb-text');if(t)t.textContent='✓ Firebase';},2500);
   }).catch((e)=>{
     if(dot)dot.style.background='#ef4444';
-    if(e&&(e.code==='permission-denied'||e.code==='unauthenticated')){
+    if(e&&e.code==='permission-denied'&&_fbAuth.currentUser){
+      if(txt)txt.textContent='Sin permiso';
+      toast('No tienes permiso para guardar este cambio','error');
+    } else if(e&&(e.code==='permission-denied'||e.code==='unauthenticated')){
       if(txt)txt.textContent='Sesión expirada';
       setTimeout(()=>{if(confirm('Tu sesión expiró. ¿Volver a iniciar sesión?'))doLogout();},400);
     } else {
