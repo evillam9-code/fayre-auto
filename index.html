@@ -4162,7 +4162,7 @@ function renderNomina(){
       <div class="table-wrap"><table id="nom-pago-tbl">
         <thead><tr>
           <th style="width:36px"></th>
-          <th>Fecha</th><th>Empleado</th><th>Tipo</th><th>Monto</th><th>Cuenta</th><th>Nota</th>
+          <th>Fecha</th><th>Empleado</th><th>Tipo</th><th>Monto</th><th>Cuenta</th><th>Nota</th><th></th>
         </tr></thead>
         <tbody>${pagosFilt.slice().reverse().map((p,i)=>{
           const emp=DB.nomina.find(e=>e.id===p.empleadoId);
@@ -4175,8 +4175,9 @@ function renderNomina(){
             <td style="font-weight:700;color:var(--green)">${fmt(p.monto)}</td>
             <td style="font-size:12px">${escHtml(p.cuenta||'—')}</td>
             <td style="font-size:12px;color:var(--gray)">${escHtml(p.nota||'—')}</td>
+            <td><button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();imprimirReciboNomina('${p.id}')" title="Recibo de pago">🧾 Recibo</button></td>
           </tr>`;
-        }).join('')||'<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--gray)">Sin pagos registrados</td></tr>'}
+        }).join('')||'<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--gray)">Sin pagos registrados</td></tr>'}
         </tbody>
       </table></div>
     </div>
@@ -4400,6 +4401,123 @@ function guardarPagoNomina(i){
     monto,moneda,banco,cuenta,referencia:banco&&cuenta?banco+' / '+cuenta:cuenta,formaPago,numeroCheque,responsable:currentUser.nombre});
   logBit('nomina','Pagó nómina','');sDB('nominaPagos');sDB('caja');closeModal();toast('Pago registrado ✓','success');renderNomina();
   refreshCajaIfActive();
+}
+// ══ RECIBO DE NÓMINA — UNA HOJA: COPIA (EMPLEADO) ARRIBA, ORIGINAL (EMPRESA) ABAJO ══
+function _periodoNomina(p){
+  const tipoLabel={MEN:'Salario mensual','1Q':'Primera quincena','2Q':'Segunda quincena',SEM:'Pago semanal',COM:'Comisión'}[p.tipo]||p.tipo||'Pago de nómina';
+  const mes=p.mes||(p.fecha||'').slice(0,7);
+  if(!/^\d{4}-\d{2}$/.test(mes))return{concepto:tipoLabel,periodo:'',corte:''};
+  const [a,m]=mes.split('-').map(Number);
+  const nm=nombreMesEs(mes).split(' ')[0].toLowerCase();
+  const ult=new Date(a,m,0).getDate();
+  const fin2Q=Math.min(30,ult);
+  const de=d=>`${d} de ${nm} de ${a}`;
+  if(p.tipo==='1Q')return{concepto:tipoLabel,periodo:`Del 1 al 15 de ${nm} de ${a}`,corte:de(15)};
+  if(p.tipo==='2Q')return{concepto:tipoLabel,periodo:`Del 16 al ${fin2Q} de ${nm} de ${a}`,corte:de(fin2Q)};
+  if(p.tipo==='MEN')return{concepto:tipoLabel,periodo:`Del 1 al ${ult} de ${nm} de ${a}`,corte:de(ult)};
+  return{concepto:tipoLabel,periodo:`Mes de ${nm} de ${a}`,corte:''};
+}
+function imprimirReciboNomina(pid){
+  const p=(DB.nominaPagos||[]).find(x=>x.id===pid);
+  if(!p){toast('Pago no encontrado','error');return;}
+  const emp=DB.nomina.find(e=>e.id===p.empleadoId)||{};
+  const nombre=emp.nombre||p.empleadoNombre||'—';
+  const empresa=DB.config.empresa||'DealerSystem';
+  const rnc=DB.config.rnc||'', dir=DB.config.direccion||'', tel=DB.config.telefono||'';
+  const logoUrl=DB.config.logoData||DB.config.logo||'';
+  const moneda=p.moneda||'RD$';
+  const per=_periodoNomina(p);
+  const nRecibo='NOM-'+String(p.id||'').slice(-6).toUpperCase();
+  const campo=(lbl,val)=>val?`<div class="campo"><div class="lbl">${lbl}</div><div class="val">${escHtml(String(val))}</div></div>`:'';
+  const copiaHTML=(titulo,color)=>`
+    <div class="copia">
+      <div class="copia-titulo" style="background:${color}">${titulo}</div>
+      <div class="hdr-rec">
+        <div style="display:flex;align-items:center;gap:12px">
+          ${logoUrl?`<img src="${logoUrl}" style="width:60px;height:60px;object-fit:contain;border-radius:6px">`
+            :`<div style="width:60px;height:60px;background:${color};border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:900;color:#fff">${escHtml(empresa[0]||'D')}</div>`}
+          <div>
+            <div style="font-size:16px;font-weight:900;color:#0f172a">${escHtml(empresa)}</div>
+            ${rnc?`<div style="font-size:11px;color:#2563eb;font-weight:700">RNC: ${escHtml(rnc)}</div>`:''}
+            ${dir?`<div style="font-size:10px;color:#6b7280">${escHtml(dir)}</div>`:''}
+            ${tel?`<div style="font-size:10px;color:#6b7280">Tel: ${escHtml(tel)}</div>`:''}
+          </div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:13px;font-weight:900;color:${color};text-transform:uppercase;letter-spacing:1px">Recibo de Pago de Nómina</div>
+          <div style="font-size:10px;color:#6b7280;margin-top:3px">N° ${nRecibo}</div>
+          <div style="font-size:12px;font-weight:700;color:#0f172a;margin-top:3px">Fecha de pago: ${fmtDate(p.fecha)}</div>
+        </div>
+      </div>
+      <div class="g3">
+        ${campo('Empleado',nombre)}
+        ${campo('Cédula / Documento',emp.documento)}
+        ${campo('Cargo',emp.cargo)}
+      </div>
+      <div class="g2">
+        ${campo('Concepto',per.concepto)}
+        ${campo('Período',per.periodo)}
+      </div>
+      <table class="tbl-pago">
+        <tr class="total-row"><td>TOTAL PAGADO${per.corte?' — corte al '+escHtml(per.corte):''}</td><td class="num">${fmtP(p.monto||0,moneda)}</td></tr>
+      </table>
+      <div class="g3">
+        ${campo('Forma de pago',p.formaPago)}
+        ${campo('N° de cheque',p.numeroCheque)}
+        ${campo('Banco',p.banco)}
+        ${campo('Cuenta',p.cuenta)}
+        ${campo('Nota',p.nota)}
+      </div>
+      <div class="firmas">
+        <div class="firma">
+          <div class="firma-linea"></div>
+          <div class="firma-nombre">${escHtml(nombre)}</div>
+          <div class="firma-label">Recibí conforme — Empleado</div>
+        </div>
+        <div class="firma">
+          <div class="firma-linea"></div>
+          <div class="firma-nombre">${escHtml(DB.config.responsable||empresa)}</div>
+          <div class="firma-label">Firma autorizada — ${escHtml(empresa)}</div>
+        </div>
+      </div>
+    </div>`;
+  const win=window.open('','_blank','width=780,height=900');
+  if(!win){toast('Permite las ventanas emergentes para ver el recibo','warning');return;}
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
+  <title>Recibo ${nRecibo} — ${escHtml(nombre)}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    @page{size:letter;margin:10mm}
+    body{font-family:'Segoe UI',Arial,sans-serif;font-size:12px;color:#0f172a;background:#fff}
+    .page{max-width:720px;margin:0 auto;padding:12px}
+    .copia{padding:12px 0}
+    .copia-titulo{font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:2px;color:#fff;padding:4px 14px;border-radius:20px;display:inline-block;margin-bottom:10px}
+    .hdr-rec{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid #e2e8f0}
+    .g2{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
+    .g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px}
+    .campo .lbl{font-size:9px;font-weight:700;text-transform:uppercase;color:#94a3b8;margin-bottom:2px}
+    .campo .val{font-size:12px;font-weight:600;color:#0f172a;padding:4px 8px;background:#f8fafc;border-radius:4px;border-left:3px solid #2563eb}
+    .tbl-pago{width:100%;border-collapse:collapse;margin:2px 0 8px}
+    .total-row{background:#eff6ff}
+    .total-row td{font-size:14px;font-weight:900;padding:9px 12px;border-bottom:2px solid #2563eb}
+    .total-row .num{text-align:right;font-size:16px}
+    .firmas{display:grid;grid-template-columns:1fr 1fr;gap:48px;margin-top:38px}
+    .firma .firma-linea{border-top:1.5px solid #0f172a;margin-bottom:5px}
+    .firma .firma-nombre{font-size:11px;font-weight:700;color:#0f172a}
+    .firma .firma-label{font-size:10px;color:#6b7280;margin-top:1px}
+    .corte{border-top:2px dashed #94a3b8;margin:8px 0;text-align:center;line-height:0}
+    .corte span{background:#fff;padding:0 10px;font-size:10px;color:#94a3b8}
+    .np{margin-top:16px;text-align:center}
+    @media print{.np{display:none}.copia{page-break-inside:avoid}}
+  </style></head><body><div class="page">
+    ${copiaHTML('COPIA — EMPLEADO','#2563eb')}
+    <div class="corte"><span>✂ cortar aquí</span></div>
+    ${copiaHTML('ORIGINAL — EMPRESA','#16a34a')}
+    <div class="np">
+      <button onclick="window.print()" style="padding:10px 28px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;font-weight:700">🖨️ Imprimir / Guardar PDF</button>
+    </div>
+  </div></body></html>`);
+  win.document.close();
 }
 function imprimirPagosNomina(){
   const pagos=DB.nominaPagos||[];
