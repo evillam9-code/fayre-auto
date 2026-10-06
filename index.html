@@ -675,66 +675,44 @@ const escHtml=s=>{const d=document.createElement('div');d.textContent=s||'';retu
 // ══ BANCOS Y CUENTAS HELPER ══
 function getBancoCuentas(){return DB.config.bancoCuentas||[];}
 function esCuentaUSD(tipo){return (tipo||'').includes('USD')||(tipo||'').includes('Dólares');}
-// Helper: genera <option> planos desde bancoCuentas para dropdowns simples de cuenta
-
-function filtrarBancosPrestamoOtorgado(){
-  const moneda=document.getElementById('po2-pago-moneda')?.value||'RD$';
-  const bancoEl=document.getElementById('po2-banco');
-  const cuentaEl=document.getElementById('po2-cuenta');
-  if(!bancoEl||!cuentaEl)return;
-  const bcs=DB.config.bancoCuentas||[];
-  const disp=bcs.filter(b=>(b.cuentas||[]).some(c=>moneda==='USD'?esCuentaUSD(c.tipo):!esCuentaUSD(c.tipo)));
-  bancoEl.innerHTML=disp.map(b=>`<option value="${escHtml(b.banco)}">${escHtml(b.banco)}</option>`).join('')||'<option>Sin bancos</option>';
-  const bancoSel=disp[0]||bcs[0];
-  const cts=(bancoSel?.cuentas||[]).filter(c=>moneda==='USD'?esCuentaUSD(c.tipo):!esCuentaUSD(c.tipo));
-  cuentaEl.innerHTML=cts.map(c=>`<option value="${escHtml(c.tipo+' — '+c.numero)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`).join('')||'<option>Sin cuentas</option>';
+// ══ MONEDA→BANCO→CUENTA: única fuente para TODOS los formularios ══
+// Lee siempre del módulo Cuentas (DB.config.bancoCuentas). Moneda filtra bancos con cuentas
+// en esa moneda; Banco filtra sus cuentas en esa moneda. bancoSel/cuentaSel preseleccionan
+// lo guardado aunque el nombre del banco se haya guardado normalizado (mayúsculas, etc.).
+function mismoBanco(a,b){
+  if(!a||!b)return false;
+  return a===b||String(normalizarBancoGlobal(a)).toLowerCase()===String(normalizarBancoGlobal(b)).toLowerCase();
 }
-function filtrarBancosPrestamoRecibido(){
-  const moneda=document.getElementById('np2-moneda')?.value||'RD$';
-  const bancoEl=document.getElementById('np2-banco-ent');
-  const cuentaEl=document.getElementById('np2-ent-cuenta');
-  if(!bancoEl||!cuentaEl)return;
-  const bcs=DB.config.bancoCuentas||[];
-  const disp=bcs.filter(b=>(b.cuentas||[]).some(c=>moneda==='USD'?esCuentaUSD(c.tipo):!esCuentaUSD(c.tipo)));
-  bancoEl.innerHTML=disp.map(b=>`<option value="${escHtml(b.banco)}">${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos</option>';
-  filtrarCuentasPorBanco('np2-ent');
+function filtroCuentaMoneda(m){return c=>m==='USD'?esCuentaUSD(c.tipo):!esCuentaUSD(c.tipo);}
+function bancosPorMoneda(m){return (DB.config.bancoCuentas||[]).filter(b=>(b.cuentas||[]).some(filtroCuentaMoneda(m)));}
+function opcionesBancoCuenta(moneda,bancoSel,cuentaSel){
+  const m=moneda==='USD'?'USD':'RD$';
+  const disp=bancosPorMoneda(m);
+  const bancoObj=disp.find(b=>mismoBanco(b.banco,bancoSel))||disp[0];
+  const cSel=limpiarCuenta(cuentaSel||'');
+  const bancos=disp.map(b=>`<option value="${escHtml(b.banco)}" ${b===bancoObj?'selected':''}>${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos</option>';
+  const cuentas=(bancoObj?(bancoObj.cuentas||[]).filter(filtroCuentaMoneda(m)):[]).map(c=>{const v=c.tipo+' — '+c.numero;return`<option value="${escHtml(v)}" ${(v===cuentaSel||v===cSel)?'selected':''}>${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('')||'<option value="">Sin cuentas</option>';
+  return {bancos,cuentas,banco:bancoObj?.banco||''};
+}
+// Rellena los <select> de banco y cuenta ya existentes según la moneda, conservando lo elegido si sigue siendo válido
+function llenarBancoCuenta(bancoEl,cuentaEl,moneda){
+  if(!cuentaEl)return;
+  const o=opcionesBancoCuenta(moneda,bancoEl?.value,cuentaEl.value);
+  if(bancoEl)bancoEl.innerHTML=o.bancos;
+  cuentaEl.innerHTML=o.cuentas;
+}
+
+function filtrarBancosPrestamoOtorgado(){filtrarBancosPorMoneda('po2');}
+function filtrarBancosPrestamoRecibido(){filtrarBancosPorMoneda('np2-ent');}
+function _idsBancoCuenta(prefix){
+  if(prefix==='np2-ent')return{moneda:'np2-moneda',banco:'np2-banco-ent',cuenta:'np2-ent-cuenta'};
+  return{moneda:prefix==='po2'?'po2-pago-moneda':(prefix+'-moneda'),banco:prefix+'-banco',cuenta:prefix+'-cuenta'};
 }
 function filtrarBancosPorMoneda(prefix){
-  const monedaId=prefix==='po2'?'po2-pago-moneda':(prefix+'-moneda');
-  const moneda=document.getElementById(monedaId)?.value||'RD$';
-  const bancoEl=document.getElementById(prefix+'-banco');
-  const cuentaEl=document.getElementById(prefix+'-cuenta');
-  if(!bancoEl||!cuentaEl)return;
-  const bcs=DB.config.bancoCuentas||[];
-  const bancosDisp=bcs.filter(b=>(b.cuentas||[]).some(c=>moneda==='USD'?esCuentaUSD(c.tipo):!esCuentaUSD(c.tipo)));
-  bancoEl.innerHTML=bancosDisp.map(b=>`<option value="${escHtml(b.banco)}">${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos</option>';
-  filtrarCuentasPorBanco(prefix);
+  const ids=_idsBancoCuenta(prefix);
+  llenarBancoCuenta(document.getElementById(ids.banco),document.getElementById(ids.cuenta),document.getElementById(ids.moneda)?.value||'RD$');
 }
-function filtrarCuentasPorBanco(prefix){
-  // Handle np2-ent special case (banco selector is np2-banco-ent, cuenta is np2-ent-cuenta)
-  if(prefix==='np2-ent'){
-    const banco=document.getElementById('np2-banco-ent')?.value;
-    const cuentaEl=document.getElementById('np2-ent-cuenta');
-    if(!cuentaEl)return;
-    const bcs=DB.config.bancoCuentas||[];
-    const b=bcs.find(x=>x.banco===banco);
-    const moneda=document.getElementById('np2-moneda')?.value||'RD$';
-    const cuentas=(b?b.cuentas:[]).filter(c=>moneda==='USD'?esCuentaUSD(c.tipo):!esCuentaUSD(c.tipo));
-    cuentaEl.innerHTML=cuentas.map(c=>{const v=c.tipo+' — '+c.numero;return`<option value="${escHtml(v)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('')||'<option value="">Sin cuentas</option>';
-    return;
-  }
-  // original function continues below
-
-  const monedaId=prefix==='po2'?'po2-pago-moneda':(prefix+'-moneda');
-  const moneda=document.getElementById(monedaId)?.value||'RD$';
-  const banco=document.getElementById(prefix+'-banco')?.value;
-  const cuentaEl=document.getElementById(prefix+'-cuenta');
-  if(!cuentaEl)return;
-  const bcs=DB.config.bancoCuentas||[];
-  const b=bcs.find(x=>x.banco===banco);
-  const cuentas=(b?b.cuentas:[]).filter(c=>moneda==='USD'?esCuentaUSD(c.tipo):!esCuentaUSD(c.tipo));
-  cuentaEl.innerHTML=cuentas.map(c=>{const v=c.tipo+' — '+c.numero;return`<option value="${escHtml(v)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('')||'<option value="">Sin cuentas</option>';
-}
+function filtrarCuentasPorBanco(prefix){filtrarBancosPorMoneda(prefix);}
 function getCuentasFlat(selected){
   const bcs=DB.config.bancoCuentas||[];
   return bcs.flatMap(b=>(b.cuentas||[]).map(c=>{
@@ -2545,8 +2523,8 @@ function gastosVehiculo(vid){
         <div class="form-field" style="margin:0"><label style="font-size:10px">Forma de Pago</label><select id="gv-forma" onchange="document.getElementById('gv-metodo-wrap').style.display=this.value==='CONTADO'?'block':'none'"><option value="CONTADO">Contado</option><option value="CREDITO">Crédito</option></select></div>
         <div class="form-field" style="margin:0" id="gv-metodo-wrap"><label style="font-size:10px">Método de Pago</label><select id="gvm-forma" data-prev="EFECTIVO" onchange="onFormaPagoChange(this,'gvm',false)"><option value="EFECTIVO">Efectivo</option><option value="TRANSFERENCIA">Transferencia</option><option value="DEPOSITO">Depósito</option><option value="CHEQUE">Cheque</option></select>${chequeHiddenFields('gvm',false)}</div>
         <div class="form-field" style="margin:0"><label style="font-size:10px">Moneda</label><select id="gv-moneda" onchange="filtrarBancosPorMoneda('gv')"><option value="RD$">RD$</option><option value="USD">USD</option></select></div>
-        <div class="form-field" style="margin:0"><label style="font-size:10px">Banco</label><select id="gv-banco" onchange="filtrarCuentasPorBanco('gv')">${(()=>{const bcs=DB.config.bancoCuentas||[];const disp=bcs.filter(b=>(b.cuentas||[]).some(c=>!esCuentaUSD(c.tipo)));return disp.map(b=>`<option value="${escHtml(b.banco)}">${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos</option>';})()}</select></div>
-        <div class="form-field" style="margin:0"><label style="font-size:10px">Cuenta</label><select id="gv-cuenta">${(()=>{const bcs=DB.config.bancoCuentas||[];const b=bcs.find(x=>(x.cuentas||[]).some(c=>!esCuentaUSD(c.tipo)))||bcs[0];return(b?b.cuentas:[]).filter(c=>!esCuentaUSD(c.tipo)).map(c=>{const v=c.tipo+' — '+c.numero;return`<option value="${escHtml(v)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('')||'<option value="">Sin cuentas</option>';})()}</select></div>
+        <div class="form-field" style="margin:0"><label style="font-size:10px">Banco</label><select id="gv-banco" onchange="filtrarCuentasPorBanco('gv')">${opcionesBancoCuenta('RD$').bancos}</select></div>
+        <div class="form-field" style="margin:0"><label style="font-size:10px">Cuenta</label><select id="gv-cuenta">${opcionesBancoCuenta('RD$').cuentas}</select></div>
         <div class="form-field" style="margin:0"><label style="font-size:10px">Fecha</label><input type="date" id="gv-fecha" value="${today()}"></div>
         <div class="form-field" style="margin:0;display:flex;align-items:flex-end"><button class="btn btn-red btn-sm" style="width:100%" onclick="agregarGastoVeh('${vid}')">💾 Agregar</button></div>
       </div>
@@ -3521,15 +3499,8 @@ function exportarResumenTodasCuentas(){
 // moneda), Banco después (filtra cuentas de ese banco en esa moneda). bancoSel/cuentaSel
 // son opcionales — se usan para preseleccionar el valor actual en formularios de "editar".
 function htmlMonedaBancoCuenta(prefix, monedaVal, bancoSel, cuentaSel, extraOnchange){
-  const m=monedaVal||'RD$';
-  const bcs=DB.config.bancoCuentas||[];
-  const filtroMoneda=c=>m==='USD'?esCuentaUSD(c.tipo):!esCuentaUSD(c.tipo);
-  const bancosDisp=bcs.filter(b=>(b.cuentas||[]).some(filtroMoneda));
-  const bancoPre=bancoSel&&bancosDisp.some(b=>b.banco===bancoSel)?bancoSel:(bancosDisp[0]?.banco||'');
-  const bancoObj=bancosDisp.find(b=>b.banco===bancoPre);
-  const cuentas=bancoObj?(bancoObj.cuentas||[]).filter(filtroMoneda):[];
-  const bancoOpts=bancosDisp.map(b=>`<option value="${escHtml(b.banco)}" ${b.banco===bancoPre?'selected':''}>${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos</option>';
-  const cuentaOpts=cuentas.map(c=>{const v=c.tipo+' — '+c.numero;return`<option value="${escHtml(v)}" ${v===cuentaSel?'selected':''}>${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('')||'<option value="">Sin cuentas</option>';
+  const m=monedaVal==='USD'?'USD':'RD$';
+  const o=opcionesBancoCuenta(m,bancoSel,cuentaSel);
   const monedaOnchange=`actualizarCuentasGenerico('${prefix}')${extraOnchange?';'+extraOnchange:''}`;
   return `<div class="form-row c3">
     <div class="form-field"><label>Moneda</label>
@@ -3539,63 +3510,32 @@ function htmlMonedaBancoCuenta(prefix, monedaVal, bancoSel, cuentaSel, extraOnch
       </select>
     </div>
     <div class="form-field"><label>Banco</label>
-      <select id="${prefix}-banco" onchange="actualizarCuentasGenerico('${prefix}')">${bancoOpts}</select>
+      <select id="${prefix}-banco" onchange="actualizarCuentasGenerico('${prefix}')">${o.bancos}</select>
     </div>
     <div class="form-field"><label>Cuenta</label>
-      <select id="${prefix}-cuenta">${cuentaOpts}</select>
+      <select id="${prefix}-cuenta">${o.cuentas}</select>
     </div>
   </div>`;
 }
 function actualizarCuentasGenerico(prefix){
-  const monedaEl=document.getElementById(prefix+'-moneda');
-  const bancoEl=document.getElementById(prefix+'-banco');
-  const cuentaEl=document.getElementById(prefix+'-cuenta');
-  if(!cuentaEl)return;
-  const m=monedaEl?.value||'RD$';
-  const bcs=DB.config.bancoCuentas||[];
-  const filtroMoneda=c=>m==='USD'?esCuentaUSD(c.tipo):!esCuentaUSD(c.tipo);
-  // Actualizar bancos si cambió la moneda (preservando el banco seleccionado si sigue siendo válido)
-  if(bancoEl){
-    const bancoPrevio=bancoEl.value;
-    const bancosDisp=bcs.filter(b=>(b.cuentas||[]).some(filtroMoneda));
-    bancoEl.innerHTML=bancosDisp.map(b=>`<option value="${escHtml(b.banco)}" ${b.banco===bancoPrevio?'selected':''}>${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos</option>';
-  }
-  const banco=bancoEl?.value;
-  const b=bcs.find(x=>x.banco===banco);
-  const cuentas=(b?b.cuentas:[]).filter(filtroMoneda);
-  cuentaEl.innerHTML=cuentas.map(c=>`<option value="${escHtml(c.tipo+' — '+c.numero)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`).join('')||'<option value="">Sin cuentas</option>';
+  llenarBancoCuenta(document.getElementById(prefix+'-banco'),document.getElementById(prefix+'-cuenta'),document.getElementById(prefix+'-moneda')?.value||'RD$');
 }
 // Variante para formularios donde la moneda viene fija/heredada de un registro existente
 // (no es seleccionable ahí) pero Banco→Cuenta igual deben quedar filtrados por esa moneda.
 function htmlBancoCuentaFiltrado(prefix, moneda, bancoSel, cuentaSel){
   const m=moneda==='USD'?'USD':'RD$';
-  const bcs=DB.config.bancoCuentas||[];
-  const filtroMoneda=c=>m==='USD'?esCuentaUSD(c.tipo):!esCuentaUSD(c.tipo);
-  const bancosDisp=bcs.filter(b=>(b.cuentas||[]).some(filtroMoneda));
-  const bancoPre=bancoSel&&bancosDisp.some(b=>b.banco===bancoSel)?bancoSel:(bancosDisp[0]?.banco||'');
-  const bancoObj=bancosDisp.find(b=>b.banco===bancoPre);
-  const cuentas=bancoObj?(bancoObj.cuentas||[]).filter(filtroMoneda):[];
-  const bancoOpts=bancosDisp.map(b=>`<option value="${escHtml(b.banco)}" ${b.banco===bancoPre?'selected':''}>${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos</option>';
-  const cuentaOpts=cuentas.map(c=>{const v=c.tipo+' — '+c.numero;return`<option value="${escHtml(v)}" ${v===cuentaSel?'selected':''}>${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('')||'<option value="">Sin cuentas</option>';
+  const o=opcionesBancoCuenta(m,bancoSel,cuentaSel);
   return `<div class="form-row c2">
     <div class="form-field"><label>Banco (${m==='USD'?'US$':'RD$'})</label>
-      <select id="${prefix}-banco" onchange="actualizarCuentasFiltrado('${prefix}','${m}')">${bancoOpts}</select>
+      <select id="${prefix}-banco" onchange="actualizarCuentasFiltrado('${prefix}','${m}')">${o.bancos}</select>
     </div>
     <div class="form-field"><label>Cuenta</label>
-      <select id="${prefix}-cuenta">${cuentaOpts}</select>
+      <select id="${prefix}-cuenta">${o.cuentas}</select>
     </div>
   </div>`;
 }
 function actualizarCuentasFiltrado(prefix, moneda){
-  const bancoEl=document.getElementById(prefix+'-banco');
-  const cuentaEl=document.getElementById(prefix+'-cuenta');
-  if(!cuentaEl)return;
-  const m=moneda==='USD'?'USD':'RD$';
-  const bcs=DB.config.bancoCuentas||[];
-  const filtroMoneda=c=>m==='USD'?esCuentaUSD(c.tipo):!esCuentaUSD(c.tipo);
-  const b=bcs.find(x=>x.banco===bancoEl?.value);
-  const cuentas=(b?b.cuentas:[]).filter(filtroMoneda);
-  cuentaEl.innerHTML=cuentas.map(c=>`<option value="${escHtml(c.tipo+' — '+c.numero)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`).join('')||'<option value="">Sin cuentas</option>';
+  llenarBancoCuenta(document.getElementById(prefix+'-banco'),document.getElementById(prefix+'-cuenta'),moneda);
 }
 
 // ══ EXPORTAR PDF — CUMPLEAÑOS ══
@@ -3762,14 +3702,9 @@ function editarGasto(i){
   const g=DB.gastos[i];
   const cats=DB.config.categoriasGastos||['Alquiler','Servicios','Salarios','Papelería','Mantenimiento','Publicidad','Combustible','Impuestos','Otros'];
   const supsEmp=(DB.suplidores||[]).filter(s=>s.tipoSuplidor==='empresa');
-  const bcs=DB.config.bancoCuentas||[];
   const monedaAct=g.moneda||'RD$';
-  const bancosDisp=bcs.filter(b=>(b.cuentas||[]).some(c=>monedaAct==='USD'?(c.tipo.includes('USD')||c.tipo.includes('Dólares')):(!c.tipo.includes('USD')&&!c.tipo.includes('Dólares'))));
-  const bancoAct=g.banco||'';
-  const bancoOpts=bancosDisp.map(b=>`<option value="${escHtml(b.banco)}" ${b.banco===bancoAct?'selected':''}>${escHtml(b.banco)}</option>`).join('')||bcs.map(b=>`<option value="${escHtml(b.banco)}" ${b.banco===bancoAct?'selected':''}>${escHtml(b.banco)}</option>`).join('');
-  const bancoSel=bcs.find(b=>b.banco===bancoAct)||bancosDisp[0]||bcs[0];
-  const cuentasDisp=(bancoSel?.cuentas||[]).filter(c=>monedaAct==='USD'?(c.tipo.includes('USD')||c.tipo.includes('Dólares')):(!c.tipo.includes('USD')&&!c.tipo.includes('Dólares')));
-  const cuentaOpts=cuentasDisp.map(c=>{const v=c.tipo+' — '+c.numero;return`<option value="${escHtml(v)}" ${v===g.cuenta?'selected':''}>${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('')||(bancoSel?.cuentas||[]).map(c=>{const v=c.tipo+' — '+c.numero;return`<option value="${escHtml(v)}" ${v===g.cuenta?'selected':''}>${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('');
+  const _bc=opcionesBancoCuenta(monedaAct,g.banco,g.cuenta);
+  const bancoOpts=_bc.bancos,cuentaOpts=_bc.cuentas;
   openModal('✏️ Editar Gasto de Empresa',`
     <div class="form-row c3">
       <div class="form-field"><label class="required">Fecha</label><input type="date" id="g-fecha" value="${g.fecha||today()}"></div>
@@ -3929,10 +3864,8 @@ function nuevoGasto(){
   // Solo suplidores de empresa
   const supsEmp=(DB.suplidores||[]).filter(s=>s.tipoSuplidor==='empresa');
   const supsOpts=supsEmp.map(s=>`<option value="${escHtml(s.empresa||s.nombre)}">${escHtml(s.empresa||s.nombre)}</option>`).join('');
-  const bcs=DB.config.bancoCuentas||[];
-  const bancoOpts=bcs.map(b=>`<option value="${escHtml(b.banco)}">${escHtml(b.banco)}</option>`).join('')||'<option value="Caja General">Caja General</option>';
-  const primerBanco=bcs[0];
-  const cuentaOpts=primerBanco?(primerBanco.cuentas||[]).map(c=>`<option value="${escHtml(c.tipo+' — '+c.numero)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`).join(''):'<option value="">Sin cuentas</option>';
+  const _bc=opcionesBancoCuenta('RD$');
+  const bancoOpts=_bc.bancos,cuentaOpts=_bc.cuentas;
   openModal('Nuevo Gasto de Empresa',`
     <div class="form-row c3">
       <div class="form-field"><label class="required">Fecha</label><input type="date" id="g-fecha" value="${today()}"></div>
@@ -4212,13 +4145,9 @@ function nomAccion(accion){
     const p=(DB.nominaPagos||[]).find(x=>x.id===nomPagoSelectedId);
     if(!p)return;
     const emp=DB.nomina.find(e=>e.id===p.empleadoId);
-    const epBcs=DB.config.bancoCuentas||[];
     const epMonedaAct=p.moneda||'RD$';
-    const epBancosDisp=epBcs.filter(b=>(b.cuentas||[]).some(c=>epMonedaAct==='USD'?esCuentaUSD(c.tipo):!esCuentaUSD(c.tipo)));
-    const epBancoSel=epBancosDisp.find(b=>b.banco===p.banco)||epBancosDisp[0]||epBcs[0];
-    const epCuentasDisp=(epBancoSel?.cuentas||[]).filter(c=>epMonedaAct==='USD'?esCuentaUSD(c.tipo):!esCuentaUSD(c.tipo));
-    const epBancoOpts=epBancosDisp.map(b=>`<option value="${escHtml(b.banco)}" ${b.banco===epBancoSel?.banco?'selected':''}>${escHtml(b.banco)}</option>`).join('');
-    const epCuentaOpts=epCuentasDisp.map(c=>{const v=c.tipo+' — '+c.numero;return`<option value="${escHtml(v)}" ${v===p.cuenta?'selected':''}>${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('');
+    const _epBc=opcionesBancoCuenta(epMonedaAct,p.banco,p.cuenta);
+    const epBancoOpts=_epBc.bancos,epCuentaOpts=_epBc.cuentas;
     openModal('✏️ Editar Pago — '+escHtml(emp?.nombre||p.empleadoNombre||''),`
       <div class="form-row c2">
         <div class="form-field"><label>Fecha</label><input type="date" id="ep-fecha" value="${p.fecha||''}"></div>
@@ -4351,10 +4280,10 @@ function registrarPagoNomina(i){
     </div>
     <div class="form-row c2">
       <div class="form-field"><label>Banco</label>
-        <select id="np-banco" onchange="filtrarCuentasPorBanco('np')">${(()=>{const bcs=DB.config.bancoCuentas||[];const disp=bcs.filter(b=>(b.cuentas||[]).some(c=>!c.tipo.includes('USD')&&!c.tipo.includes('Dólares')));return disp.map(b=>`<option value="${escHtml(b.banco)}">${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos</option>';})()}</select>
+        <select id="np-banco" onchange="filtrarCuentasPorBanco('np')">${opcionesBancoCuenta('RD$').bancos}</select>
       </div>
       <div class="form-field"><label>Cuenta</label>
-        <select id="np-cuenta">${(()=>{const bcs=DB.config.bancoCuentas||[];const b=bcs.find(x=>(x.cuentas||[]).some(c=>!c.tipo.includes('USD')&&!c.tipo.includes('Dólares')));return(b?b.cuentas:[]).filter(c=>!c.tipo.includes('USD')&&!c.tipo.includes('Dólares')).map(c=>{const v=c.tipo+' — '+c.numero;return`<option value="${escHtml(v)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('')||'<option value="">Sin cuentas</option>';})()}</select>
+        <select id="np-cuenta">${opcionesBancoCuenta('RD$').cuentas}</select>
       </div>
     </div>
     <div class="form-field"><label>Nota</label><input type="text" id="np-nota" placeholder="Opcional"></div>
@@ -5399,10 +5328,10 @@ function nuevoPrestamo(){
     <div class="form-row c3">
       <div class="form-field"><label class="required">Cuenta de Entrada</label>
         <div style="font-size:11px;color:var(--gray);margin-bottom:4px">¿En qué cuenta se recibió el dinero?</div>
-        <select id="np2-banco-ent" onchange="filtrarCuentasPorBanco('np2-ent')">${(()=>{const bcs=DB.config.bancoCuentas||[];const disp=bcs.filter(b=>(b.cuentas||[]).some(c=>!esCuentaUSD(c.tipo)));return disp.map(b=>`<option value="${escHtml(b.banco)}">${escHtml(b.banco)}</option>`).join('')||'<option>Sin bancos</option>';})()}</select>
+        <select id="np2-banco-ent" onchange="filtrarCuentasPorBanco('np2-ent')">${opcionesBancoCuenta('RD$').bancos}</select>
       </div>
       <div class="form-field"><label>&nbsp;</label>
-        <select id="np2-ent-cuenta">${(()=>{const bcs=DB.config.bancoCuentas||[];const b=bcs.find(x=>(x.cuentas||[]).some(c=>!esCuentaUSD(c.tipo)))||bcs[0];return(b?b.cuentas:[]).filter(c=>!esCuentaUSD(c.tipo)).map(c=>{const v=c.tipo+' — '+c.numero;return`<option value="${escHtml(v)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('')||'<option>Sin cuentas</option>';})()}</select>
+        <select id="np2-ent-cuenta">${opcionesBancoCuenta('RD$').cuentas}</select>
       </div>
     </div>`,
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
@@ -7829,10 +7758,10 @@ function abonarGastoVeh(gid){
         </select>
       </div>
       <div class="form-field"><label>Banco</label>
-        <select id="abgv-banco" onchange="filtrarCuentasPorBanco('abgv')">${(()=>{const m=g.moneda||'RD$';const bcs=DB.config.bancoCuentas||[];const disp=bcs.filter(b=>(b.cuentas||[]).some(c=>m==='USD'?(c.tipo.includes('USD')||c.tipo.includes('Dólares')):(!c.tipo.includes('USD')&&!c.tipo.includes('Dólares'))));return disp.map(b=>`<option value="${escHtml(b.banco)}" ${b.banco===g.banco?'selected':''}>${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos</option>';})()}</select>
+        <select id="abgv-banco" onchange="filtrarCuentasPorBanco('abgv')">${opcionesBancoCuenta(g.moneda,g.banco,g.cuenta).bancos}</select>
       </div>
       <div class="form-field"><label>Cuenta de Salida</label>
-        <select id="abgv-cuenta">${(()=>{const m=g.moneda||'RD$';const bcs=DB.config.bancoCuentas||[];const b=bcs.find(x=>x.banco===g.banco)||bcs.find(x=>(x.cuentas||[]).some(c=>m==='USD'?(c.tipo.includes('USD')||c.tipo.includes('Dólares')):(!c.tipo.includes('USD')&&!c.tipo.includes('Dólares'))));const cts=(b?b.cuentas:[]).filter(c=>m==='USD'?(c.tipo.includes('USD')||c.tipo.includes('Dólares')):(!c.tipo.includes('USD')&&!c.tipo.includes('Dólares')));return cts.map(c=>{const v=c.tipo+' — '+c.numero;return`<option value="${escHtml(v)}" ${v===g.cuenta?'selected':''}>${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('')||'<option value="">Sin cuentas</option>';})()}</select>
+        <select id="abgv-cuenta">${opcionesBancoCuenta(g.moneda,g.banco,g.cuenta).cuentas}</select>
       </div>
     </div>
     <div class="form-field"><label>Forma de Pago</label>
@@ -7938,10 +7867,10 @@ function editarGastoVeh(gid){
         <input type="number" id="egv-tasa" value="${g.tasaCambio||DB.config.tasaCambio||60}" step="0.01" placeholder="Ej: 60.50">
       </div>
       <div class="form-field"><label>Banco</label>
-        <select id="egv-banco" onchange="filtrarCuentasPorBanco('egv')">${(()=>{const m=g.moneda||'RD$';const bcs=DB.config.bancoCuentas||[];const disp=bcs.filter(b=>(b.cuentas||[]).some(c=>m==='USD'?(c.tipo.includes('USD')||c.tipo.includes('Dólares')):(!c.tipo.includes('USD')&&!c.tipo.includes('Dólares'))));return disp.map(b=>`<option value="${escHtml(b.banco)}" ${b.banco===g.banco?'selected':''}>${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos</option>';})()}</select>
+        <select id="egv-banco" onchange="filtrarCuentasPorBanco('egv')">${opcionesBancoCuenta(g.moneda,g.banco,g.cuenta).bancos}</select>
       </div>
       <div class="form-field"><label>Cuenta Salida</label>
-        <select id="egv-cuenta">${(()=>{const m=g.moneda||'RD$';const bcs=DB.config.bancoCuentas||[];const b=bcs.find(x=>x.banco===g.banco)||bcs.find(x=>(x.cuentas||[]).some(c=>m==='USD'?(c.tipo.includes('USD')||c.tipo.includes('Dólares')):(!c.tipo.includes('USD')&&!c.tipo.includes('Dólares'))));const cts=(b?b.cuentas:[]).filter(c=>m==='USD'?(c.tipo.includes('USD')||c.tipo.includes('Dólares')):(!c.tipo.includes('USD')&&!c.tipo.includes('Dólares')));return cts.map(c=>{const v=c.tipo+' — '+c.numero;return`<option value="${escHtml(v)}" ${v===g.cuenta?'selected':''}>${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('')||'<option value="">Sin cuentas</option>';})()}</select>
+        <select id="egv-cuenta">${opcionesBancoCuenta(g.moneda,g.banco,g.cuenta).cuentas}</select>
       </div>
     </div>
     <div class="form-row c3">
@@ -7984,6 +7913,9 @@ function guardarEditGastoVeh(i){
     return;
   }
   const tasaGuardada=moneda==='USD'?tasaRawE:parseFloat(DB.config.tasaCambio||60);
+  // Leer lo pagado ANTES de sobrescribir el registro, para poder ajustar Caja por la diferencia
+  const pagadoAnterior=parseFloat(DB.gastosVehiculos[i].montoPagado||0);
+  const pagosGV=asegurarPagosGastoVeh(DB.gastosVehiculos[i]);
   const egvVid=document.getElementById('egv-veh')?.value||DB.gastosVehiculos[i].vehiculoId;
   if(egvVid){
     const egvV=DB.vehiculos.find(x=>x.id===egvVid);
@@ -7994,6 +7926,7 @@ function guardarEditGastoVeh(i){
   DB.gastosVehiculos[i].tipo=document.getElementById('egv-tipo').value;
   DB.gastosVehiculos[i].moneda=moneda;
   DB.gastosVehiculos[i].tasaCambio=tasaGuardada;
+  DB.gastosVehiculos[i].banco=_egv_banco;
   DB.gastosVehiculos[i].cuenta=document.getElementById('egv-cuenta').value;
   DB.gastosVehiculos[i].fecha=document.getElementById('egv-fecha').value;
   DB.gastosVehiculos[i].fechaPago=document.getElementById('egv-fechapago').value;
@@ -8013,8 +7946,6 @@ function guardarEditGastoVeh(i){
   }
   // Sincronizar Caja por la DIFERENCIA real del monto pagado (no por el total de la factura)
   const _gvOld=DB.gastosVehiculos[i];
-  const pagadoAnterior=parseFloat(_gvOld.montoPagado||0);
-  const pagosGV=asegurarPagosGastoVeh(_gvOld);
   const diferenciaGV=pagado-pagadoAnterior;
   const nuevoBancoGV=document.getElementById('egv-banco')?.value||_gvOld.banco||'';
   const nuevaCuentaGV=document.getElementById('egv-cuenta')?.value||_gvOld.cuenta||'';
@@ -8767,13 +8698,13 @@ function nuevaVenta(){
         </select>
       </div>
       <div class="form-field"><label>Banco</label>
-        <select id="sv-banco" onchange="filtrarCuentasPorBanco('sv');actualizarCuentasVenta()">
-          ${(()=>{const bcs=DB.config.bancoCuentas||[];const disp=bcs.filter(b=>(b.cuentas||[]).some(c=>!c.tipo.includes('USD')&&!c.tipo.includes('Dólares')));return disp.map(b=>`<option value="${escHtml(b.banco)}">${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos</option>';})()}
+        <select id="sv-banco" onchange="filtrarCuentasPorBanco('sv')">
+          ${opcionesBancoCuenta('RD$').bancos}
         </select>
       </div>
       <div class="form-field"><label class="required">Cuenta de Cobro</label>
         <select id="sv-cuenta">
-          ${(()=>{const bcs=DB.config.bancoCuentas||[];const b=bcs.find(x=>(x.cuentas||[]).some(c=>!c.tipo.includes('USD')&&!c.tipo.includes('Dólares')));return(b?b.cuentas:[]).filter(c=>!c.tipo.includes('USD')&&!c.tipo.includes('Dólares')).map(c=>`<option value="${escHtml(c.tipo+' — '+c.numero)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`).join('')||'<option value="">Sin cuentas</option>';})()}
+          ${opcionesBancoCuenta('RD$').cuentas}
         </select>
       </div>
     </div>
@@ -9043,16 +8974,7 @@ function toggleVehRecibido(){
   if(fields)fields.style.display=cb?.checked?'block':'none';
 }
 
-function actualizarCuentasVenta(){
-  const bancoEl=document.getElementById('sv-banco');
-  const cuentaEl=document.getElementById('sv-cuenta');
-  if(!bancoEl||!cuentaEl)return;
-  const moneda=document.getElementById('sv-moneda')?.value||'RD$';
-  const bcs=DB.config.bancoCuentas||[];
-  const b=bcs.find(x=>x.banco===bancoEl.value);
-  const cuentas=(b?b.cuentas:[]).filter(c=>moneda==='USD'?esCuentaUSD(c.tipo):!esCuentaUSD(c.tipo));
-  cuentaEl.innerHTML=cuentas.map(c=>`<option value="${escHtml(c.tipo+' — '+c.numero)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`).join('')||'<option value="Caja General">Caja General</option>';
-}
+function actualizarCuentasVenta(){filtrarBancosPorMoneda('sv');}
 function toggleTasaVenta(){
   // Tasa de cambio eliminada del formulario — siempre oculta
   const wrap=document.getElementById('sv-tasa-wrap');
@@ -9341,10 +9263,10 @@ function abonarVenta(vid){
         </select>
       </div>
       <div class="form-field"><label>Banco</label>
-        <select id="ab-banco" onchange="filtrarCuentasPorBanco('ab')">${(()=>{const m=v.moneda||'RD$';const bcs=DB.config.bancoCuentas||[];const disp=bcs.filter(b=>(b.cuentas||[]).some(c=>m==='USD'?(c.tipo.includes('USD')||c.tipo.includes('Dólares')):(!c.tipo.includes('USD')&&!c.tipo.includes('Dólares'))));return disp.map(b=>`<option value="${escHtml(b.banco)}">${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos</option>';})()}</select>
+        <select id="ab-banco" onchange="filtrarCuentasPorBanco('ab')">${opcionesBancoCuenta(v.moneda).bancos}</select>
       </div>
       <div class="form-field"><label>Cuenta</label>
-        <select id="ab-cuenta">${(()=>{const m=v.moneda||'RD$';const bcs=DB.config.bancoCuentas||[];const b=bcs.find(x=>(x.cuentas||[]).some(c=>m==='USD'?(c.tipo.includes('USD')||c.tipo.includes('Dólares')):(!c.tipo.includes('USD')&&!c.tipo.includes('Dólares'))));return(b?b.cuentas:[]).filter(c=>m==='USD'?(c.tipo.includes('USD')||c.tipo.includes('Dólares')):(!c.tipo.includes('USD')&&!c.tipo.includes('Dólares'))).map(c=>{const val=c.tipo+' — '+c.numero;return`<option value="${escHtml(val)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('')||'<option value="">Sin cuentas</option>';})()}</select>
+        <select id="ab-cuenta">${opcionesBancoCuenta(v.moneda).cuentas}</select>
       </div>
     </div>
     <div class="form-field"><label>Nota</label><input type="text" id="ab-nota" placeholder="Descripción del cobro"></div>`,
@@ -9390,19 +9312,8 @@ function confirmarAbVenta(vid){
   renderVentas();
 }
 
-function bancoOptionsPorMonedaVenta(moneda,selected){
-  const bcs=DB.config.bancoCuentas||[];
-  const esUSD=moneda==='USD';
-  const disp=bcs.filter(b=>(b.cuentas||[]).some(c=>esUSD?(c.tipo.includes('USD')||c.tipo.includes('Dólares')):(!c.tipo.includes('USD')&&!c.tipo.includes('Dólares'))));
-  return disp.map(b=>`<option value="${escHtml(b.banco)}" ${b.banco===selected?'selected':''}>${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos</option>';
-}
-function cuentaOptionsPorBancoMonedaVenta(banco,moneda,selected){
-  const bcs=DB.config.bancoCuentas||[];
-  const esUSD=moneda==='USD';
-  const b=bcs.find(x=>x.banco===banco);
-  const cuentas=(b?b.cuentas:[]).filter(c=>esUSD?(c.tipo.includes('USD')||c.tipo.includes('Dólares')):(!c.tipo.includes('USD')&&!c.tipo.includes('Dólares')));
-  return cuentas.map(c=>{const val=c.tipo+' — '+c.numero;return `<option value="${escHtml(val)}" ${val===selected?'selected':''}>${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('')||'<option value="">Sin cuentas</option>';
-}
+function bancoOptionsPorMonedaVenta(moneda,selected){return opcionesBancoCuenta(moneda,selected).bancos;}
+function cuentaOptionsPorBancoMonedaVenta(banco,moneda,selected){return opcionesBancoCuenta(moneda,banco,selected).cuentas;}
 function editarVenta(vid){
   if(currentUser?.role!=='admin'&&!canDo('editar')){toast('No tienes permiso para editar','error');return;}
   const v=DB.ventas.find(x=>x.id===vid);if(!v)return;
@@ -9456,7 +9367,7 @@ function editarVenta(vid){
         </select>
       </div>
       <div class="form-field"><label>Banco</label>
-        <select id="sv-banco" onchange="filtrarCuentasPorBanco('sv');actualizarCuentasVenta()">
+        <select id="sv-banco" onchange="filtrarCuentasPorBanco('sv')">
           ${bancoOptionsPorMonedaVenta(v.moneda||'RD$',v.banco)}
         </select>
       </div>
@@ -11982,7 +11893,7 @@ function nuevaPrestamoOtorgado(){
       <div class="form-field"><label>Notas</label><input type="text" id="po2-notas" placeholder="Referencia, contrato..."></div>
     </div>
     <div class="form-row c3">
-      ${(()=>{const bcs=DB.config.bancoCuentas||[];const bancosDisp=bcs.filter(b=>(b.cuentas||[]).some(c=>!esCuentaUSD(c.tipo)));const primerBanco=bancosDisp[0];const cuentas=primerBanco?(primerBanco.cuentas||[]).filter(c=>!esCuentaUSD(c.tipo)):[];return`
+      ${(()=>{const _bc=opcionesBancoCuenta('RD$');return`
       <div class="form-field"><label class="required">Moneda Desembolso</label>
         <select id="po2-pago-moneda" onchange="filtrarBancosPrestamoOtorgado()">
           <option value="RD$">RD$ — Pesos</option>
@@ -11990,10 +11901,10 @@ function nuevaPrestamoOtorgado(){
         </select>
       </div>
       <div class="form-field"><label class="required">Banco Desembolso</label>
-        <select id="po2-banco" onchange="filtrarCuentasPorBanco('po2')">${bancosDisp.map(b=>`<option value="${escHtml(b.banco)}">${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos</option>'}</select>
+        <select id="po2-banco" onchange="filtrarCuentasPorBanco('po2')">${_bc.bancos}</select>
       </div>
       <div class="form-field"><label class="required">Cuenta Desembolso</label>
-        <select id="po2-cuenta">${cuentas.map(c=>`<option value="${escHtml(c.tipo+' — '+c.numero)}">${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`).join('')||'<option value="">Sin cuentas</option>'}</select>
+        <select id="po2-cuenta">${_bc.cuentas}</select>
       </div>`;})()}
     </div>`,
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
@@ -15309,10 +15220,10 @@ function _formSeguro(s){
     <div id="sg-banco-wrap">
       <div class="form-row c2">
         <div class="form-field"><label>Banco</label>
-          <select id="sg-banco" onchange="filtrarCuentasPorBanco('sg')">${(()=>{const m=s?.moneda||'RD$';const bcs=DB.config.bancoCuentas||[];const disp=bcs.filter(b=>(b.cuentas||[]).some(c=>m==='USD'?(c.tipo.includes('USD')||c.tipo.includes('Dólares')):(!c.tipo.includes('USD')&&!c.tipo.includes('Dólares'))));return disp.map(b=>`<option value="${escHtml(b.banco)}" ${b.banco===s?.banco?'selected':''}>${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos</option>';})()}</select>
+          <select id="sg-banco" onchange="filtrarCuentasPorBanco('sg')">${opcionesBancoCuenta(s?.moneda,s?.banco,s?.cuenta).bancos}</select>
         </div>
         <div class="form-field"><label>Cuenta de Pago</label>
-          <select id="sg-cuenta">${(()=>{const m=s?.moneda||'RD$';const bcs=DB.config.bancoCuentas||[];const b=bcs.find(x=>x.banco===s?.banco)||bcs.find(x=>(x.cuentas||[]).some(c=>m==='USD'?(c.tipo.includes('USD')||c.tipo.includes('Dólares')):(!c.tipo.includes('USD')&&!c.tipo.includes('Dólares'))));const cts=(b?b.cuentas:[]).filter(c=>m==='USD'?(c.tipo.includes('USD')||c.tipo.includes('Dólares')):(!c.tipo.includes('USD')&&!c.tipo.includes('Dólares')));return cts.map(c=>{const v=c.tipo+' — '+c.numero;return`<option value="${escHtml(v)}" ${v===s?.cuenta?'selected':''}>${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('')||'<option value="">Sin cuentas</option>';})()}</select>
+          <select id="sg-cuenta">${opcionesBancoCuenta(s?.moneda,s?.banco,s?.cuenta).cuentas}</select>
         </div>
       </div>
     </div>
@@ -15552,10 +15463,10 @@ function abonarSeguro(id){
     </div>
     <div class="form-row c2">
       <div class="form-field"><label>Banco</label>
-        <select id="sgp-banco" onchange="filtrarCuentasPorBanco('sgp')">${(()=>{const bcs=DB.config.bancoCuentas||[];const esUSD=(s.moneda||'RD$')==='USD';const disp=bcs.filter(b=>(b.cuentas||[]).some(c=>esUSD?esCuentaUSD(c.tipo):!esCuentaUSD(c.tipo)));return disp.map(b=>`<option value="${escHtml(b.banco)}" ${b.banco===s.banco?'selected':''}>${escHtml(b.banco)}</option>`).join('')||'<option value="">Sin bancos</option>';})()}</select>
+        <select id="sgp-banco" onchange="filtrarCuentasPorBanco('sgp')">${opcionesBancoCuenta(s.moneda,s.banco,s.cuenta).bancos}</select>
       </div>
       <div class="form-field"><label>Cuenta</label>
-        <select id="sgp-cuenta">${(()=>{const bcs=DB.config.bancoCuentas||[];const esUSD=(s.moneda||'RD$')==='USD';const b=bcs.find(x=>x.banco===s.banco)||bcs.find(x=>(x.cuentas||[]).some(c=>esUSD?esCuentaUSD(c.tipo):!esCuentaUSD(c.tipo)));const cts=(b?b.cuentas:[]).filter(c=>esUSD?esCuentaUSD(c.tipo):!esCuentaUSD(c.tipo));return cts.map(c=>{const v=c.tipo+' — '+c.numero;return`<option value="${escHtml(v)}" ${v===s.cuenta?'selected':''}>${escHtml(c.tipo)} — ${escHtml(c.numero)}</option>`;}).join('')||'<option value="">Sin cuentas</option>';})()}</select>
+        <select id="sgp-cuenta">${opcionesBancoCuenta(s.moneda,s.banco,s.cuenta).cuentas}</select>
       </div>
     </div>
     <div class="form-field"><label>Fecha de Pago</label><input type="date" id="sgp-fecha" value="${today()}"></div>
