@@ -28,6 +28,11 @@ const PCF={
   logo:()=>(DB.config&&DB.config.logoData)||'',
   usuario:()=>currentUser?(currentUser.nombre||currentUser.username||''):'',
   esAdmin:()=>!!currentUser&&currentUser.role==='admin',
+  // Agrega la opción al menú lateral del sistema
+  registrarMenu:()=>{
+    if(typeof MENU_DEFS!=='undefined'&&!MENU_DEFS.some(m=>m.id===PCF.id))
+      MENU_DEFS.push({id:PCF.id,label:PCF.label,ico:PCF.ico,seccionDef:PCF.seccion});
+  },
   bitacora:(accion,detalle)=>{if(typeof logBit==='function')logBit(PCF.label,accion,detalle);},
   guardar:k=>sDB(k),
   guardarLocal:(k,v)=>ss(k,v),
@@ -86,8 +91,7 @@ const PCF={
 
 // ══ REGISTRO EN EL SISTEMA ══
 (function pcfRegistrar(){
-  if(typeof MENU_DEFS!=='undefined'&&!MENU_DEFS.some(m=>m.id===PCF.id))
-    MENU_DEFS.push({id:PCF.id,label:PCF.label,ico:PCF.ico,seccionDef:PCF.seccion});
+  PCF.registrarMenu();
   window.MODULOS_EXTRA=window.MODULOS_EXTRA||[];
   window.MODULOS_EXTRA.push({id:PCF.id,label:PCF.label,ico:PCF.ico,keys:Object.values(PCF.keys),render:()=>pcfRender()});
   const ref=document.getElementById('page-dashboard');
@@ -133,7 +137,7 @@ const pcfISO=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+S
 const pcfHoy=()=>pcfISO(new Date());
 const pcfFecha=d=>{if(!d)return '';const p=d.split('-');return p[2]+'-'+p[1]+'-'+p[0];};
 const PCF_MESES=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
-const PCF_MODALIDADES={fijo:'Capital + interés fijo',saldo:'Capital + interés sobre saldo',interes:'Solo interés (capital al final)'};
+const PCF_MODALIDADES={fijo:'Capital + interés fijo',saldo:'Capital + interés sobre saldo',frances:'Cuota fija con interés sobre saldo (como los bancos)',interes:'Solo interés (capital al final)'};
 const PCF_PERIODO={Mensual:['mensual','mensuales'],Quincenal:['quincenal','quincenales'],Semanal:['semanal','semanales']};
 const PCF_CIVIL={soltero:['soltero','soltera'],casado:['casado','casada'],union:['en unión libre','en unión libre'],divorciado:['divorciado','divorciada'],viudo:['viudo','viuda']};
 
@@ -191,18 +195,20 @@ function pcfFechaLarga(iso){
 }
 
 // ══ CÁLCULO DE LA TABLA (versión 1) ══
+// Cuota fija tipo banco (sistema francés) para un capital, una tasa por cuota y n cuotas
+function pcfCuotaFija(cap,t,n){return t>0?cap*t/(1-Math.pow(1+t,-n)):cap/n;}
 // La tasa es mensual: en quincenal se cobra la mitad por cuota y en semanal 12/52
 const PCF_FACTOR={Mensual:1,Quincenal:0.5,Semanal:12/52};
 function pcfTabla(p){
   const cap=pcfR2(p.capital),n=Math.max(1,parseInt(p.cuotas)||1),t=(+p.tasa||0)/100*(PCF_FACTOR[p.forma]||1),com=pcfR2(p.comision);
-  const capBase=pcfR2(cap/n),intFijo=pcfR2(cap*t);
+  const capBase=pcfR2(cap/n),intFijo=pcfR2(cap*t),cuotaFija=pcfCuotaFija(cap,t,n);
   const filas=[];let saldo=cap;
   for(let i=1;i<=n;i++){
-    const interes=p.modalidad==='saldo'?pcfR2(saldo*t):intFijo;
+    const interes=p.modalidad==='saldo'||p.modalidad==='frances'?pcfR2(saldo*t):intFijo;
     let capital;
     if(i===n)capital=saldo;
     else{
-      const exacta=pcfR2((p.modalidad==='interes'?0:capBase)+interes+com);
+      const exacta=p.modalidad==='frances'?pcfR2(cuotaFija+com):pcfR2((p.modalidad==='interes'?0:capBase)+interes+com);
       const cuota=p.redondeo?Math.ceil(exacta-1e-9):exacta;
       capital=pcfR2(Math.max(0,Math.min(saldo,cuota-interes-com)));
     }
@@ -226,7 +232,8 @@ const pcfPrestamos=()=>DB[PCF.keys.prestamos]||[];
 const pcfId=pref=>pref+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 function pcfCfg(){
   const c=DB[PCF.keys.config]||{},out={};
-  Object.keys(PCF.defaults).forEach(k=>{out[k]=Object.assign({},PCF.defaults[k],c[k]||{});});
+  const d=typeof PCF.defaults==='function'?PCF.defaults():PCF.defaults;
+  Object.keys(d).forEach(k=>{out[k]=Object.assign({},d[k],c[k]||{});});
   // Datos guardados antes de que el peso fuera la moneda por defecto
   if(!out.condiciones.monedaRevisada)out.condiciones.moneda='RD$';
   return out;
@@ -286,7 +293,7 @@ async function pcfCargar(forzar){
       if(v!==null){DB[k]=v;PCF.guardarLocal(k,v);}
     }
     _pcfCarga=Date.now();return true;
-  }catch(e){console.warn('Préstamos Credit Fayre: no se pudo cargar —',e.message);return false;}
+  }catch(e){console.warn(PCF.label+': no se pudo cargar —',e.message);return false;}
 }
 function pcfSiguienteContrato(lista){
   const max=lista.reduce((a,p)=>Math.max(a,parseInt(p.contrato)||0),0);
@@ -345,7 +352,7 @@ function pcfTabResumen(){
     :`<div class="card" style="text-align:center;padding:48px">
       <div style="font-size:48px;margin-bottom:12px">💵</div>
       <div style="font-size:16px;font-weight:700">Crea tu primer préstamo</div>
-      <p style="color:var(--gray);margin-top:8px">Los clientes y los vehículos se toman de FAYRE.</p>
+      <p style="color:var(--gray);margin-top:8px">Los clientes y los vehículos se toman del sistema.</p>
       <button class="btn btn-primary" style="margin-top:16px" onclick="pcfIr('nuevo')">➕ Nuevo préstamo</button></div>`}`;
 }
 function pcfBadgeTipo(p){
@@ -880,6 +887,11 @@ function pcfPlanAbono(p,monto,fecha,modo){
   const nuevoCap=pcfR2(e.saldoCapital-monto),quedan=e.n-sig.n+1;
   let cuotas=quedan;
   if(nuevoCap<=0)cuotas=1;
+  else if(modo==='plazo'&&p.modalidad==='frances'){
+    // Mantener la cuota de antes y ver cuántas cuotas hacen falta
+    const t=(+p.tasa||0)/100*(PCF_FACTOR[p.forma]||1),c0=pcfCuotaFija(p.capital,t,p.cuotas);
+    cuotas=Math.max(1,Math.min(quedan,Math.ceil((t>0?-Math.log(1-nuevoCap*t/c0)/Math.log(1+t):nuevoCap/c0)-1e-9)));
+  }
   else if(modo==='plazo')cuotas=Math.max(1,Math.min(quedan,Math.ceil(nuevoCap/(p.capital/p.cuotas)-1e-9)));
   const reajuste={desde:sig.n,capital:nuevoCap,cuotas,primerPago:sig.fecha};
   const nueva=pcfTablaActual(Object.assign({},p,{reajustes:(p.reajustes||[]).concat(reajuste)})).slice(sig.n-1);
