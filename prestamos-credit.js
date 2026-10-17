@@ -15,7 +15,7 @@ const PCF={
   label:'Préstamos Credit Fayre',
   ico:'💵',
   seccion:'CLIENTES',
-  keys:{prestamos:'pcfPrestamos',config:'pcfConfig'},
+  keys:{prestamos:'pcfPrestamos',pagos:'pcfPagos',config:'pcfConfig'},
   clientes:()=>DB.clientes||[],
   vehiculos:()=>DB.vehiculos||[],
   // Vehículos que el cliente compró (para ponerlos primero en la lista)
@@ -37,6 +37,28 @@ const PCF={
     const s=await window._fbDB.collection(window._fbCol).doc(k).get();
     return s.exists?JSON.parse(s.data().valor):null;
   },
+  // Caja del sistema. En otro sistema sin caja: activa:()=>false
+  caja:{
+    activa:()=>Array.isArray(DB.caja)&&typeof htmlBancoCuentaFiltrado==='function',
+    selector:(prefix,moneda)=>htmlBancoCuentaFiltrado(prefix,moneda==='US$'?'USD':'RD$'),
+    leer:prefix=>({banco:(document.getElementById(prefix+'-banco')||{}).value||'',cuenta:(document.getElementById(prefix+'-cuenta')||{}).value||''}),
+    // movs: [{id,fecha,tipo:'ENTRADA'|'SALIDA',categoria,descripcion,monto,moneda,banco,cuenta,formaPago}]
+    registrar:movs=>{
+      movs.forEach(m=>DB.caja.push({id:m.id,fecha:m.fecha,tipo:m.tipo,categoria:m.categoria,descripcion:m.descripcion,monto:m.monto,
+        moneda:m.moneda==='US$'?'USD':'RD$',banco:normalizarBancoGlobal(m.banco||''),cuenta:limpiarCuenta(m.cuenta||''),
+        referencia:m.banco&&m.cuenta?m.banco+' / '+m.cuenta:limpiarCuenta(m.cuenta||''),formaPago:m.formaPago||'',responsable:PCF.usuario()}));
+      sDB('caja');if(typeof refreshCajaIfActive==='function')refreshCajaIfActive();
+    },
+    actualizar:(id,cambios)=>{
+      const c=DB.caja.find(x=>x.id===id);if(!c)return;
+      if(cambios.moneda)cambios.moneda=cambios.moneda==='US$'?'USD':'RD$';
+      Object.assign(c,cambios);sDB('caja');if(typeof refreshCajaIfActive==='function')refreshCajaIfActive();
+    },
+    borrar:ids=>{
+      if(!ids||!ids.length)return;
+      DB.caja=DB.caja.filter(c=>!ids.includes(c.id));sDB('caja');if(typeof refreshCajaIfActive==='function')refreshCajaIfActive();
+    }
+  },
   // Datos de la empresa que presta. Se cambian en la pestaña "Datos legales".
   // Las cédulas y domicilios personales NO van aquí (el código es público): se llenan en el sistema.
   defaults:{
@@ -50,8 +72,9 @@ const PCF={
       estudio:'la calle Las Orquídeas casi esquina Carretera Duarte, Condominio Residencial Montecarlo, Apartamento 1-A, Las Dianas, de esta ciudad de Santiago de los Caballeros',
       lugarActo:'la ciudad de Santiago de los Caballeros, Municipio y Provincia de Santiago, República Dominicana',
       ciudadEncabezado:'Santiago, R.D.'},
-    condiciones:{moneda:'US$',tasa:1.3,cuotas:36,forma:'Mensual',modalidad:'fijo',mora:5,
-      honorarios:1000,honorariosMoneda:'US$',contratoInicial:1,redondeo:true}
+    condiciones:{moneda:'US$',tasa:1.3,cuotas:36,forma:'Mensual',modalidad:'fijo',mora:5,diasGracia:0,
+      honorarios:1000,honorariosMoneda:'US$',contratoInicial:1,redondeo:true,usarCaja:true},
+    ncf:{usar:false,etiqueta:'FACTURA DE CONSUMO',prefijo:'B02',siguiente:1,vencimiento:''}
   }
 };
 
@@ -66,6 +89,7 @@ const PCF={
     const d=document.createElement('div');d.className='page';d.id='page-'+PCF.id;ref.parentNode.appendChild(d);
   }
   DB[PCF.keys.prestamos]=PCF.leerLocal(PCF.keys.prestamos)||[];
+  DB[PCF.keys.pagos]=PCF.leerLocal(PCF.keys.pagos)||[];
   DB[PCF.keys.config]=PCF.leerLocal(PCF.keys.config)||{};
   const st=document.createElement('style');
   st.textContent=`
@@ -85,6 +109,7 @@ const PCF={
 .pcf-num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
 .pcf-tabla-wrap{max-height:460px;overflow:auto}
 #page-${PCF.id} .table-wrap{width:0;min-width:100%}
+.pcf-tabla-wrap td{white-space:nowrap}
 .pcf-sub{font-size:12px;font-weight:700;text-transform:uppercase;color:var(--gray);margin:6px 0 10px;letter-spacing:.4px}
 .pcf-chk{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;cursor:pointer;margin:4px 0 12px}
 .pcf-chk input{width:18px;height:18px;accent-color:var(--blue)}`;
@@ -192,13 +217,57 @@ function pcfResumen(filas){
 // ══ DATOS ══
 let pcfTab='resumen',pcfEditId=null,_pcfCarga=0;
 const pcfPrestamos=()=>DB[PCF.keys.prestamos]||[];
+const pcfId=pref=>pref+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 function pcfCfg(){
   const c=DB[PCF.keys.config]||{},out={};
   Object.keys(PCF.defaults).forEach(k=>{out[k]=Object.assign({},PCF.defaults[k],c[k]||{});});
   return out;
 }
-const pcfSaldoCapital=p=>pcfR2(p.capital);
-const pcfInteresPendiente=p=>pcfResumen(pcfTabla(p)).intereses;
+const pcfPagos=()=>DB[PCF.keys.pagos]||[];
+const pcfPagosDe=id=>pcfPagos().filter(x=>x.prestamoId===id&&!x.anulado);
+// Tabla vigente: la original, recalculada desde cada abono a capital (reajustes)
+function pcfTablaActual(p){
+  let filas=pcfTabla(p);
+  (p.reajustes||[]).forEach(r=>{
+    const nuevas=pcfTabla(Object.assign({},p,{capital:r.capital,cuotas:r.cuotas,primerPago:r.primerPago}));
+    filas=filas.slice(0,r.desde-1).concat(nuevas.map((f,i)=>Object.assign(f,{n:r.desde+i})));
+  });
+  let resta=pcfR2(filas.reduce((a,f)=>a+f.cuota,0));
+  filas.forEach(f=>{resta=pcfR2(resta-f.cuota);f.balance=resta;});
+  return filas;
+}
+const pcfDias=(a,b)=>Math.round((new Date(b+'T12:00:00')-new Date(a+'T12:00:00'))/864e5);
+// Estado del préstamo a una fecha: lo pagado y lo pendiente de cada cuota, con mora
+function pcfEstado(p,fechaRef){
+  fechaRef=fechaRef||pcfHoy();
+  const gracia=parseInt(pcfCfg().condiciones.diasGracia)||0,tasaMora=(+p.mora||0)/100;
+  const pagos=pcfPagosDe(p.id);
+  const filas=pcfTablaActual(p).map(f=>{
+    const pag={mora:0,moraExo:0,interes:0,comision:0,capital:0};
+    pagos.forEach(x=>(x.detalle||[]).forEach(d=>{if(d.n===f.n)Object.keys(pag).forEach(k=>{pag[k]+=+d[k]||0;});}));
+    Object.keys(pag).forEach(k=>{pag[k]=pcfR2(pag[k]);});
+    const pendCap=pcfR2(Math.max(0,f.capital-pag.capital)),pendInt=pcfR2(Math.max(0,f.interes-pag.interes)),pendCom=pcfR2(Math.max(0,f.comision-pag.comision));
+    const pend=pcfR2(pendCap+pendInt+pendCom);
+    const dias=pcfDias(f.fecha,fechaRef);
+    let moraPend=0;
+    if(pend>0&&dias>gracia&&tasaMora>0)moraPend=pcfR2(Math.max(0,pend*tasaMora*Math.ceil(dias/30)-pag.mora-pag.moraExo));
+    const pagado=pcfR2(pag.capital+pag.interes+pag.comision);
+    const estado=pend<=0?'PAGADA':dias>0?'VENCIDA':pagado>0?'PARCIAL':'PENDIENTE';
+    return Object.assign({},f,{pag,pendCap,pendInt,pendCom,pend,moraPend,dias:Math.max(0,dias),pagado,estado});
+  });
+  const s=k=>pcfR2(filas.reduce((a,f)=>a+f[k],0));
+  const venc=filas.filter(f=>f.estado==='VENCIDA');
+  return {filas,saldoCapital:s('pendCap'),interesPend:s('pendInt'),balance:s('pend'),moraPend:s('moraPend'),
+    vencido:pcfR2(venc.reduce((a,f)=>a+f.pend,0)),cuotasVencidas:venc.length,pagadas:filas.filter(f=>f.estado==='PAGADA').length,
+    n:filas.length,saldado:s('pend')<=0};
+}
+const pcfSaldoCapital=p=>pcfEstado(p).saldoCapital;
+const pcfInteresPendiente=p=>pcfEstado(p).interesPend;
+function pcfBadgeEstado(e){
+  if(e.saldado)return '<span class="badge badge-green">✅ Saldado</span>';
+  if(e.cuotasVencidas)return `<span class="badge badge-red">⚠️ Atrasado (${e.cuotasVencidas})</span>`;
+  return '<span class="badge badge-amber">⏳ Al día</span>';
+}
 // true = datos frescos de Firebase. Sin conexión no se guarda nada (evita borrar datos de otros).
 async function pcfCargar(forzar){
   if(!forzar&&_pcfCarga&&Date.now()-_pcfCarga<30000)return true;
@@ -231,31 +300,39 @@ async function pcfRender(tab){
   const pg=document.getElementById('page-'+PCF.id);if(!pg)return;
   if(!_pcfCarga)pg.innerHTML='<div class="card" style="text-align:center;padding:40px;color:var(--gray)">⏳ Cargando préstamos…</div>';
   await pcfCargar();
-  const tabs=[['resumen','📊 Resumen'],['nuevo',pcfEditId?'✏️ Editar préstamo':'➕ Nuevo préstamo'],['prestamos','📋 Préstamos'],['legal','⚖️ Datos legales']];
+  const tabs=[['resumen','📊 Resumen'],['nuevo',pcfEditId?'✏️ Editar préstamo':'➕ Nuevo préstamo'],['prestamos','📋 Préstamos'],['cobros','💳 Cobros'],['legal','⚖️ Datos legales']];
   pg.innerHTML=`
     <div class="page-header"><div><h1>${PCF.ico} ${pcfEsc(PCF.label)}</h1><p>Financiamiento de vehículos y préstamos personales a clientes</p></div></div>
     <div class="pcf-tabs">${tabs.map(([id,l])=>`<button class="btn ${id===pcfTab?'btn-primary':'btn-secondary'}" onclick="pcfIr('${id}')">${l}</button>`).join('')}</div>
     <div id="pcf-body"></div>`;
-  ({resumen:pcfTabResumen,nuevo:pcfTabNuevo,prestamos:pcfTabPrestamos,legal:pcfTabLegal}[pcfTab]||pcfTabResumen)();
+  ({resumen:pcfTabResumen,nuevo:pcfTabNuevo,prestamos:pcfTabPrestamos,cobros:pcfTabCobros,legal:pcfTabLegal}[pcfTab]||pcfTabResumen)();
 }
 function pcfIr(tab){if(tab!=='nuevo')pcfEditId=null;pcfRender(tab);}
 
 // ── Resumen ──
 function pcfTabResumen(){
-  const act=pcfPrestamos().filter(p=>pcfSaldoCapital(p)>0);
-  const suma=(m,f)=>act.filter(p=>p.moneda===m).reduce((a,p)=>a+f(p),0);
-  const nV=act.filter(p=>p.tipo==='vehiculo').length;
+  const est=pcfPrestamos().map(p=>({p,e:pcfEstado(p)}));
+  const act=est.filter(x=>!x.e.saldado);
+  const suma=(arr,m,f)=>pcfR2(arr.filter(x=>x.p.moneda===m).reduce((a,x)=>a+f(x),0));
+  const dos=(arr,f)=>`${pcfMon(suma(arr,'US$',f),'US$')}<div class="stat-sub">${pcfMon(suma(arr,'RD$',f),'RD$')}</div>`;
+  const nV=act.filter(x=>x.p.tipo==='vehiculo').length,atr=act.filter(x=>x.e.cuotasVencidas);
+  const mes=pcfHoy().slice(0,7);
+  const pagosMes=pcfPagos().filter(x=>!x.anulado&&(x.fecha||'').startsWith(mes)).map(x=>({p:{moneda:x.moneda},x}));
   const ult=pcfPrestamos().slice().sort((a,b)=>(b.contrato||'').localeCompare(a.contrato||'')).slice(0,8);
   document.getElementById('pcf-body').innerHTML=`
     <div class="stats-grid">
-      <div class="stat-card blue"><div class="stat-ico">💵</div><div class="stat-label">Capital en la calle US$</div><div class="stat-value">${pcfMon(suma('US$',pcfSaldoCapital),'US$')}</div></div>
-      <div class="stat-card green"><div class="stat-ico">🟢</div><div class="stat-label">Capital en la calle RD$</div><div class="stat-value">${pcfMon(suma('RD$',pcfSaldoCapital),'RD$')}</div></div>
+      <div class="stat-card blue"><div class="stat-ico">💵</div><div class="stat-label">Capital en la calle</div><div class="stat-value">${dos(act,x=>x.e.saldoCapital)}</div></div>
+      <div class="stat-card green"><div class="stat-ico">💳</div><div class="stat-label">Cobrado este mes</div><div class="stat-value">${dos(pagosMes,y=>y.x.monto)}</div></div>
       <div class="stat-card purple"><div class="stat-ico">📋</div><div class="stat-label">Préstamos activos</div><div class="stat-value">${act.length}</div><div class="stat-sub">${nV} de vehículo · ${act.length-nV} personales</div></div>
-      <div class="stat-card amber"><div class="stat-ico">📈</div><div class="stat-label">Intereses por cobrar</div><div class="stat-value">${pcfMon(suma('US$',pcfInteresPendiente),'US$')}</div><div class="stat-sub">${pcfMon(suma('RD$',pcfInteresPendiente),'RD$')}</div></div>
+      <div class="stat-card red"><div class="stat-ico">⚠️</div><div class="stat-label">Atrasados: ${atr.length}</div><div class="stat-value">${dos(atr,x=>x.e.vencido)}</div></div>
+      <div class="stat-card amber"><div class="stat-ico">📈</div><div class="stat-label">Intereses por cobrar</div><div class="stat-value">${dos(act,x=>x.e.interesPend)}</div></div>
+      <div class="stat-card green"><div class="stat-ico">💰</div><div class="stat-label">Intereses cobrados este mes</div><div class="stat-value">${dos(pagosMes,y=>y.x.interes)}</div></div>
+      <div class="stat-card amber"><div class="stat-ico">⏱️</div><div class="stat-label">Mora cobrada este mes</div><div class="stat-value">${dos(pagosMes,y=>y.x.mora)}</div></div>
+      <div class="stat-card blue"><div class="stat-ico">🧾</div><div class="stat-label">Recibos este mes</div><div class="stat-value">${pagosMes.length}</div></div>
     </div>
     ${ult.length?`<div class="card"><div class="card-title">🕒 Últimos préstamos</div>
-      <div class="table-wrap"><table><thead><tr><th>Contrato</th><th>Fecha</th><th>Cliente</th><th>Tipo</th><th class="pcf-num">Capital</th><th class="pcf-num">Cuota</th></tr></thead><tbody>
-      ${ult.map(p=>`<tr style="cursor:pointer" onclick="pcfVer('${p.id}')"><td style="font-weight:700">${pcfEsc(p.contrato)}</td><td>${pcfFecha(p.fecha)}</td><td>${pcfEsc(p.cliente.nombre)}</td><td>${pcfBadgeTipo(p)}</td><td class="pcf-num">${pcfMon(p.capital,p.moneda)}</td><td class="pcf-num">${pcfFmt(pcfTabla(p)[0].cuota)}</td></tr>`).join('')}
+      <div class="table-wrap"><table><thead><tr><th>Contrato</th><th>Fecha</th><th>Cliente</th><th>Tipo</th><th class="pcf-num">Capital</th><th class="pcf-num">Saldo capital</th><th>Estado</th></tr></thead><tbody>
+      ${ult.map(p=>{const e=pcfEstado(p);return `<tr style="cursor:pointer" onclick="pcfVer('${p.id}')"><td style="font-weight:700">${pcfEsc(p.contrato)}</td><td>${pcfFecha(p.fecha)}</td><td>${pcfEsc(p.cliente.nombre)}</td><td>${pcfBadgeTipo(p)}</td><td class="pcf-num">${pcfMon(p.capital,p.moneda)}</td><td class="pcf-num">${pcfMon(e.saldoCapital,p.moneda)}</td><td>${pcfBadgeEstado(e)}</td></tr>`;}).join('')}
       </tbody></table></div></div>`
     :`<div class="card" style="text-align:center;padding:48px">
       <div style="font-size:48px;margin-bottom:12px">💵</div>
@@ -319,7 +396,7 @@ function pcfTabNuevo(){
 
       <div class="pcf-sub">💰 Condiciones</div>
       <div class="pcf-grid" oninput="pcfActualizar()" onchange="pcfActualizar()">
-        ${f('Moneda',sel('pcf-moneda',[['US$','US$ — Dólares'],['RD$','RD$ — Pesos']],v.moneda))}
+        ${f('Moneda',sel('pcf-moneda',[['US$','US$ — Dólares'],['RD$','RD$ — Pesos']],v.moneda,'onchange="pcfEntregaBox()"'))}
         ${f('Monto del préstamo','<input type="text" id="pcf-monto" inputmode="decimal" placeholder="0.00" oninput="pcfMoneyInput(this)" value="'+(v.capital?pcfFmt(v.capital):'')+'">')}
         ${f('Tasa mensual %','<input type="number" id="pcf-tasa" step="0.01" min="0" value="'+pcfEsc(v.tasa)+'">')}
         ${f('Número de cuotas','<input type="number" id="pcf-cuotas" step="1" min="1" value="'+pcfEsc(v.cuotas)+'">')}
@@ -333,6 +410,7 @@ function pcfTabNuevo(){
         ${f('Notas','<input type="text" id="pcf-notas" value="'+pcfEsc(v.notas||'')+'">')}
         <label class="pcf-chk full"><input type="checkbox" id="pcf-redondeo" ${v.redondeo?'checked':''}> Redondear la cuota hacia arriba (la última cuota se ajusta)</label>
       </div>
+      <div id="pcf-entrega"></div>
       <div class="btn-row">
         <button class="btn btn-secondary" onclick="pcfDoc('pagare')">📄 Vista previa pagaré</button>
         <button class="btn btn-secondary" onclick="pcfDoc('notarial')">⚖️ Vista previa pagaré notarial</button>
@@ -347,7 +425,22 @@ function pcfTabNuevo(){
   pcfLlenarVehiculos(vh.id||(p&&p.vehiculo?'manual':''));
   pcfClienteInfo();
   pcfPrimerPagoAuto();
+  pcfEntregaBox();
   pcfActualizar();
+}
+// Salida del dinero prestado en Caja (solo al crear; al editar se ajusta la misma salida)
+function pcfEntregaBox(){
+  const box=document.getElementById('pcf-entrega');if(!box)return;
+  const co=pcfCfg().condiciones;
+  if(!(co.usarCaja&&PCF.caja.activa())){box.innerHTML='';return;}
+  const p=pcfEditId?pcfPrestamos().find(x=>x.id===pcfEditId):null;
+  if(p){box.innerHTML=p.entrega&&p.entrega.cajaId?'<div class="pcf-info">💳 La salida del dinero ya está en Caja. Si cambias el monto, la fecha o la moneda, se corrige ahí también.</div>':'';return;}
+  const mon=document.getElementById('pcf-moneda').value;
+  const chk=document.getElementById('pcf-ent-caja'),marcado=chk?chk.checked:true,forma=(document.getElementById('pcf-ent-forma')||{}).value||'Transferencia';
+  box.innerHTML=`<div class="pcf-sub">💳 Entrega del dinero</div>
+    <label class="pcf-chk"><input type="checkbox" id="pcf-ent-caja" ${marcado?'checked':''} onchange="pcfEntregaBox()"> Registrar la salida del dinero en Caja</label>
+    ${marcado?`<div class="pcf-grid"><div class="form-field"><label>Forma de entrega</label><select id="pcf-ent-forma">${['Efectivo','Cheque','Transferencia'].map(x=>`<option ${x===forma?'selected':''}>${x}</option>`).join('')}</select></div></div>
+    ${PCF.caja.selector('pcf-ent',mon)}`:''}`;
 }
 function pcfTipoCambio(){
   const t=document.querySelector('input[name=pcf-tipo]:checked').value;
@@ -497,22 +590,28 @@ async function pcfGuardar(){
   const btn=document.getElementById('pcf-btn-ok');if(btn){btn.disabled=true;btn.textContent='⏳ Guardando…';}
   const d=pcfLeerForm(),e=pcfValidar(d);
   if(e.length){toast(e[0],'error');closeModal();return;}
+  const chkEnt=document.getElementById('pcf-ent-caja');
+  const entrega=!pcfEditId&&chkEnt&&chkEnt.checked?Object.assign({forma:(document.getElementById('pcf-ent-forma')||{}).value||''},PCF.caja.leer('pcf-ent')):null;
   if(!await pcfCargar(true)){
     toast('Sin conexión con la base de datos. No se guardó; intenta de nuevo.','error');
     if(btn){btn.disabled=false;btn.textContent='💾 Sí, guardar';}return;
   }
+  if(pcfEditId&&pcfPagosDe(pcfEditId).length){toast('Este préstamo ya tiene pagos; no se puede editar','error');closeModal();return;}
   const lista=pcfPrestamos().slice(),ahora=new Date().toISOString();
   let p;
   if(pcfEditId){
     const i=lista.findIndex(x=>x.id===pcfEditId);
     if(i<0){toast('Ese préstamo ya no existe','error');closeModal();pcfIr('prestamos');return;}
     p=Object.assign({},lista[i],d,{editado:{usuario:PCF.usuario(),fecha:ahora}});lista[i]=p;
+    if(p.entrega&&p.entrega.cajaId)PCF.caja.actualizar(p.entrega.cajaId,{fecha:p.fecha,monto:p.capital,moneda:p.moneda,descripcion:`Préstamo ${p.contrato}: ${p.cliente.nombre}`});
   } else {
-    p=Object.assign({id:'pcf'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),contrato:pcfSiguienteContrato(lista),
-      estado:'ACTIVO',creado:{usuario:PCF.usuario(),fecha:ahora}},d);
+    p=Object.assign({id:pcfId('pcf'),contrato:pcfSiguienteContrato(lista),estado:'ACTIVO',creado:{usuario:PCF.usuario(),fecha:ahora}},d);
+    if(entrega)p.entrega=Object.assign(entrega,{fecha:p.fecha,cajaId:pcfId('pcfc')});
     lista.push(p);
   }
   DB[PCF.keys.prestamos]=lista;PCF.guardar(PCF.keys.prestamos);
+  if(entrega)PCF.caja.registrar([{id:p.entrega.cajaId,fecha:p.fecha,tipo:'SALIDA',categoria:'Préstamo Otorgado',
+    descripcion:`Préstamo ${p.contrato}: ${p.cliente.nombre}`,monto:p.capital,moneda:p.moneda,banco:entrega.banco,cuenta:entrega.cuenta,formaPago:entrega.forma}]);
   const eraEdit=!!pcfEditId;
   PCF.bitacora(eraEdit?'Editó préstamo':'Creó préstamo',`Contrato ${p.contrato} — ${p.cliente.nombre} — ${pcfMon(p.capital,p.moneda)}`);
   pcfEditId=null;closeModal();
@@ -553,16 +652,18 @@ function pcfPintarLista(){
     .sort((a,b)=>(b.contrato||'').localeCompare(a.contrato||''));
   const box=document.getElementById('pcf-lista');if(!box)return;
   if(!ps.length){box.innerHTML=`<p style="text-align:center;color:var(--gray);padding:30px">${pcfPrestamos().length?'Ningún préstamo coincide con la búsqueda.':'Todavía no hay préstamos.'}</p>`;return;}
-  box.innerHTML=`<div class="table-wrap"><table><thead><tr><th>Contrato</th><th>Fecha</th><th>Cliente</th><th>Tipo</th><th class="pcf-num">Capital</th><th class="pcf-num">Tasa</th><th class="pcf-num">Cuota</th><th>Plazo</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>
-    ${ps.map(p=>{const r=pcfResumen(pcfTabla(p));return `<tr>
+  box.innerHTML=`<div class="table-wrap"><table><thead><tr><th>Contrato</th><th>Fecha</th><th>Cliente</th><th>Tipo</th><th class="pcf-num">Capital</th><th class="pcf-num">Saldo capital</th><th class="pcf-num">Cuota</th><th>Pagadas</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>
+    ${ps.map(p=>{const r=pcfResumen(pcfTabla(p)),e=pcfEstado(p);return `<tr>
       <td style="font-weight:700">${pcfEsc(p.contrato)}</td><td>${pcfFecha(p.fecha)}</td>
       <td><b>${pcfEsc(p.cliente.nombre)}</b><div style="font-size:11px;color:var(--gray)">${pcfEsc(p.cliente.documento||'')}</div></td>
       <td>${pcfBadgeTipo(p)}${p.vehiculo?`<div style="font-size:11px;color:var(--gray);margin-top:2px">${pcfEsc(pcfDescVehiculo(p.vehiculo))}</div>`:''}</td>
-      <td class="pcf-num" style="font-weight:700">${pcfMon(p.capital,p.moneda)}</td><td class="pcf-num">${p.tasa}%</td>
-      <td class="pcf-num">${pcfFmt(r.cuota)}</td><td>${r.n} ${PCF_PERIODO[p.forma][1]}</td>
-      <td>${pcfSaldoCapital(p)>0?'<span class="badge badge-amber">⏳ Activo</span>':'<span class="badge badge-green">✅ Saldado</span>'}</td>
+      <td class="pcf-num">${pcfMon(p.capital,p.moneda)}</td><td class="pcf-num" style="font-weight:700">${pcfMon(e.saldoCapital,p.moneda)}</td>
+      <td class="pcf-num">${pcfFmt(r.cuota)}</td><td>${e.pagadas} de ${e.n} ${PCF_PERIODO[p.forma][1]}</td>
+      <td>${pcfBadgeEstado(e)}</td>
       <td><div style="display:flex;gap:4px;flex-wrap:wrap">
+        ${e.saldado?'':`<button class="btn btn-sm btn-primary" onclick="pcfIrCobrar('${p.id}')">💳 Cobrar</button>`}
         <button class="btn btn-sm btn-secondary" onclick="pcfVer('${p.id}')">🔍 Ver</button>
+        <button class="btn btn-sm btn-secondary" onclick="pcfDoc('estado','${p.id}')">📑 Estado de cuenta</button>
         <button class="btn btn-sm btn-secondary" onclick="pcfDoc('pagare','${p.id}')">📄 Pagaré</button>
         <button class="btn btn-sm btn-secondary" onclick="pcfDoc('notarial','${p.id}')">⚖️ Notarial</button>
         <button class="btn btn-sm btn-secondary" onclick="pcfDoc('tabla','${p.id}')">📋 Tabla</button>
@@ -571,9 +672,17 @@ function pcfPintarLista(){
 }
 function pcfVer(id){
   const p=pcfPrestamos().find(x=>x.id===id);if(!p)return;
-  const r=pcfResumen(pcfTabla(p)),c=p.cliente,v=p.vehiculo,m=p.moneda;
+  const r=pcfResumen(pcfTabla(p)),c=p.cliente,v=p.vehiculo,m=p.moneda,e=pcfEstado(p),conPagos=pcfPagosDe(id).length>0;
   const fila=(l,x)=>x?`<div><b>${l}:</b> ${pcfEsc(x)}</div>`:'';
+  const co=pcfCfg().condiciones,sinEntrega=co.usarCaja&&PCF.caja.activa()&&!(p.entrega&&p.entrega.cajaId);
   openModal('💵 Contrato '+p.contrato,`
+    <div class="pcf-mini" style="margin-bottom:12px">
+      <div><span>Saldo capital</span><b>${pcfMon(e.saldoCapital,m)}</b></div>
+      <div><span>Balance total</span><b>${pcfMon(e.balance,m)}</b></div>
+      <div><span>Cuotas pagadas</span><b>${e.pagadas} de ${e.n}</b></div>
+      <div><span>Estado</span><b style="font-size:13px">${pcfBadgeEstado(e)}</b></div>
+    </div>
+    ${sinEntrega?`<div class="pcf-aviso">💳 La salida del dinero de este préstamo no está en Caja. <a href="#" onclick="event.preventDefault();pcfEntregaTardia('${id}')">Registrarla ahora</a></div>`:''}
     <div style="font-size:13px;line-height:1.8">
       <div class="pcf-sub">Cliente</div>
       ${fila('Nombre',c.nombre)}${fila(c.tipoDoc||'Documento',c.documento)}${fila('Dirección',c.direccion)}${fila('Teléfono',c.telefono)}
@@ -592,14 +701,16 @@ function pcfVer(id){
       <button class="btn btn-sm btn-secondary" onclick="pcfDoc('notarial','${id}')">⚖️ Notarial</button>
       <button class="btn btn-sm btn-secondary" onclick="pcfWordNotarial('${id}')">📝 Word</button>
       <button class="btn btn-sm btn-secondary" onclick="pcfDoc('tabla','${id}')">📋 Tabla</button>
+      <button class="btn btn-sm btn-secondary" onclick="pcfDoc('estado','${id}')">📑 Estado de cuenta</button>
+      ${e.saldado?'':`<button class="btn btn-sm btn-primary" onclick="closeModal();pcfIrCobrar('${id}')">💳 Cobrar</button>`}
     </div>`,
-    `${PCF.esAdmin()?`<button class="btn btn-red" onclick="pcfConfirmarBorrar('${id}')">🗑️ Eliminar</button>
+    `${PCF.esAdmin()&&!conPagos?`<button class="btn btn-red" onclick="pcfConfirmarBorrar('${id}')">🗑️ Eliminar</button>
      <button class="btn btn-secondary" onclick="closeModal();pcfEditId='${id}';pcfRender('nuevo')">✏️ Editar</button>`:''}
      <button class="btn btn-primary" onclick="closeModal()">Cerrar</button>`);
 }
 function pcfConfirmarBorrar(id){
   const p=pcfPrestamos().find(x=>x.id===id);if(!p)return;
-  openModal('🗑️ Eliminar préstamo',`<p style="font-size:14px;line-height:1.7">¿Eliminar el contrato <b>${pcfEsc(p.contrato)}</b> de <b>${pcfEsc(p.cliente.nombre)}</b> por ${pcfMon(p.capital,p.moneda)}?<br>No se puede deshacer.</p>`,
+  openModal('🗑️ Eliminar préstamo',`<p style="font-size:14px;line-height:1.7">¿Eliminar el contrato <b>${pcfEsc(p.contrato)}</b> de <b>${pcfEsc(p.cliente.nombre)}</b> por ${pcfMon(p.capital,p.moneda)}?<br>${p.entrega&&p.entrega.cajaId?'También se borra su salida de Caja.<br>':''}No se puede deshacer.</p>`,
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
      <button class="btn btn-red" id="pcf-btn-del" onclick="pcfBorrar('${id}')">🗑️ Sí, eliminar</button>`);
 }
@@ -608,9 +719,372 @@ async function pcfBorrar(id){
   const btn=document.getElementById('pcf-btn-del');if(btn)btn.disabled=true;
   if(!await pcfCargar(true)){toast('Sin conexión con la base de datos. No se eliminó.','error');if(btn)btn.disabled=false;return;}
   const p=pcfPrestamos().find(x=>x.id===id);
+  if(pcfPagosDe(id).length){toast('Este préstamo tiene pagos; anúlalos primero','error');closeModal();return;}
   DB[PCF.keys.prestamos]=pcfPrestamos().filter(x=>x.id!==id);PCF.guardar(PCF.keys.prestamos);
+  if(p&&p.entrega&&p.entrega.cajaId)PCF.caja.borrar([p.entrega.cajaId]);
   if(p)PCF.bitacora('Eliminó préstamo',`Contrato ${p.contrato} — ${p.cliente.nombre} — ${pcfMon(p.capital,p.moneda)}`);
   closeModal();toast('Préstamo eliminado ✓','success');pcfRender('prestamos');
+}
+
+// ── Entrega registrada después (préstamos creados antes de usar Caja) ──
+function pcfEntregaTardia(id){
+  const p=pcfPrestamos().find(x=>x.id===id);if(!p)return;
+  openModal('💳 Registrar salida en Caja — Contrato '+p.contrato,`
+    <p style="font-size:13px;margin-bottom:12px">${pcfEsc(p.cliente.nombre)} · ${pcfMon(p.capital,p.moneda)}</p>
+    <div class="pcf-grid">
+      <div class="form-field"><label>Fecha</label><input type="date" id="pcf-et-fecha" value="${pcfEsc(p.fecha)}"></div>
+      <div class="form-field"><label>Forma de entrega</label><select id="pcf-et-forma"><option>Transferencia</option><option>Efectivo</option><option>Cheque</option></select></div>
+    </div>
+    ${PCF.caja.selector('pcf-et',p.moneda)}`,
+    `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+     <button class="btn btn-primary" id="pcf-btn-et" onclick="pcfEntregaTardiaGuardar('${id}')">💾 Registrar</button>`);
+}
+async function pcfEntregaTardiaGuardar(id){
+  const btn=document.getElementById('pcf-btn-et');if(btn)btn.disabled=true;
+  const fecha=document.getElementById('pcf-et-fecha').value,forma=document.getElementById('pcf-et-forma').value,bc=PCF.caja.leer('pcf-et');
+  if(!await pcfCargar(true)){toast('Sin conexión con la base de datos. No se guardó.','error');if(btn)btn.disabled=false;return;}
+  const p=pcfPrestamos().find(x=>x.id===id);if(!p||(p.entrega&&p.entrega.cajaId)){closeModal();return;}
+  p.entrega=Object.assign({forma,fecha,cajaId:pcfId('pcfc')},bc);
+  PCF.guardar(PCF.keys.prestamos);
+  PCF.caja.registrar([{id:p.entrega.cajaId,fecha,tipo:'SALIDA',categoria:'Préstamo Otorgado',descripcion:`Préstamo ${p.contrato}: ${p.cliente.nombre}`,
+    monto:p.capital,moneda:p.moneda,banco:bc.banco,cuenta:bc.cuenta,formaPago:forma}]);
+  PCF.bitacora('Registró entrega en Caja',`Contrato ${p.contrato} — ${pcfMon(p.capital,p.moneda)}`);
+  closeModal();toast('Salida registrada en Caja ✓','success');pcfRender();
+}
+
+// ── Cobros ──
+let pcfCobroId='';
+function pcfIrCobrar(id){pcfCobroId=id;pcfIr('cobros');}
+function pcfTabCobros(){
+  document.getElementById('pcf-body').innerHTML=`
+    <div class="card" style="border-top:3px solid var(--green)">
+      <div class="card-title">💳 Cobrar</div>
+      <div class="pcf-grid">
+        <div class="form-field"><label>Buscar</label><input type="text" id="pcf-cb-buscar" placeholder="Cliente, contrato o documento" oninput="pcfCbFiltrar()"></div>
+        <div class="form-field"><label>Préstamo</label><select id="pcf-cb-sel" onchange="pcfCobroId=this.value;pcfCbPintar()"></select></div>
+      </div>
+      <div id="pcf-cb-det"></div>
+    </div>
+    <div class="card"><div class="card-title" id="pcf-cb-rtit">🧾 Últimos recibos</div><div id="pcf-cb-recibos"></div></div>`;
+  pcfCbFiltrar();pcfCbPintar();
+}
+function pcfCbFiltrar(){
+  const s=document.getElementById('pcf-cb-sel');if(!s)return;
+  const q=(document.getElementById('pcf-cb-buscar').value||'').toLowerCase().trim();
+  const lista=pcfPrestamos().map(p=>({p,e:pcfEstado(p)})).filter(x=>x.p.id===pcfCobroId||!x.e.saldado)
+    .filter(x=>x.p.id===pcfCobroId||!q||[x.p.contrato,x.p.cliente.nombre,x.p.cliente.documento].some(t=>String(t||'').toLowerCase().includes(q)))
+    .sort((a,b)=>(a.p.cliente.nombre||'').localeCompare(b.p.cliente.nombre||''));
+  s.innerHTML='<option value="">— Seleccionar préstamo —</option>'+lista.map(x=>`<option value="${pcfEsc(x.p.id)}">${pcfEsc(x.p.contrato)} — ${pcfEsc(x.p.cliente.nombre)} — saldo ${pcfMon(x.e.saldoCapital,x.p.moneda)}</option>`).join('');
+  s.value=pcfCobroId;
+  if(q&&!s.value&&lista.length===1){pcfCobroId=lista[0].p.id;s.value=pcfCobroId;pcfCbPintar();}
+}
+function pcfCbPintar(){
+  const det=document.getElementById('pcf-cb-det');if(!det)return;
+  const p=pcfPrestamos().find(x=>x.id===pcfCobroId);
+  pcfCbRecibos(p);
+  if(!p){det.innerHTML='<p style="color:var(--gray);font-size:13px">Selecciona el préstamo que vas a cobrar.</p>';return;}
+  const cfg=pcfCfg(),usaCaja=cfg.condiciones.usarCaja&&PCF.caja.activa();
+  const ncf=cfg.ncf.usar?cfg.ncf.prefijo+String(parseInt(cfg.ncf.siguiente)||1).padStart(8,'0'):'';
+  const admin=PCF.esAdmin(),soloInteres=p.modalidad==='interes';
+  det.innerHTML=`
+    <div id="pcf-cb-info"></div>
+    <div class="pcf-sub">Cuotas</div>
+    <div class="table-wrap pcf-tabla-wrap" style="max-height:300px" id="pcf-cb-cuotas"></div>
+    <div class="pcf-sub" style="margin-top:14px">Registrar pago</div>
+    <div class="pcf-tipo">
+      <label id="pcf-cb-t1" class="on"><input type="radio" name="pcf-cb-tipo" value="cuota" checked onchange="pcfCbTipo()">💳 Pago de cuotas</label>
+      <label id="pcf-cb-t2"><input type="radio" name="pcf-cb-tipo" value="abono" onchange="pcfCbTipo()">⚡ Abono a capital</label>
+    </div>
+    <div class="pcf-grid">
+      <div class="form-field"><label>Fecha del pago</label><input type="date" id="pcf-cb-fecha" value="${pcfHoy()}" onchange="pcfCbCalc()"></div>
+      <div class="form-field"><label>Monto recibido (${pcfEsc(p.moneda)})</label><input type="text" id="pcf-cb-monto" inputmode="decimal" placeholder="0.00" oninput="pcfMoneyInput(this);pcfCbPrevia()"></div>
+      <div class="form-field"><label>Forma de pago</label><select id="pcf-cb-forma">${['Efectivo','Cheque','Tarjeta','Transferencia'].map(x=>`<option>${x}</option>`).join('')}</select></div>
+      <div class="form-field"><label>Referencia o número de cheque</label><input type="text" id="pcf-cb-ref"></div>
+    </div>
+    <div id="pcf-cb-rapidos" class="btn-row" style="margin:0 0 12px"></div>
+    <div id="pcf-cb-op-cuota">
+      <label class="pcf-chk"><input type="checkbox" id="pcf-cb-exo" ${admin?'':'disabled'} onchange="pcfCbCalc()"> Exonerar la mora${admin?'':' (solo el administrador)'}</label>
+    </div>
+    <div id="pcf-cb-op-abono" style="display:none">
+      <div class="pcf-grid"><div class="form-field"><label>Con el abono</label><select id="pcf-cb-modo" onchange="pcfCbPrevia()">
+        <option value="cuota">Bajar la cuota (mismo número de cuotas)</option>
+        ${soloInteres?'':'<option value="plazo">Bajar el número de cuotas</option>'}</select></div></div>
+    </div>
+    ${usaCaja?PCF.caja.selector('pcf-cb',p.moneda):''}
+    <div class="pcf-grid">
+      <div class="form-field full"><label>Observación</label><input type="text" id="pcf-cb-obs"></div>
+    </div>
+    ${ncf?`<label class="pcf-chk"><input type="checkbox" id="pcf-cb-ncf"> Con comprobante fiscal (NCF) — próximo: ${pcfEsc(ncf)}</label>`:''}
+    <div id="pcf-cb-prev"></div>
+    <div class="btn-row"><button class="btn btn-green" onclick="pcfCbConfirmar()">💾 Cobrar e imprimir recibo</button></div>`;
+  pcfCbCalc();
+}
+function pcfCbTipo(){
+  const t=document.querySelector('input[name=pcf-cb-tipo]:checked').value;
+  document.getElementById('pcf-cb-t1').classList.toggle('on',t==='cuota');
+  document.getElementById('pcf-cb-t2').classList.toggle('on',t==='abono');
+  document.getElementById('pcf-cb-op-cuota').style.display=t==='cuota'?'block':'none';
+  document.getElementById('pcf-cb-op-abono').style.display=t==='abono'?'block':'none';
+  pcfCbCalc();
+}
+// Reparte el dinero: por cada cuota, de la más vieja a la más nueva: mora, interés, comisión y capital
+function pcfDistribuir(p,monto,fecha,exonerar){
+  const e=pcfEstado(p,fecha);let resto=pcfR2(monto);const det=[];
+  for(const f of e.filas){
+    if(resto<=0)break;
+    if(f.pend<=0)continue;
+    const d={n:f.n,mora:0,moraExo:0,interes:0,comision:0,capital:0};
+    if(f.moraPend>0){if(exonerar)d.moraExo=f.moraPend;else{d.mora=pcfR2(Math.min(resto,f.moraPend));resto=pcfR2(resto-d.mora);}}
+    [['interes','pendInt'],['comision','pendCom'],['capital','pendCap']].forEach(([k,pk])=>{const t=pcfR2(Math.min(resto,f[pk]));d[k]=t;resto=pcfR2(resto-t);});
+    d.completa=pcfR2(d.interes+d.comision+d.capital)>=pcfR2(f.pend)&&(exonerar||d.mora>=f.moraPend);
+    d.previo=f.pagado>0||f.pag.mora>0;
+    det.push(d);
+  }
+  const lista=det.filter(d=>d.mora+d.moraExo+d.interes+d.comision+d.capital>0);
+  const tot=k=>pcfR2(lista.reduce((a,d)=>a+d[k],0));
+  return {det:lista,sobra:resto,e,mora:tot('mora'),moraExo:tot('moraExo'),interes:tot('interes'),comision:tot('comision'),capital:tot('capital')};
+}
+function pcfConcepto(det,n){
+  const c=det.filter(d=>d.interes+d.comision+d.capital>0).map(d=>(d.completa?(d.previo?'Saldo cuota':'Cuota'):'Abono cuota')+' #'+d.n+'/'+n);
+  if(det.some(d=>d.mora>0))c.push('Mora');
+  return c.join(', ')||'Mora';
+}
+// Abono a capital: desde qué cuota se recalcula y cuántas cuotas quedan
+function pcfPlanAbono(p,monto,fecha,modo){
+  const e=pcfEstado(p,fecha);
+  if(e.cuotasVencidas)return {error:'Tiene cuotas vencidas. Primero cobra lo vencido y después haz el abono.'};
+  if(e.filas.some(f=>f.pagado>0&&f.pend>0))return {error:'Hay una cuota pagada a medias. Complétala primero.'};
+  const sig=e.filas.find(f=>f.pend>0);
+  if(!sig)return {error:'Este préstamo ya está saldado.'};
+  if(!(monto>0))return {error:'Escribe el monto del abono'};
+  if(monto>e.saldoCapital)return {error:'El abono no puede ser mayor que el saldo de capital ('+pcfMon(e.saldoCapital,p.moneda)+')'};
+  const nuevoCap=pcfR2(e.saldoCapital-monto),quedan=e.n-sig.n+1;
+  let cuotas=quedan;
+  if(nuevoCap<=0)cuotas=1;
+  else if(modo==='plazo')cuotas=Math.max(1,Math.min(quedan,Math.ceil(nuevoCap/(p.capital/p.cuotas)-1e-9)));
+  const reajuste={desde:sig.n,capital:nuevoCap,cuotas,primerPago:sig.fecha};
+  const nueva=pcfTablaActual(Object.assign({},p,{reajustes:(p.reajustes||[]).concat(reajuste)})).slice(sig.n-1);
+  return {e,reajuste,nuevoCap,cuota:nueva.length?nueva[0].cuota:0,cuotas:nueva.length};
+}
+function pcfCbCalc(){
+  const p=pcfPrestamos().find(x=>x.id===pcfCobroId);if(!p)return;
+  const fecha=document.getElementById('pcf-cb-fecha').value||pcfHoy(),e=pcfEstado(p,fecha),m=p.moneda;
+  const exo=document.getElementById('pcf-cb-exo')&&document.getElementById('pcf-cb-exo').checked;
+  const sigCuota=e.filas.find(f=>f.pend>0);
+  document.getElementById('pcf-cb-info').innerHTML=`<div class="pcf-info"><b>${pcfEsc(p.cliente.nombre)}</b> · Contrato ${pcfEsc(p.contrato)} · ${pcfBadgeTipo(p)} ${pcfBadgeEstado(e)}</div>
+    <div class="pcf-mini" style="margin-bottom:12px">
+      <div><span>Saldo capital</span><b>${pcfMon(e.saldoCapital,m)}</b></div>
+      <div><span>Balance total</span><b>${pcfMon(e.balance,m)}</b></div>
+      <div><span>Vencido</span><b style="color:${e.vencido?'var(--red)':'inherit'}">${pcfMon(e.vencido,m)}</b></div>
+      <div><span>Mora al ${pcfFecha(fecha)}</span><b style="color:${e.moraPend?'var(--red)':'inherit'}">${pcfMon(e.moraPend,m)}</b></div>
+      <div><span>Cuota</span><b>${pcfMon(sigCuota?sigCuota.cuota:0,m)}</b></div>
+    </div>`;
+  const color={PAGADA:'badge-green',PARCIAL:'badge-amber',VENCIDA:'badge-red',PENDIENTE:'badge-blue'};
+  document.getElementById('pcf-cb-cuotas').innerHTML=`<table><thead><tr><th>Cuota</th><th>Fecha</th><th class="pcf-num">Valor</th><th class="pcf-num">Pagado</th><th class="pcf-num">Pendiente</th><th class="pcf-num">Mora</th><th>Estado</th></tr></thead><tbody>
+    ${e.filas.map(f=>`<tr><td>${f.n}/${e.n}</td><td>${pcfFecha(f.fecha)}</td><td class="pcf-num">${pcfFmt(f.cuota)}</td><td class="pcf-num">${pcfFmt(f.pagado)}</td><td class="pcf-num" style="font-weight:700">${pcfFmt(f.pend)}</td><td class="pcf-num" style="color:${f.moraPend?'var(--red)':'inherit'}">${pcfFmt(f.moraPend)}</td><td><span class="badge ${color[f.estado]}">${f.estado}${f.estado==='VENCIDA'?' '+f.dias+' días':''}</span></td></tr>`).join('')}
+  </tbody></table>`;
+  const tipo=document.querySelector('input[name=pcf-cb-tipo]:checked').value;
+  const sig=e.filas.find(f=>f.pend>0&&f.estado!=='VENCIDA');
+  const mora=exo?0:e.moraPend;
+  const bot=(t,v)=>v>0?`<button class="btn btn-sm btn-secondary" onclick="pcfCbPoner(${v})">${t}: ${pcfFmt(v)}</button>`:'';
+  document.getElementById('pcf-cb-rapidos').innerHTML=tipo==='cuota'
+    ?bot('Lo vencido + mora',pcfR2(e.vencido+mora))+bot('Vencido + próxima cuota',sig?pcfR2(e.vencido+mora+sig.pend):0)+bot('Todas las cuotas',pcfR2(e.balance+mora))
+    :bot('Todo el capital',e.saldoCapital);
+  pcfCbPrevia();
+}
+function pcfCbPoner(v){document.getElementById('pcf-cb-monto').value=pcfFmt(v);pcfCbPrevia();}
+function pcfCbLeer(){
+  const g=id=>document.getElementById(id);
+  return {p:pcfPrestamos().find(x=>x.id===pcfCobroId),tipo:document.querySelector('input[name=pcf-cb-tipo]:checked').value,fecha:g('pcf-cb-fecha').value,
+    monto:pcfR2(pcfN(g('pcf-cb-monto').value)),exo:!!(g('pcf-cb-exo')&&g('pcf-cb-exo').checked&&PCF.esAdmin()),modo:(g('pcf-cb-modo')||{}).value||'cuota',
+    forma:g('pcf-cb-forma').value,ref:g('pcf-cb-ref').value.trim(),obs:g('pcf-cb-obs').value.trim(),
+    ncf:!!(g('pcf-cb-ncf')&&g('pcf-cb-ncf').checked),bc:g('pcf-cb-banco')?PCF.caja.leer('pcf-cb'):null};
+}
+// Revisa el pago y dice a qué se aplica. Devuelve {error} o el plan.
+function pcfCbPlan(x){
+  if(!x.p)return {error:'Selecciona el préstamo'};
+  if(!x.fecha)return {error:'Escribe la fecha del pago'};
+  if(x.fecha<x.p.fecha)return {error:'La fecha del pago no puede ser antes del préstamo'};
+  if(x.tipo==='abono'){
+    const a=pcfPlanAbono(x.p,x.monto,x.fecha,x.modo);if(a.error)return a;
+    return Object.assign(a,{concepto:'Abono a capital',capital:x.monto,interes:0,comision:0,mora:0,moraExo:0,det:[]});
+  }
+  if(!(x.monto>0))return {error:'Escribe el monto recibido'};
+  const d=pcfDistribuir(x.p,x.monto,x.fecha,x.exo);
+  if(d.sobra>0)return {error:'El monto es mayor que lo que debe ('+pcfMon(pcfR2(x.monto-d.sobra),x.p.moneda)+')'};
+  return Object.assign(d,{concepto:pcfConcepto(d.det,d.e.n)});
+}
+function pcfCbPrevia(){
+  const box=document.getElementById('pcf-cb-prev');if(!box)return;
+  const x=pcfCbLeer();
+  if(!(x.monto>0)){box.innerHTML='';return;}
+  const pl=pcfCbPlan(x),m=x.p.moneda;
+  if(pl.error){box.innerHTML=`<div class="pcf-aviso">⚠️ ${pcfEsc(pl.error)}</div>`;return;}
+  box.innerHTML=x.tipo==='abono'
+    ?`<div class="pcf-info">⚡ Abono a capital de ${pcfMon(x.monto,m)}. Nuevo saldo de capital: <b>${pcfMon(pl.nuevoCap,m)}</b>.${pl.nuevoCap>0?` Quedan <b>${pl.cuotas}</b> cuotas de <b>${pcfMon(pl.cuota,m)}</b>.`:' El préstamo queda saldado.'}</div>`
+    :`<div class="pcf-info">Se aplica a: <b>${pcfEsc(pl.concepto)}</b><br>Capital ${pcfMon(pl.capital,m)} · Interés ${pcfMon(pl.interes,m)}${pl.comision?' · Comisión '+pcfMon(pl.comision,m):''} · Mora ${pcfMon(pl.mora,m)}${pl.moraExo?' · Mora exonerada '+pcfMon(pl.moraExo,m):''}</div>`;
+}
+function pcfCbConfirmar(){
+  const x=pcfCbLeer(),pl=pcfCbPlan(x);
+  if(pl.error){toast(pl.error,'error');return;}
+  openModal('💳 Confirmar cobro',`<div style="font-size:14px;line-height:1.8">
+      <div><b>Cliente:</b> ${pcfEsc(x.p.cliente.nombre)} · Contrato ${pcfEsc(x.p.contrato)}</div>
+      <div><b>Monto:</b> ${pcfMon(x.monto,x.p.moneda)} · ${pcfEsc(x.forma)}</div>
+      <div><b>Concepto:</b> ${pcfEsc(pl.concepto)}</div>
+      ${x.ncf?'<div><b>Con comprobante fiscal (NCF)</b></div>':''}
+    </div>`,
+    `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+     <button class="btn btn-green" id="pcf-btn-cb" onclick="pcfCbGuardar()">💾 Sí, cobrar</button>`);
+}
+async function pcfCbGuardar(){
+  const btn=document.getElementById('pcf-btn-cb');if(btn){btn.disabled=true;btn.textContent='⏳ Guardando…';}
+  const x0=pcfCbLeer();
+  if(!await pcfCargar(true)){toast('Sin conexión con la base de datos. No se cobró; intenta de nuevo.','error');if(btn){btn.disabled=false;btn.textContent='💾 Sí, cobrar';}return;}
+  // Se recalcula con los datos recién cargados (otro usuario pudo haber cobrado)
+  const x=Object.assign({},x0,{p:pcfPrestamos().find(p=>p.id===x0.p.id)});
+  const pl=pcfCbPlan(x);
+  if(pl.error){toast(pl.error,'error');closeModal();pcfRender();return;}
+  const p=x.p,cfg=pcfCfg(),pagos=pcfPagos().slice();
+  const recibo=String(pagos.reduce((a,y)=>Math.max(a,parseInt(y.recibo)||0),0)+1).padStart(10,'0');
+  let ncf='';
+  if(x.ncf&&cfg.ncf.usar){
+    const sigN=parseInt(cfg.ncf.siguiente)||1;
+    ncf=cfg.ncf.prefijo+String(sigN).padStart(8,'0');
+    DB[PCF.keys.config]=Object.assign({},DB[PCF.keys.config],{ncf:Object.assign({},cfg.ncf,{siguiente:sigN+1})});
+    PCF.guardar(PCF.keys.config);
+  }
+  const pago={id:pcfId('pcfp'),recibo,prestamoId:p.id,contrato:p.contrato,cliente:p.cliente.nombre,moneda:p.moneda,fecha:x.fecha,tipo:x.tipo,
+    monto:x.monto,capital:pl.capital,interes:pl.interes,comision:pl.comision,mora:pl.mora,moraExo:pl.moraExo,
+    detalle:(pl.det||[]).map(d=>({n:d.n,mora:d.mora,moraExo:d.moraExo,interes:d.interes,comision:d.comision,capital:d.capital})),
+    concepto:pl.concepto,forma:x.forma,referencia:x.ref,observacion:x.obs,ncf,ncfVence:ncf?cfg.ncf.vencimiento:'',ncfEtiqueta:ncf?cfg.ncf.etiqueta:'',
+    banco:x.bc?x.bc.banco:'',cuenta:x.bc?x.bc.cuenta:'',cajaIds:[],usuario:PCF.usuario(),creado:new Date().toISOString()};
+  if(x.tipo==='abono'){
+    p.reajustes=(p.reajustes||[]).concat(Object.assign({pagoId:pago.id},pl.reajuste));
+    PCF.guardar(PCF.keys.prestamos);
+  }
+  pagos.push(pago);DB[PCF.keys.pagos]=pagos;
+  const e=pcfEstado(p);pago.saldoCapital=e.saldoCapital;pago.balance=e.balance;
+  if(x.bc&&cfg.condiciones.usarCaja&&PCF.caja.activa()){
+    const desc=`Recibo ${recibo} — Contrato ${p.contrato}: ${p.cliente.nombre}`,base={fecha:x.fecha,tipo:'ENTRADA',moneda:p.moneda,banco:x.bc.banco,cuenta:x.bc.cuenta,formaPago:x.forma};
+    const movs=[['Cobro Préstamo — Capital',pago.capital],['Cobro Préstamo — Interés',pcfR2(pago.interes+pago.comision)],['Cobro Préstamo — Mora',pago.mora]]
+      .filter(([,v])=>v>0).map(([cat,v])=>Object.assign({id:pcfId('pcfc'),categoria:cat,descripcion:desc,monto:v},base));
+    pago.cajaIds=movs.map(mv=>mv.id);
+    PCF.caja.registrar(movs);
+  }
+  PCF.guardar(PCF.keys.pagos);
+  PCF.bitacora('Cobró',`Recibo ${recibo} — Contrato ${p.contrato} — ${p.cliente.nombre} — ${pcfMon(x.monto,p.moneda)} — ${pl.concepto}`);
+  closeModal();toast('Cobro registrado ✓ Recibo '+recibo,'success');
+  pcfCobroId=p.id;await pcfRender('cobros');
+  pcfRecibo(pago.id);
+}
+// ¿Es el último pago válido de su préstamo? (solo ese se puede anular)
+const pcfEsUltimoPago=y=>!pcfPagos().some(z=>z.prestamoId===y.prestamoId&&!z.anulado&&(z.recibo||'')>(y.recibo||''));
+function pcfCbRecibos(p){
+  const box=document.getElementById('pcf-cb-recibos');if(!box)return;
+  document.getElementById('pcf-cb-rtit').textContent=p?'🧾 Pagos de este préstamo':'🧾 Últimos recibos';
+  const lista=(p?pcfPagos().filter(x=>x.prestamoId===p.id):pcfPagos().slice()).sort((a,b)=>(b.recibo||'').localeCompare(a.recibo||'')).slice(0,p?500:15);
+  if(!lista.length){box.innerHTML='<p style="color:var(--gray);font-size:13px">Todavía no hay pagos.</p>';return;}
+  box.innerHTML=`<div class="table-wrap"><table><thead><tr><th>Recibo</th><th>Fecha</th>${p?'':'<th>Cliente</th>'}<th>Concepto</th><th class="pcf-num">Monto</th><th>Estado</th><th></th></tr></thead><tbody>
+    ${lista.map(y=>`<tr style="${y.anulado?'opacity:.55':''}"><td style="font-weight:700">${pcfEsc(y.recibo)}</td><td>${pcfFecha(y.fecha)}</td>${p?'':`<td>${pcfEsc(y.cliente)}</td>`}
+      <td style="font-size:12px">${pcfEsc(y.concepto)}${y.ncf?'<div style="color:var(--gray)">NCF '+pcfEsc(y.ncf)+'</div>':''}</td><td class="pcf-num" style="font-weight:700">${pcfMon(y.monto,y.moneda)}</td>
+      <td>${y.anulado?'<span class="badge badge-red">Anulado</span>':'<span class="badge badge-green">Válido</span>'}</td>
+      <td><div style="display:flex;gap:4px">
+        <button class="btn btn-sm btn-secondary" onclick="pcfRecibo('${y.id}')">🖨️ Recibo</button>
+        ${!y.anulado&&PCF.esAdmin()&&pcfEsUltimoPago(y)?`<button class="btn btn-sm" style="background:var(--red2);color:var(--red)" onclick="pcfConfirmarAnular('${y.id}')">🚫 Anular</button>`:''}
+      </div></td></tr>`).join('')}
+  </tbody></table></div>`;
+}
+function pcfConfirmarAnular(id){
+  const y=pcfPagos().find(z=>z.id===id);if(!y)return;
+  openModal('🚫 Anular recibo '+y.recibo,`<p style="font-size:14px;line-height:1.7">${pcfEsc(y.cliente)} · ${pcfMon(y.monto,y.moneda)}<br>${pcfEsc(y.concepto)}</p>
+    <p style="font-size:13px;color:var(--gray);margin:8px 0">El pago deja de contar${(y.cajaIds||[]).length?' y se borra su entrada de Caja':''}. El recibo queda en el historial como anulado.</p>
+    <div class="form-field"><label>Motivo</label><input type="text" id="pcf-an-motivo"></div>`,
+    `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+     <button class="btn btn-red" id="pcf-btn-an" onclick="pcfAnular('${id}')">🚫 Sí, anular</button>`);
+}
+async function pcfAnular(id){
+  if(!PCF.esAdmin()){toast('Solo el administrador puede anular pagos','error');return;}
+  const motivo=((document.getElementById('pcf-an-motivo')||{}).value||'').trim();
+  if(!motivo){toast('Escribe el motivo','error');return;}
+  const btn=document.getElementById('pcf-btn-an');if(btn)btn.disabled=true;
+  if(!await pcfCargar(true)){toast('Sin conexión con la base de datos. No se anuló.','error');if(btn)btn.disabled=false;return;}
+  const y=pcfPagos().find(z=>z.id===id);
+  if(!y||y.anulado){closeModal();pcfRender();return;}
+  if(!pcfEsUltimoPago(y)){toast('Solo se puede anular el último pago del préstamo','error');closeModal();return;}
+  y.anulado={usuario:PCF.usuario(),fecha:new Date().toISOString(),motivo};
+  if(y.tipo==='abono'){const p=pcfPrestamos().find(z=>z.id===y.prestamoId);if(p){p.reajustes=(p.reajustes||[]).filter(r=>r.pagoId!==y.id);PCF.guardar(PCF.keys.prestamos);}}
+  PCF.guardar(PCF.keys.pagos);
+  PCF.caja.borrar(y.cajaIds||[]);
+  PCF.bitacora('Anuló recibo',`Recibo ${y.recibo} — Contrato ${y.contrato} — ${pcfMon(y.monto,y.moneda)} — ${motivo}`);
+  closeModal();toast('Recibo anulado ✓','success');pcfRender();
+}
+
+// ── Recibo de ingreso (original cliente arriba, copia empresa abajo) ──
+function pcfRecibo(id){
+  const y=pcfPagos().find(z=>z.id===id);if(!y)return;
+  const p=pcfPrestamos().find(z=>z.id===y.prestamoId)||{cliente:{nombre:y.cliente}};
+  const cfg=pcfCfg(),e=cfg.empresa,logo=e.usarLogo?PCF.logo():'',m=y.moneda,c=p.cliente||{};
+  const ab={Efectivo:'EF',Cheque:'CH',Tarjeta:'TAR',Transferencia:'TRANS'};
+  const copia=t=>`<div class="rec mono">
+    <div class="caja fila" style="align-items:flex-start">
+      <div><div class="b" style="font-size:15px">*${pcfEsc(e.nombre)}*</div><div>${pcfEsc(e.direccion)}</div><div>${pcfEsc(e.telefonos)}${e.rnc?' RNC: '+pcfEsc(e.rnc):''}</div>
+        <div style="margin-top:4px"><b>Fecha</b> ${pcfFecha(y.fecha)}</div></div>
+      <div style="text-align:right">${logo?`<img class="logo" src="${logo}"><br>`:''}<span style="font-size:11px">IMPRESO: ${pcfFecha(pcfHoy())} ${pcfHora()}</span></div>
+    </div>
+    <div class="fila" style="margin:8px 0 4px;align-items:flex-start">
+      <div class="tit">RECIBO DE INGRESO</div>
+      <div style="text-align:right">${y.ncf?`<b>${pcfEsc(y.ncfEtiqueta||'')}</b><br>NCF: <b>${pcfEsc(y.ncf)}</b>${y.ncfVence?'<br>Fecha vencimiento: '+pcfFecha(y.ncfVence):''}`:''}${y.anulado?'<div style="color:#b91c1c;font-weight:bold;font-size:15px">*** ANULADO ***</div>':''}</div>
+    </div>
+    <div style="border-top:1.5px solid #000;padding-top:6px">
+      <div class="fila"><span><b>Número recibo:</b> ${pcfEsc(y.recibo)}</span><span><b>Fecha:</b> ${pcfFecha(y.fecha)}</span><span><b>Préstamo:</b> ${pcfEsc(y.contrato)}</span></div>
+      <div><b>Señor(es).....:</b> ${pcfEsc((c.nombre||y.cliente||'').toUpperCase())}${c.documento?' · '+pcfEsc(c.tipoDoc||'')+' '+pcfEsc(c.documento):''}</div>
+      <div><b>Monto ingreso.:</b> (${pcfMontoLetras(y.monto,m,false,true)} )</div>
+      <div><b>Concepto......:</b> ${pcfEsc(y.concepto)}</div>
+      <div><b>Observación...:</b> ${pcfEsc(y.observacion||'')}${y.referencia?' Ref. '+pcfEsc(y.referencia):''}</div>
+    </div>
+    <div class="fila" style="border-top:1.5px solid #000;margin-top:6px;padding-top:6px">
+      <span style="font-size:14px"><b>Pago recibido.: ${pcfFmt(y.monto)} ${pcfEsc(m)}</b></span>
+      <span style="font-size:14px"><b>Balance actual....: ${pcfFmt(y.balance)}</b></span>
+    </div>
+    <div style="font-size:11.5px">Capital ${pcfFmt(y.capital)} · Interés ${pcfFmt(pcfR2(y.interes+y.comision))} · Mora ${pcfFmt(y.mora)}${y.moraExo?' · Mora exonerada '+pcfFmt(y.moraExo):''} · Saldo de capital ${pcfFmt(y.saldoCapital)}</div>
+    <div style="margin-top:6px"><b>Detalles de pago</b><br>${Object.keys(ab).map(k=>`${ab[k]}.: ${pcfFmt(y.forma===k?y.monto:0)}`).join('&nbsp;&nbsp;&nbsp;&nbsp;')}</div>
+    <div class="fila" style="margin-top:12px;align-items:flex-end">
+      <div><b>Le atendió....:</b> ${pcfEsc((y.usuario||'').toUpperCase())}<br><span style="font-size:11.5px">Válido si está debidamente sellado.</span></div>
+      <div style="text-align:center;min-width:220px"><div style="border-bottom:1px solid #000;height:38px"></div>Recibido por</div>
+    </div>
+    <div style="text-align:right;font-weight:bold;margin-top:4px">${t}</div>
+  </div>`;
+  pcfVentana('Recibo '+y.recibo,`<div class="hoja rec-hoja">${copia('ORIGINAL CLIENTE')}<div class="corte">✂ - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -</div>${copia('COPIA EMPRESA')}</div>`,
+    PCF_CSS_MONO+`.rec-hoja{padding:1cm 1.3cm}@media print{.rec-hoja{padding:0}}
+    .rec{height:11.9cm;overflow:hidden;box-sizing:border-box}
+    .tit{border:1.5px solid #000;padding:4px 18px;font-weight:bold;font-size:16px;font-family:"Times New Roman",serif}
+    .corte{text-align:center;color:#666;margin:.3cm 0;font-family:Arial,sans-serif;font-size:11px;white-space:nowrap;overflow:hidden}`);
+}
+
+// ── Estado de cuenta ──
+function pcfHtmlEstado(p,cfg){
+  const e=pcfEstado(p),c=p.cliente||{},m=p.moneda;
+  const pagos=pcfPagos().filter(x=>x.prestamoId===p.id).sort((a,b)=>(a.recibo||'').localeCompare(b.recibo||''));
+  const L=(l,v)=>`<div><span>${(l+' ').padEnd(18,'.').replace(/ /g,'&nbsp;')}:</span> <b>${v}</b></div>`;
+  return `<div class="hoja"><div class="mono">
+    ${pcfEncabezadoMono(cfg,'FECHA.: '+pcfFecha(pcfHoy())+'<br>HORA..: '+pcfHora())}
+    <div style="text-align:center;font-size:16px;font-weight:bold;margin:12px 0 6px;letter-spacing:1px">ESTADO DE CUENTA</div>
+    <div class="info">
+      ${L('Contrato',pcfEsc(p.contrato))}${L('Fecha préstamo',pcfFecha(p.fecha))}
+      ${L('Cliente',pcfEsc(c.nombre))}${L(c.tipoDoc||'Documento',pcfEsc(c.documento||'—'))}
+      ${L('Capital',pcfFmt(p.capital)+' '+pcfEsc(m))}${L('Tasa',(+p.tasa).toFixed(2)+' % mensual')}
+      ${L('Saldo capital',pcfFmt(e.saldoCapital))}${L('Balance total',pcfFmt(e.balance))}
+      ${L('Vencido',pcfFmt(e.vencido))}${L('Mora al día',pcfFmt(e.moraPend))}
+      ${L('Cuotas pagadas',e.pagadas+' de '+e.n)}${L('Estado',e.saldado?'SALDADO':e.cuotasVencidas?'ATRASADO':'AL DÍA')}
+    </div>
+    <table class="t"><thead><tr><th>Fecha</th><th>Cuota</th><th>Valor</th><th>Pagado</th><th>Pendiente</th><th>Mora</th><th>Estado</th></tr></thead><tbody>
+      ${e.filas.map(f=>`<tr><td>${pcfFecha(f.fecha)}</td><td>${f.n}/${e.n}</td><td>${pcfFmt(f.cuota)}</td><td>${pcfFmt(f.pagado)}</td><td>${pcfFmt(f.pend)}</td><td>${pcfFmt(f.moraPend)}</td><td>${f.estado}</td></tr>`).join('')}
+    </tbody></table>
+    <div style="font-weight:bold;margin:16px 0 4px">PAGOS RECIBIDOS</div>
+    ${pagos.length?`<table class="t"><thead><tr><th>Recibo</th><th>Fecha</th><th>Concepto</th><th>Monto</th><th>Capital</th><th>Interés</th><th>Mora</th></tr></thead><tbody>
+      ${pagos.map(x=>`<tr style="${x.anulado?'text-decoration:line-through;color:#888':''}"><td>${pcfEsc(x.recibo)}</td><td>${pcfFecha(x.fecha)}</td><td style="text-align:left">${pcfEsc(x.concepto)}${x.anulado?' (ANULADO)':''}</td><td>${pcfFmt(x.monto)}</td><td>${pcfFmt(x.capital)}</td><td>${pcfFmt(pcfR2(x.interes+x.comision))}</td><td>${pcfFmt(x.mora)}</td></tr>`).join('')}
+    </tbody></table>`:'<div>Sin pagos.</div>'}
+  </div></div>`;
 }
 
 // ── Datos legales ──
@@ -631,7 +1105,11 @@ const PCF_LEGAL=[
     ['moneda','Moneda','US$|RD$'],['tasa','Tasa mensual %','num'],['cuotas','Número de cuotas','num'],['forma','Forma de pago','Mensual|Quincenal|Semanal'],
     ['modalidad','Modalidad',Object.entries(PCF_MODALIDADES).map(([k,l])=>k+'='+l).join('|')],['mora','Mora % por mes de atraso','num'],
     ['honorarios','Honorarios de abogados (pagaré notarial)','num'],['honorariosMoneda','Moneda de los honorarios','US$|RD$'],
-    ['contratoInicial','Empezar los contratos en el número','num'],['redondeo','Redondear la cuota hacia arriba','chk']]]
+    ['contratoInicial','Empezar los contratos en el número','num'],['diasGracia','Días de gracia antes de cobrar mora','num'],
+    ['redondeo','Redondear la cuota hacia arriba','chk'],['usarCaja','Registrar entregas y cobros en Caja','chk']]],
+  ['ncf','🧾 Comprobante fiscal (NCF) en los recibos',[
+    ['usar','Permitir poner NCF en los recibos','chk'],['etiqueta','Tipo de comprobante'],['prefijo','Serie (ej. B02)'],
+    ['siguiente','Próximo número de la secuencia','num'],['vencimiento','Vencimiento de la secuencia','date']]]
 ];
 const PCF_REQUERIDOS={empresa:['razonSocial','rnc','domicilioSocial'],representante:['nombre','nacionalidad','estadoCivil','profesion','cedula','domicilio'],
   notario:['nombre','nacionalidad','estadoCivil','profesion','cedula','matricula','municipio','residencia','estudio','lugarActo']};
@@ -650,8 +1128,8 @@ function pcfTabLegal(){
     const val=cfg[sec][k],id=`pcf-l-${sec}-${k}`;
     if(tipo==='chk')return `<label class="pcf-chk full"><input type="checkbox" id="${id}" ${val?'checked':''} ${dis}> ${label}</label>`;
     let html;
-    if(tipo&&tipo!=='num')html=`<select id="${id}" ${dis}>${tipo.split('|').map(o=>{const [k2,l2]=o.split('=');return `<option value="${pcfEsc(k2)}" ${String(k2)===String(val)?'selected':''}>${pcfEsc(l2||k2)}</option>`;}).join('')}</select>`;
-    else html=`<input type="${tipo==='num'?'number':'text'}" ${tipo==='num'?'step="any"':''} id="${id}" value="${pcfEsc(val)}" ${dis}>`;
+    if(tipo&&tipo!=='num'&&tipo!=='date')html=`<select id="${id}" ${dis}>${tipo.split('|').map(o=>{const [k2,l2]=o.split('=');return `<option value="${pcfEsc(k2)}" ${String(k2)===String(val)?'selected':''}>${pcfEsc(l2||k2)}</option>`;}).join('')}</select>`;
+    else html=`<input type="${tipo==='num'?'number':tipo==='date'?'date':'text'}" ${tipo==='num'?'step="any"':''} id="${id}" value="${pcfEsc(val)}" ${dis}>`;
     return `<div class="form-field ${ancho?'full':''}"><label>${label}</label>${html}</div>`;
   };
   const falta=pcfFaltantesLegales();
@@ -692,6 +1170,7 @@ function pcfDoc(tipo,id){
     if(falta.length)toast('Faltan datos legales; saldrán en blanco. Complétalos en la pestaña Datos legales.','error');
     pcfVentana('Pagaré notarial '+(p.contrato||''),pcfHtmlNotarial(p,cfg,true),PCF_CSS_NOTARIAL,p._borrador);
   } else if(tipo==='pagare')pcfVentana('Pagaré '+(p.contrato||''),pcfHtmlPagare(p,cfg),PCF_CSS_MONO,p._borrador);
+  else if(tipo==='estado')pcfVentana('Estado de cuenta '+p.contrato,pcfHtmlEstado(p,cfg),PCF_CSS_MONO);
   else pcfVentana('Tabla de amortización '+(p.contrato||''),pcfHtmlTabla(p,cfg),PCF_CSS_MONO,p._borrador);
 }
 function pcfVentana(titulo,html,css,borrador){
@@ -769,7 +1248,7 @@ function pcfHtmlPagare(p,cfg){
 
 // ── Tabla de amortización ──
 function pcfHtmlTabla(p,cfg){
-  const filas=pcfTabla(p),r=pcfResumen(filas),c=p.cliente||{};
+  const filas=pcfTablaActual(p),r=pcfResumen(filas),c=p.cliente||{};
   const L=(l,v)=>`<div><span>${(l+' ').padEnd(20,'.').replace(/ /g,'&nbsp;')}:</span> <b>${v}</b></div>`;
   const garantia=p.vehiculo?pcfEsc([p.vehiculo.tipo,pcfDescVehiculo(p.vehiculo)].filter(Boolean).join(' ')):(p.garantia?pcfEsc(p.garantia):'Ninguna');
   return `<div class="hoja"><div class="mono">
