@@ -238,10 +238,10 @@ function pcfTablaActual(p){
 }
 const pcfDias=(a,b)=>Math.round((new Date(b+'T12:00:00')-new Date(a+'T12:00:00'))/864e5);
 // Estado del préstamo a una fecha: lo pagado y lo pendiente de cada cuota, con mora
-function pcfEstado(p,fechaRef){
+function pcfEstado(p,fechaRef,soloHastaFecha){
   fechaRef=fechaRef||pcfHoy();
   const gracia=parseInt(pcfCfg().condiciones.diasGracia)||0,tasaMora=(+p.mora||0)/100;
-  const pagos=pcfPagosDe(p.id);
+  const pagos=pcfPagosDe(p.id).filter(x=>!soloHastaFecha||x.fecha<=fechaRef);
   const filas=pcfTablaActual(p).map(f=>{
     const pag={mora:0,moraExo:0,interes:0,comision:0,capital:0};
     pagos.forEach(x=>(x.detalle||[]).forEach(d=>{if(d.n===f.n)Object.keys(pag).forEach(k=>{pag[k]+=+d[k]||0;});}));
@@ -300,12 +300,12 @@ async function pcfRender(tab){
   const pg=document.getElementById('page-'+PCF.id);if(!pg)return;
   if(!_pcfCarga)pg.innerHTML='<div class="card" style="text-align:center;padding:40px;color:var(--gray)">⏳ Cargando préstamos…</div>';
   await pcfCargar();
-  const tabs=[['resumen','📊 Resumen'],['nuevo',pcfEditId?'✏️ Editar préstamo':'➕ Nuevo préstamo'],['prestamos','📋 Préstamos'],['cobros','💳 Cobros'],['legal','⚖️ Datos legales']];
+  const tabs=[['resumen','📊 Resumen'],['nuevo',pcfEditId?'✏️ Editar préstamo':'➕ Nuevo préstamo'],['prestamos','📋 Préstamos'],['cobros','💳 Cobros'],['vencidas','⚠️ Vencidas'],['informes','📊 Informes'],['legal','⚖️ Datos legales']];
   pg.innerHTML=`
     <div class="page-header"><div><h1>${PCF.ico} ${pcfEsc(PCF.label)}</h1><p>Financiamiento de vehículos y préstamos personales a clientes</p></div></div>
     <div class="pcf-tabs">${tabs.map(([id,l])=>`<button class="btn ${id===pcfTab?'btn-primary':'btn-secondary'}" onclick="pcfIr('${id}')">${l}</button>`).join('')}</div>
     <div id="pcf-body"></div>`;
-  ({resumen:pcfTabResumen,nuevo:pcfTabNuevo,prestamos:pcfTabPrestamos,cobros:pcfTabCobros,legal:pcfTabLegal}[pcfTab]||pcfTabResumen)();
+  ({resumen:pcfTabResumen,nuevo:pcfTabNuevo,prestamos:pcfTabPrestamos,cobros:pcfTabCobros,vencidas:pcfTabVencidas,informes:pcfTabInformes,legal:pcfTabLegal}[pcfTab]||pcfTabResumen)();
 }
 function pcfIr(tab){if(tab!=='nuevo')pcfEditId=null;pcfRender(tab);}
 
@@ -324,7 +324,7 @@ function pcfTabResumen(){
       <div class="stat-card blue"><div class="stat-ico">💵</div><div class="stat-label">Capital en la calle</div><div class="stat-value">${dos(act,x=>x.e.saldoCapital)}</div></div>
       <div class="stat-card green"><div class="stat-ico">💳</div><div class="stat-label">Cobrado este mes</div><div class="stat-value">${dos(pagosMes,y=>y.x.monto)}</div></div>
       <div class="stat-card purple"><div class="stat-ico">📋</div><div class="stat-label">Préstamos activos</div><div class="stat-value">${act.length}</div><div class="stat-sub">${nV} de vehículo · ${act.length-nV} personales</div></div>
-      <div class="stat-card red"><div class="stat-ico">⚠️</div><div class="stat-label">Atrasados: ${atr.length}</div><div class="stat-value">${dos(atr,x=>x.e.vencido)}</div></div>
+      <div class="stat-card red" style="cursor:pointer" onclick="pcfIr('vencidas')"><div class="stat-ico">⚠️</div><div class="stat-label">Atrasados: ${atr.length}</div><div class="stat-value">${dos(atr,x=>x.e.vencido)}</div></div>
       <div class="stat-card amber"><div class="stat-ico">📈</div><div class="stat-label">Intereses por cobrar</div><div class="stat-value">${dos(act,x=>x.e.interesPend)}</div></div>
       <div class="stat-card green"><div class="stat-ico">💰</div><div class="stat-label">Intereses cobrados este mes</div><div class="stat-value">${dos(pagosMes,y=>y.x.interes)}</div></div>
       <div class="stat-card amber"><div class="stat-ico">⏱️</div><div class="stat-label">Mora cobrada este mes</div><div class="stat-value">${dos(pagosMes,y=>y.x.mora)}</div></div>
@@ -1085,6 +1085,142 @@ function pcfHtmlEstado(p,cfg){
       ${pagos.map(x=>`<tr style="${x.anulado?'text-decoration:line-through;color:#888':''}"><td>${pcfEsc(x.recibo)}</td><td>${pcfFecha(x.fecha)}</td><td style="text-align:left">${pcfEsc(x.concepto)}${x.anulado?' (ANULADO)':''}</td><td>${pcfFmt(x.monto)}</td><td>${pcfFmt(x.capital)}</td><td>${pcfFmt(pcfR2(x.interes+x.comision))}</td><td>${pcfFmt(x.mora)}</td></tr>`).join('')}
     </tbody></table>`:'<div>Sin pagos.</div>'}
   </div></div>`;
+}
+
+// ── Vencidas ──
+function pcfAtrasados(){
+  return pcfPrestamos().map(p=>{
+    const e=pcfEstado(p),venc=e.filas.filter(f=>f.estado==='VENCIDA');
+    const ult=pcfPagosDe(p.id).reduce((a,x)=>x.fecha>a?x.fecha:a,'');
+    return {p,e,dias:venc.reduce((a,f)=>Math.max(a,f.dias),0),ult};
+  }).filter(x=>x.e.cuotasVencidas>0).sort((a,b)=>b.dias-a.dias);
+}
+function pcfColorDias(d){return d>60?'badge-red':d>30?'badge-amber':'badge-blue';}
+function pcfWhatsApp(x){
+  let t=String(x.p.cliente.telefono||'').replace(/\D/g,'');
+  if(t.length===10)t='1'+t;
+  if(t.length<10)return '';
+  const msg=`Saludos ${x.p.cliente.nombre}. Le recordamos que su préstamo ${x.p.contrato} con ${pcfCfg().empresa.nombre} tiene ${x.e.cuotasVencidas} cuota(s) vencida(s) por ${pcfMon(x.e.vencido,x.p.moneda)}${x.e.moraPend?' más '+pcfMon(x.e.moraPend,x.p.moneda)+' de mora':''}. Favor comunicarse con nosotros.`;
+  return 'https://wa.me/'+t+'?text='+encodeURIComponent(msg);
+}
+function pcfTabVencidas(){
+  const lista=pcfAtrasados(),hoy=pcfHoy(),en7=pcfSumar(hoy,'Semanal',1);
+  const prox=pcfPrestamos().map(p=>({p,f:pcfEstado(p).filas.find(f=>f.pend>0&&f.estado!=='VENCIDA'&&f.fecha>=hoy&&f.fecha<=en7)})).filter(x=>x.f).sort((a,b)=>a.f.fecha.localeCompare(b.f.fecha));
+  const suma=m=>pcfR2(lista.filter(x=>x.p.moneda===m).reduce((a,x)=>a+x.e.vencido+x.e.moraPend,0));
+  document.getElementById('pcf-body').innerHTML=`
+    <div class="stats-grid">
+      <div class="stat-card red"><div class="stat-ico">⚠️</div><div class="stat-label">Préstamos atrasados</div><div class="stat-value">${lista.length}</div></div>
+      <div class="stat-card red"><div class="stat-ico">💵</div><div class="stat-label">Por cobrar con mora US$</div><div class="stat-value">${pcfMon(suma('US$'),'US$')}</div></div>
+      <div class="stat-card red"><div class="stat-ico">🟢</div><div class="stat-label">Por cobrar con mora RD$</div><div class="stat-value">${pcfMon(suma('RD$'),'RD$')}</div></div>
+      <div class="stat-card amber"><div class="stat-ico">📅</div><div class="stat-label">Vencen en 7 días</div><div class="stat-value">${prox.length}</div></div>
+    </div>
+    <div class="card"><div class="card-title" style="justify-content:space-between">⚠️ Cuotas vencidas
+      ${lista.length?'<button class="btn btn-sm btn-secondary" onclick="pcfImprimirVencidas()">🖨️ Imprimir lista</button>':''}</div>
+      ${lista.length?`<div class="table-wrap"><table><thead><tr><th>Cliente</th><th>Contrato</th><th>Cuotas</th><th>Atraso</th><th class="pcf-num">Vencido</th><th class="pcf-num">Mora</th><th class="pcf-num">Total</th><th></th></tr></thead><tbody>
+        ${lista.map(x=>{const wa=pcfWhatsApp(x);return `<tr>
+          <td style="white-space:nowrap"><b>${pcfEsc(x.p.cliente.nombre)}</b><div style="font-size:11px;color:var(--gray)">${pcfEsc(x.p.cliente.telefono||'')}</div></td>
+          <td>${pcfEsc(x.p.contrato)}</td><td>${x.e.cuotasVencidas}</td>
+          <td style="white-space:nowrap"><span class="badge ${pcfColorDias(x.dias)}">${x.dias} días</span><div style="font-size:11px;color:var(--gray)">Último pago: ${x.ult?pcfFecha(x.ult):'nunca'}</div></td>
+          <td class="pcf-num">${pcfMon(x.e.vencido,x.p.moneda)}</td><td class="pcf-num" style="color:var(--red)">${pcfFmt(x.e.moraPend)}</td>
+          <td class="pcf-num" style="font-weight:800">${pcfMon(pcfR2(x.e.vencido+x.e.moraPend),x.p.moneda)}</td>
+          <td><div style="display:flex;gap:4px">
+            <button class="btn btn-sm btn-primary" onclick="pcfIrCobrar('${x.p.id}')">💳 Cobrar</button>
+            <button class="btn btn-sm btn-secondary" onclick="pcfDoc('estado','${x.p.id}')">📑 Estado</button>
+            ${wa?`<a class="btn btn-sm btn-green" href="${wa}" target="_blank" rel="noopener">💬 WhatsApp</a>`:''}
+          </div></td></tr>`;}).join('')}
+      </tbody></table></div>`:'<p style="text-align:center;color:var(--gray);padding:24px">✅ No hay cuotas vencidas.</p>'}
+    </div>
+    <div class="card"><div class="card-title">📅 Cuotas que vencen en los próximos 7 días</div>
+      ${prox.length?`<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Cliente</th><th>Contrato</th><th>Cuota</th><th class="pcf-num">Pendiente</th><th></th></tr></thead><tbody>
+        ${prox.map(x=>`<tr><td>${pcfFecha(x.f.fecha)}</td><td>${pcfEsc(x.p.cliente.nombre)}<div style="font-size:11px;color:var(--gray)">${pcfEsc(x.p.cliente.telefono||'')}</div></td><td>${pcfEsc(x.p.contrato)}</td><td>${x.f.n}</td><td class="pcf-num">${pcfMon(x.f.pend,x.p.moneda)}</td>
+          <td><button class="btn btn-sm btn-secondary" onclick="pcfIrCobrar('${x.p.id}')">💳 Cobrar</button></td></tr>`).join('')}
+      </tbody></table></div>`:'<p style="color:var(--gray);font-size:13px">No hay cuotas por vencer esta semana.</p>'}
+    </div>`;
+}
+function pcfImprimirVencidas(){
+  const lista=pcfAtrasados(),cfg=pcfCfg();
+  pcfVentana('Cuotas vencidas',`<div class="hoja"><div class="mono">
+    ${pcfEncabezadoMono(cfg,'FECHA.: '+pcfFecha(pcfHoy())+'<br>HORA..: '+pcfHora())}
+    <div style="text-align:center;font-size:16px;font-weight:bold;margin:12px 0">CUOTAS VENCIDAS AL ${pcfFecha(pcfHoy())}</div>
+    <table class="t"><thead><tr><th>Cliente</th><th>Teléfono</th><th>Contrato</th><th>Cuotas</th><th>Días</th><th>Vencido</th><th>Mora</th><th>Total</th></tr></thead><tbody>
+      ${lista.map(x=>`<tr><td>${pcfEsc(x.p.cliente.nombre)}</td><td>${pcfEsc(x.p.cliente.telefono||'')}</td><td>${pcfEsc(x.p.contrato)}</td><td>${x.e.cuotasVencidas}</td><td>${x.dias}</td><td>${pcfFmt(x.e.vencido)} ${pcfEsc(x.p.moneda)}</td><td>${pcfFmt(x.e.moraPend)}</td><td><b>${pcfFmt(pcfR2(x.e.vencido+x.e.moraPend))}</b></td></tr>`).join('')}
+    </tbody></table></div></div>`,PCF_CSS_MONO);
+}
+
+// ── Informes ──
+function pcfTabInformes(){
+  const hoy=pcfHoy();
+  document.getElementById('pcf-body').innerHTML=`
+    <div class="card">
+      <div class="pcf-grid">
+        <div class="form-field"><label>Desde</label><input type="date" id="pcf-inf-desde" value="${hoy.slice(0,8)}01" onchange="pcfPintarInforme()"></div>
+        <div class="form-field"><label>Hasta</label><input type="date" id="pcf-inf-hasta" value="${hoy}" onchange="pcfPintarInforme()"></div>
+        <div class="form-field"><label>Tipo</label><select id="pcf-inf-tipo" onchange="pcfPintarInforme()"><option value="">Todos</option><option value="vehiculo">🚗 Vehículo</option><option value="personal">👤 Personal</option></select></div>
+      </div>
+      <div class="btn-row" style="margin-top:0"><button class="btn btn-primary" onclick="pcfImprimirInforme()">🖨️ Imprimir informe</button></div>
+    </div>
+    <div id="pcf-inf"></div>`;
+  pcfPintarInforme();
+}
+// Datos del informe del período (los mismos en pantalla y en el impreso)
+function pcfDatosInforme(){
+  const desde=document.getElementById('pcf-inf-desde').value,hasta=document.getElementById('pcf-inf-hasta').value,tipo=document.getElementById('pcf-inf-tipo').value;
+  const ps=pcfPrestamos().filter(p=>!tipo||p.tipo===tipo),ids=ps.map(p=>p.id);
+  const pagos=pcfPagos().filter(x=>!x.anulado&&ids.includes(x.prestamoId)&&x.fecha>=desde&&x.fecha<=hasta).sort((a,b)=>(a.recibo||'').localeCompare(b.recibo||''));
+  const nuevos=ps.filter(p=>p.fecha>=desde&&p.fecha<=hasta);
+  const est=ps.filter(p=>p.fecha<=hasta).map(p=>({p,e:pcfEstado(p,hasta,true)}));
+  const mon=['US$','RD$'].map(m=>{
+    const pg=pagos.filter(x=>x.moneda===m),es=est.filter(x=>x.p.moneda===m),act=es.filter(x=>!x.e.saldado);
+    const s=(arr,f)=>pcfR2(arr.reduce((a,x)=>a+f(x),0));
+    const cartera=s(act,x=>x.e.saldoCapital),vencido=s(act,x=>x.e.vencido);
+    return {m,cobrado:s(pg,x=>x.monto),capital:s(pg,x=>x.capital),interes:s(pg,x=>x.interes+x.comision),mora:s(pg,x=>x.mora),moraExo:s(pg,x=>x.moraExo||0),recibos:pg.length,
+      prestado:s(nuevos.filter(p=>p.moneda===m),p=>p.capital),nPrestados:nuevos.filter(p=>p.moneda===m).length,
+      cartera,interesPend:s(act,x=>x.e.interesPend),vencido,moraPend:s(act,x=>x.e.moraPend),activos:act.length,atrasados:act.filter(x=>x.e.cuotasVencidas).length,
+      morosidad:cartera>0?pcfR2(vencido/cartera*100):0};
+  });
+  return {desde,hasta,tipo,pagos,mon};
+}
+function pcfPintarInforme(){
+  const d=pcfDatosInforme(),box=document.getElementById('pcf-inf');if(!box)return;
+  const col=(t,f)=>`<tr><td>${t}</td>${d.mon.map(x=>`<td class="pcf-num">${f(x)}</td>`).join('')}</tr>`;
+  const fm=k=>x=>pcfFmt(x[k]);
+  box.innerHTML=`
+    <div class="card"><div class="card-title">📊 Resumen del ${pcfFecha(d.desde)} al ${pcfFecha(d.hasta)}</div>
+      <div class="table-wrap"><table><thead><tr><th></th><th class="pcf-num">US$</th><th class="pcf-num">RD$</th></tr></thead><tbody>
+        <tr><td colspan="3" style="background:var(--gray2);font-weight:800">Cobros del período</td></tr>
+        ${col('Total cobrado',x=>'<b>'+pcfFmt(x.cobrado)+'</b>')}${col('Capital',fm('capital'))}${col('Interés',fm('interes'))}${col('Mora',fm('mora'))}${col('Mora exonerada',fm('moraExo'))}${col('Recibos',x=>x.recibos)}
+        <tr><td colspan="3" style="background:var(--gray2);font-weight:800">Préstamos entregados en el período</td></tr>
+        ${col('Cantidad',x=>x.nPrestados)}${col('Monto prestado',fm('prestado'))}
+        <tr><td colspan="3" style="background:var(--gray2);font-weight:800">Cartera al ${pcfFecha(d.hasta)}</td></tr>
+        ${col('Préstamos activos',x=>x.activos)}${col('Capital en la calle',x=>'<b>'+pcfFmt(x.cartera)+'</b>')}${col('Intereses por cobrar',fm('interesPend'))}
+        ${col('Préstamos atrasados',x=>x.atrasados)}${col('Monto vencido',fm('vencido'))}${col('Mora pendiente',fm('moraPend'))}${col('Morosidad (% de la cartera vencida)',x=>x.morosidad+' %')}
+      </tbody></table></div></div>
+    <div class="card"><div class="card-title">🧾 Recibos del período (${d.pagos.length})</div>
+      ${d.pagos.length?`<div class="table-wrap pcf-tabla-wrap"><table><thead><tr><th>Recibo</th><th>Fecha</th><th>Cliente</th><th>Contrato</th><th>Concepto</th><th class="pcf-num">Capital</th><th class="pcf-num">Interés</th><th class="pcf-num">Mora</th><th class="pcf-num">Total</th></tr></thead><tbody>
+        ${d.pagos.map(x=>`<tr><td>${pcfEsc(x.recibo)}</td><td>${pcfFecha(x.fecha)}</td><td>${pcfEsc(x.cliente)}</td><td>${pcfEsc(x.contrato)}</td><td style="white-space:normal;font-size:12px">${pcfEsc(x.concepto)}</td><td class="pcf-num">${pcfFmt(x.capital)}</td><td class="pcf-num">${pcfFmt(pcfR2(x.interes+x.comision))}</td><td class="pcf-num">${pcfFmt(x.mora)}</td><td class="pcf-num"><b>${pcfMon(x.monto,x.moneda)}</b></td></tr>`).join('')}
+      </tbody></table></div>`:'<p style="color:var(--gray);font-size:13px">No hay cobros en este período.</p>'}
+    </div>`;
+}
+function pcfImprimirInforme(){
+  const d=pcfDatosInforme(),cfg=pcfCfg();
+  const col=(t,f)=>`<tr><td>${t}</td>${d.mon.map(x=>`<td>${f(x)}</td>`).join('')}</tr>`;
+  const fm=k=>x=>pcfFmt(x[k]);
+  const sec=t=>`<tr><td colspan="3" style="text-align:left;font-weight:bold;padding-top:10px">${t}</td></tr>`;
+  pcfVentana('Informe de préstamos',`<div class="hoja"><div class="mono">
+    ${pcfEncabezadoMono(cfg,'FECHA.: '+pcfFecha(pcfHoy())+'<br>HORA..: '+pcfHora())}
+    <div style="text-align:center;font-size:16px;font-weight:bold;margin:12px 0 2px">INFORME DE PRÉSTAMOS</div>
+    <div style="text-align:center;margin-bottom:10px">Del ${pcfFecha(d.desde)} al ${pcfFecha(d.hasta)}${d.tipo?' · '+(d.tipo==='vehiculo'?'Vehículos':'Personales'):''}</div>
+    <table class="t" style="max-width:520px;margin:0 auto"><thead><tr><th></th><th>US$</th><th>RD$</th></tr></thead><tbody>
+      ${sec('COBROS DEL PERÍODO')}${col('Total cobrado',x=>'<b>'+pcfFmt(x.cobrado)+'</b>')}${col('Capital',fm('capital'))}${col('Interés',fm('interes'))}${col('Mora',fm('mora'))}${col('Mora exonerada',fm('moraExo'))}${col('Recibos',x=>x.recibos)}
+      ${sec('PRÉSTAMOS ENTREGADOS')}${col('Cantidad',x=>x.nPrestados)}${col('Monto prestado',fm('prestado'))}
+      ${sec('CARTERA AL '+pcfFecha(d.hasta))}${col('Préstamos activos',x=>x.activos)}${col('Capital en la calle',x=>'<b>'+pcfFmt(x.cartera)+'</b>')}${col('Intereses por cobrar',fm('interesPend'))}
+      ${col('Préstamos atrasados',x=>x.atrasados)}${col('Monto vencido',fm('vencido'))}${col('Mora pendiente',fm('moraPend'))}${col('Morosidad',x=>x.morosidad+' %')}
+    </tbody></table>
+    <div style="font-weight:bold;margin:18px 0 4px">RECIBOS DEL PERÍODO</div>
+    ${d.pagos.length?`<table class="t"><thead><tr><th>Recibo</th><th>Fecha</th><th>Cliente</th><th>Contrato</th><th>Capital</th><th>Interés</th><th>Mora</th><th>Total</th></tr></thead><tbody>
+      ${d.pagos.map(x=>`<tr><td>${pcfEsc(x.recibo)}</td><td>${pcfFecha(x.fecha)}</td><td style="text-align:left">${pcfEsc(x.cliente)}</td><td>${pcfEsc(x.contrato)}</td><td>${pcfFmt(x.capital)}</td><td>${pcfFmt(pcfR2(x.interes+x.comision))}</td><td>${pcfFmt(x.mora)}</td><td><b>${pcfFmt(x.monto)} ${pcfEsc(x.moneda)}</b></td></tr>`).join('')}
+    </tbody></table>`:'<div>No hay cobros en este período.</div>'}
+  </div></div>`,PCF_CSS_MONO);
 }
 
 // ── Datos legales ──
