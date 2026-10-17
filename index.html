@@ -3177,6 +3177,7 @@ function exportarCajaPDF(){
 // Traduce la categoría de un movimiento de Caja al módulo del sistema donde se originó.
 function moduloOrigenCaja(categoria){
   const c=(categoria||'').toLowerCase();
+  for(const m of (typeof modulosExtra==='function'?modulosExtra():[]))if((m.categoriasCaja||[]).some(x=>c.startsWith(x.toLowerCase())))return m.label;
   const mapa={
     'cobro cxc':'Cuentas por Cobrar','cxc manual':'Cuentas por Cobrar','cobro de venta':'Cuentas por Cobrar',
     'cxp manual':'Cuentas por Pagar','cxp usd':'Cuentas por Pagar','pago a suplidor':'Cuentas por Pagar',
@@ -17179,6 +17180,6 @@ window.fbIniciar = async function(){
 };
 </script>
 <!-- Módulo aparte: Préstamos Credit Fayre. Para quitarlo del sistema, borrar esta línea. -->
-<script src="prestamos-credit.js?v=6"></script>
+<script src="prestamos-credit.js?v=7"></script>
 </body>
 </html>

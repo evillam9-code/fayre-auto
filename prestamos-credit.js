@@ -93,7 +93,8 @@ const PCF={
 (function pcfRegistrar(){
   PCF.registrarMenu();
   window.MODULOS_EXTRA=window.MODULOS_EXTRA||[];
-  window.MODULOS_EXTRA.push({id:PCF.id,label:PCF.label,ico:PCF.ico,keys:Object.values(PCF.keys),render:()=>pcfRender()});
+  window.MODULOS_EXTRA.push({id:PCF.id,label:PCF.label,ico:PCF.ico,keys:Object.values(PCF.keys),render:()=>pcfRender(),
+    categoriasCaja:['Préstamo Otorgado','Cobro Préstamo']});
   const ref=document.getElementById('page-dashboard');
   if(ref&&!document.getElementById('page-'+PCF.id)){
     const d=document.createElement('div');d.className='page';d.id='page-'+PCF.id;ref.parentNode.appendChild(d);
