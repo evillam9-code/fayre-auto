@@ -1019,6 +1019,19 @@ function canAccess(modId){
   if(currentUser.role==='admin')return true;
   return (currentUser.modulos||[]).includes(modId);
 }
+// ══ MÓDULOS ADICIONALES ══
+// Módulos en archivos aparte (ej. prestamos-credit.js) se registran en window.MODULOS_EXTRA.
+// Si se quita el archivo, la lista queda vacía y el sistema sigue igual.
+function modulosExtra(){return window.MODULOS_EXTRA||[];}
+function moduloApagado(id){return (DB.config.modulosApagados||[]).includes(id);}
+function toggleModuloExtra(id,encender){
+  if(currentUser?.role!=='admin'){toast('Solo el administrador puede activar o apagar módulos','error');return;}
+  const off=(DB.config.modulosApagados||[]).filter(x=>x!==id);
+  if(!encender)off.push(id);
+  DB.config.modulosApagados=off;sDB('config');
+  aplicarPermisosNav();renderConfig();
+  toast(encender?'Módulo activado ✓':'Módulo apagado ✓','success');
+}
 function canDo(action){
   if(!currentUser)return false;
   if(currentUser.role==='admin')return true;
@@ -1044,7 +1057,7 @@ function renderSidebarNav(){
   const secciones=DB.config.menuSecciones||{};
   const orden=DB.config.menuOrden||[];
   // Construir lista ordenada: primero los que tienen orden guardado, luego el resto
-  const ordenados=MENU_DEFS.slice().sort((a,b)=>{
+  const ordenados=MENU_DEFS.filter(m=>!moduloApagado(m.id)).sort((a,b)=>{
     const ia=orden.indexOf(a.id); const ib=orden.indexOf(b.id);
     if(ia===-1&&ib===-1)return 0;
     if(ia===-1)return 1; if(ib===-1)return -1;
@@ -1152,7 +1165,7 @@ function aplicarPermisosNav(){
   renderSidebarNav();
   // Ocultar nav-items de módulos sin acceso
   const MODS_NAV=['dashboard','informes','consultas','suplidores','inventario','gastosVeh','cxp',
-    'clientes','ventas','cxc','lavado','gastos','nomina','caja','consultaCuentas','prestamos','cotizaciones','autorizaciones','seguros','facturaExterna','alertas','verSaldoCaja','chat','usuarios','config','cumpleanos','cuentas'];
+    'clientes','ventas','cxc','lavado','gastos','nomina','caja','consultaCuentas','prestamos','cotizaciones','autorizaciones','seguros','facturaExterna','alertas','verSaldoCaja','chat','usuarios','config','cumpleanos','cuentas'].concat(modulosExtra().map(m=>m.id));
   MODS_NAV.forEach(id=>{
     const nav=document.getElementById('nav-'+id);
     if(!nav)return;
@@ -1385,6 +1398,8 @@ function showPage(id){
   const sb=document.getElementById('sidebar');const ov=document.getElementById('sidebar-overlay');
   if(sb&&window.innerWidth<=768){sb.classList.remove('open');if(ov)ov.classList.remove('open');}
   const r={dashboard:renderDashboard,inventario:renderInventario,consultas:renderConsultas,ventas:renderVentas,cotizaciones:renderCotizaciones,clientes:renderClientes,suplidores:renderSuplidores,caja:renderCaja,consultaCuentas:renderConsultaCuentas,gastos:renderGastos,nomina:renderNomina,informes:renderInformes,usuarios:renderUsuarios,config:renderConfig,gastosVeh:renderGastosVeh,cxp:renderCXP,cxc:renderCXC,lavado:renderLavado,autorizaciones:renderAutorizaciones,seguros:renderSeguros,facturaExterna:renderFacturaExterna,alertas:renderAlertas,chat:renderChat,cumpleanos:renderCumpleanos,cuentas:renderCuentas,backup:renderBackup,bitacora:renderBitacora,prestamos:renderPrestamos,activosFijos:renderActivosFijos};
+  modulosExtra().forEach(m=>{r[m.id]=m.render;});
+  if(moduloApagado(id)){toast('Este módulo está apagado','error');return;}
   // Refresh Firebase si han pasado más de 60 segundos
   const ahora=Date.now();
   if(window._fbActivo&&window._fbCargado&&(!window._lastFbRefresh||ahora-window._lastFbRefresh>60000)){
@@ -4617,7 +4632,7 @@ function _renderUsuariosHTML(){
     {id:'prestamos',label:'🏦 Préstamos Bancos'},{id:'activosFijos',label:'🏛️ Activos Fijos'},
     {id:'usuarios',label:'Usuarios'},{id:'config',label:'Configuración'},
     {id:'cuentas',label:'🏦 Cuentas'},{id:'cumpleanos',label:'🎂 Cumpleaños'},
-  ];
+  ].concat(modulosExtra().map(m=>({id:m.id,label:m.ico+' '+m.label})));
   const BORRAR=[
     {id:'ventas',label:'Borrar Ventas'},{id:'clientes',label:'Borrar Clientes'},
     {id:'suplidores',label:'Borrar Suplidores'},{id:'gastos',label:'Borrar Gastos'},
@@ -4740,7 +4755,7 @@ function crearUsuarioNuevo(){
   const role=document.getElementById('nu-role')?.value;
   if(!nombre||!user||!pass){toast('Complete nombre, usuario y contraseña','error');return;}
   if(DB.users.find(u=>u.username===user)){toast('El usuario ya existe','error');return;}
-  const MODS_IDS=['dashboard','informes','consultas','inventario','gastosVeh','cxp','clientes','ventas','cxc','lavado','suplidores','gastos','nomina','caja','consultaCuentas','cotizaciones','autorizaciones','seguros','facturaExterna','alertas','verSaldoCaja','chat','prestamos','usuarios','config','cuentas','cumpleanos'];
+  const MODS_IDS=['dashboard','informes','consultas','inventario','gastosVeh','cxp','clientes','ventas','cxc','lavado','suplidores','gastos','nomina','caja','consultaCuentas','cotizaciones','autorizaciones','seguros','facturaExterna','alertas','verSaldoCaja','chat','prestamos','usuarios','config','cuentas','cumpleanos'].concat(modulosExtra().map(m=>m.id));
   const DEL_IDS=['ventas','clientes','suplidores','gastos','nomina','gastosVeh','cxc','inventario','cotizaciones','cxp','autorizaciones','seguros'];
   const modulos=role==='admin'?MODS_IDS:MODS_IDS.filter(id=>document.getElementById('nu-mod-'+id)?.checked);
   const puedeEliminar=role==='admin'||DEL_IDS.some(id=>document.getElementById('nu-del-'+id)?.checked);
@@ -4835,7 +4850,7 @@ function editarUsuario(i){
     {id:'seguros',label:'🛡️ Seguros'},{id:'facturaExterna',label:'🧾 Facturas Externas'},{id:'alertas',label:'🔔 Alertas'},{id:'verSaldoCaja',label:'💰 Ver Saldo Caja'},{id:'chat',label:'💬 Chat Interno'},
     {id:'prestamos',label:'🏦 Préstamos Bancos'},
     {id:'cuentas',label:'🏦 Cuentas'},{id:'cumpleanos',label:'🎂 Cumpleaños'},
-  ];
+  ].concat(modulosExtra().map(m=>({id:m.id,label:m.ico+' '+m.label})));
   const mods=u.modulos||[];
   const perms=u.permisos||{};
   openModal('Editar Usuario: '+escHtml(u.nombre),`
@@ -4923,7 +4938,7 @@ function guardarUsuario(idx){
   const pass=document.getElementById('u-pass').value;
   if(!nombre||!user||(!pass&&idx===undefined)){toast('Complete todos los campos','error');return;}
   if(idx===undefined&&DB.users.find(u=>u.username===user)){toast('El usuario ya existe','error');return;}
-  const MODS_IDS=['dashboard','informes','consultas','suplidores','inventario','gastosVeh','cxp','clientes','ventas','cxc','lavado','gastos','nomina','caja','consultaCuentas','cotizaciones','autorizaciones','seguros','facturaExterna','alertas','verSaldoCaja','chat','prestamos','cuentas','cumpleanos'];
+  const MODS_IDS=['dashboard','informes','consultas','suplidores','inventario','gastosVeh','cxp','clientes','ventas','cxc','lavado','gastos','nomina','caja','consultaCuentas','cotizaciones','autorizaciones','seguros','facturaExterna','alertas','verSaldoCaja','chat','prestamos','cuentas','cumpleanos'].concat(modulosExtra().map(m=>m.id));
   const nuevosMods=MODS_IDS.filter(m=>{const el=document.getElementById('u-mod-'+m);return el&&el.checked;});
   const permKeys=['editar','eliminar','imprimir','pdf','editarVentas','editarClientes','editarSuplidores','editarGastos','editarNomina','editarGastosVeh','editarCobros','editarCxp','editarVehiculos','editarCaja','editarCotizaciones','editarAutorizaciones','editarSeguros','editarFacturas','editarCuentas','editarCumpleanos','borrarVentas','borrarClientes','borrarSuplidores','borrarGastos','borrarNomina','borrarGastosVeh','borrarCobros','borrarCxp','borrarVehiculos','borrarCaja','borrarCotizaciones','borrarAutorizaciones','borrarSeguros','borrarFacturas','borrarCuentas','borrarCumpleanos'];
   const nuevosPerms={};permKeys.forEach(k=>{const el=document.getElementById('u-perm-'+k);if(el)nuevosPerms[k]=el.checked;});
@@ -6419,7 +6434,7 @@ function guardarPermisosUsuarioConfig(i){
   if(currentUser?.role!=='admin'){toast('Solo el administrador puede editar usuarios','error');return;}
   const u=DB.users[i];
   if(!u)return;
-  const MODS_IDS=['dashboard','informes','consultas','suplidores','inventario','gastosVeh','cxp','clientes','ventas','cxc','lavado','gastos','nomina','caja','consultaCuentas','cotizaciones','autorizaciones','seguros','facturaExterna','alertas','verSaldoCaja','chat','prestamos','cuentas','cumpleanos'];
+  const MODS_IDS=['dashboard','informes','consultas','suplidores','inventario','gastosVeh','cxp','clientes','ventas','cxc','lavado','gastos','nomina','caja','consultaCuentas','cotizaciones','autorizaciones','seguros','facturaExterna','alertas','verSaldoCaja','chat','prestamos','cuentas','cumpleanos'].concat(modulosExtra().map(m=>m.id));
   const ALERT_IDS=['SIN_VIN','SIN_COSTO','CXP','CXC_VENCIDA','CXC','SIN_VENDER_6M','SIN_VENDER_1A','DOCS'];
   if(u.role!=='admin'){
     const mods=MODS_IDS.filter(id=>document.getElementById(`cfg-mod-${i}-${id}`)?.checked);
@@ -6778,6 +6793,17 @@ function renderConfig(){
       </div>
     </div>
 
+    ${currentUser?.role==='admin'&&modulosExtra().length?`
+    <!-- MÓDULOS ADICIONALES -->
+    <div class="card">
+      <div class="card-title">🧩 Módulos Adicionales</div>
+      <p style="font-size:13px;color:var(--gray);margin-bottom:12px">Módulos que funcionan aparte del sistema. Si apagas uno, desaparece del menú y sus datos quedan guardados.</p>
+      ${modulosExtra().map(m=>{const on=!moduloApagado(m.id);return `<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--gray2);border:1px solid var(--gray3);border-radius:8px;margin-bottom:6px;cursor:pointer">
+        <input type="checkbox" ${on?'checked':''} onchange="toggleModuloExtra('${m.id}',this.checked)" style="width:18px;height:18px;accent-color:var(--green)">
+        <span style="font-size:15px">${m.ico}</span><span style="flex:1;font-size:13px;font-weight:600">${escHtml(m.label)}</span>
+        <span class="badge ${on?'badge-green':'badge-red'}">${on?'Activo':'Apagado'}</span></label>`;}).join('')}
+    </div>`:''}
+
     <!-- ORDEN DEL MENÚ LATERAL -->
     <div class="card">
       <div class="card-title">📋 Orden del Menú Lateral</div>
@@ -6819,7 +6845,7 @@ function renderConfig(){
       <p style="font-size:13px;color:var(--gray);margin-bottom:12px">El administrador puede editar módulos, permisos y alertas de cada usuario. Los cambios se guardan de inmediato.</p>
       <div style="display:flex;flex-direction:column;gap:12px">
         ${DB.users.map((u,ui)=>{
-          const MODS_LIST=[{id:'dashboard',label:'Inicio'},{id:'informes',label:'Informe'},{id:'consultas',label:'🔍 Consultas'},{id:'suplidores',label:'Suplidores'},{id:'inventario',label:'Reg. Vehículo'},{id:'gastosVeh',label:'Gastos Veh.'},{id:'cxp',label:'CxP'},{id:'clientes',label:'Clientes'},{id:'ventas',label:'Ventas'},{id:'cxc',label:'CxC'},{id:'lavado',label:'🛡️ Lavado'},{id:'gastos',label:'Gastos Emp.'},{id:'nomina',label:'Nómina'},{id:'caja',label:'Caja'},{id:'consultaCuentas',label:'🧾 Consulta Cuentas'},{id:'cotizaciones',label:'Cotizaciones'},{id:'autorizaciones',label:'Autorización Compra'},{id:'seguros',label:'Seguros'},{id:'facturaExterna',label:'Facturas Externas'},{id:'alertas',label:'Alertas'},{id:'verSaldoCaja',label:'💰 Ver Saldo Caja'},{id:'chat',label:'💬 Chat'},{id:'cuentas',label:'🏦 Cuentas'},{id:'cumpleanos',label:'🎂 Cumpleaños'}];
+          const MODS_LIST=[{id:'dashboard',label:'Inicio'},{id:'informes',label:'Informe'},{id:'consultas',label:'🔍 Consultas'},{id:'suplidores',label:'Suplidores'},{id:'inventario',label:'Reg. Vehículo'},{id:'gastosVeh',label:'Gastos Veh.'},{id:'cxp',label:'CxP'},{id:'clientes',label:'Clientes'},{id:'ventas',label:'Ventas'},{id:'cxc',label:'CxC'},{id:'lavado',label:'🛡️ Lavado'},{id:'gastos',label:'Gastos Emp.'},{id:'nomina',label:'Nómina'},{id:'caja',label:'Caja'},{id:'consultaCuentas',label:'🧾 Consulta Cuentas'},{id:'cotizaciones',label:'Cotizaciones'},{id:'autorizaciones',label:'Autorización Compra'},{id:'seguros',label:'Seguros'},{id:'facturaExterna',label:'Facturas Externas'},{id:'alertas',label:'Alertas'},{id:'verSaldoCaja',label:'💰 Ver Saldo Caja'},{id:'chat',label:'💬 Chat'},{id:'cuentas',label:'🏦 Cuentas'},{id:'cumpleanos',label:'🎂 Cumpleaños'}].concat(modulosExtra().map(m=>({id:m.id,label:m.ico+' '+m.label})));
           const ALERT_TYPES=[{id:'SIN_VIN',label:'Sin VIN'},{id:'SIN_COSTO',label:'Sin costos'},{id:'CXP',label:'CxP pendientes'},{id:'CXC_VENCIDA',label:'CxC vencidas'},{id:'CXC',label:'CxC pendientes'},{id:'SIN_VENDER_6M',label:'6m sin vender'},{id:'SIN_VENDER_1A',label:'1 año sin vender'},{id:'DOCS',label:'Docs pendientes'}];
           const mods=u.modulos||[];
           const alertas=u.alertasPermitidas||ALERT_TYPES.map(a=>a.id);
@@ -16546,7 +16572,8 @@ function _ejecutarBackup(){
     autorizaciones:DB.autorizaciones||[],
     seguros:DB.seguros||[],
     facturasExternas:DB.facturasExternas||[],
-    cumpleanosMensajes:DB.cumpleanosMensajes||{}
+    cumpleanosMensajes:DB.cumpleanosMensajes||{},
+    ...Object.fromEntries(modulosExtra().flatMap(m=>(m.keys||[]).map(k=>[k,DB[k]])))
   };
   const blob=new Blob([JSON.stringify(datos,null,2)],{type:'application/json'});
   const a=document.createElement('a');
@@ -16624,7 +16651,8 @@ function _ejecutarBackupAuto(){
       caja:DB.caja||[],gastos:DB.gastos||[],nomina:DB.nomina||[],nominaPagos:DB.nominaPagos||[],
       gastosVehiculos:DB.gastosVehiculos||[],cxp:DB.cxp||[],cxc:DB.cxc||[],
       autorizaciones:DB.autorizaciones||[],seguros:DB.seguros||[],
-      facturasExternas:DB.facturasExternas||[],cumpleanosMensajes:DB.cumpleanosMensajes||{}
+      facturasExternas:DB.facturasExternas||[],cumpleanosMensajes:DB.cumpleanosMensajes||{},
+      ...Object.fromEntries(modulosExtra().flatMap(m=>(m.keys||[]).map(k=>[k,DB[k]])))
     };
     const blob=new Blob([JSON.stringify(datos,null,2)],{type:'application/json'});
     const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=filename;
@@ -17150,5 +17178,7 @@ window.fbIniciar = async function(){
   }
 };
 </script>
+<!-- Módulo aparte: Préstamos Credit Fayre. Para quitarlo del sistema, borrar esta línea. -->
+<script src="prestamos-credit.js?v=1"></script>
 </body>
 </html>
