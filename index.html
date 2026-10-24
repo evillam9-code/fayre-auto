@@ -8109,8 +8109,6 @@ function _generarHojaCostosPDF(gastos,filtroVeh,tasaElegida){
   const rnc=DB.config.rnc||'';
   const tel=DB.config.telefono||'';
   const dir=DB.config.direccion||'';
-  const fRD=(n)=>'RD$ '+parseFloat(n||0).toLocaleString('es-DO',{minimumFractionDigits:2,maximumFractionDigits:2});
-  const fUS=(n)=>'US$ '+parseFloat(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
   const fN=(n)=>parseFloat(n||0).toLocaleString('es-DO',{minimumFractionDigits:2,maximumFractionDigits:2});
   const fmtN=(n,usd)=>usd?'$'+parseFloat(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}):parseFloat(n||0).toLocaleString('es-DO',{minimumFractionDigits:2,maximumFractionDigits:2});
   const fechaCorta=(f)=>{if(!f)return'—';const p=f.split('-');return p.length===3?p[2]+'/'+p[1]+'/'+p[0].slice(2):f;};
@@ -8153,18 +8151,18 @@ function _generarHojaCostosPDF(gastos,filtroVeh,tasaElegida){
   // Totales — independientes de cómo se dibujan las filas.
   const enUSD=gastos.filter(g=>g.moneda==='USD'),enRD=gastos.filter(g=>(g.moneda||'RD$')==='RD$');
   const totUSD=enUSD.reduce((a,g)=>a+parseFloat(g.montoFactura||0),0);
-  const totPagUSD=enUSD.reduce((a,g)=>a+parseFloat(g.montoPagado||0),0);
   const totPendUSD=enUSD.reduce((a,g)=>a+parseFloat(g.montoPendiente||0),0);
   const totRD=enRD.reduce((a,g)=>a+parseFloat(g.montoFactura||0),0);
-  const totPagRD=enRD.reduce((a,g)=>a+parseFloat(g.montoPagado||0),0);
   const totPendRD=enRD.reduce((a,g)=>a+parseFloat(g.montoPendiente||0),0);
   const totalRD=totRD+(totUSD*tasaFallback);
-  const totalPagRD=totPagRD+(totPagUSD*tasaFallback);
   const totalPendRD=totPendRD+(totPendUSD*tasaFallback);
-  const hayUSD=totUSD>0;
-  const totalUS=hayUSD?(totUSD+(totRD/tasaFallback)):0;
-  const totalPagUS=hayUSD?(totPagUSD+(totPagRD/tasaFallback)):0;
-  const totalPendUS=hayUSD?(totalUS-totalPagUS):0;
+
+  // "Sin placa" = total general menos lo registrado en Placa/Registro; "con placa" = total general.
+  const TIPO_GASTO_PLACA='Placa/Registro';
+  const placaRD=(porConcepto.find(c=>c.nombre===TIPO_GASTO_PLACA)?.gastos||[]).reduce((a,g)=>a+equivRD(g),0);
+  const sinPlacaRD=totalRD-placaRD;
+  const conPlacaRD=totalRD;
+  const nPendientes=gastos.filter(g=>parseFloat(g.montoPendiente||0)>0).length;
 
   const win=window.open('','_blank','width=820,height=750');
   win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
@@ -8192,16 +8190,6 @@ function _generarHojaCostosPDF(gastos,filtroVeh,tasaElegida){
   .b{display:inline-block;padding:1px 5px;font-size:8px;font-weight:800}
   .g{color:#1d4ed8}.r{color:#dc2626}.a{color:#d97706}
   .subhdr{font-size:9px;font-weight:800;text-transform:uppercase;color:#0f172a;letter-spacing:.4px;margin:14px 0 2px}
-  .res{margin-top:16px;border:1px solid #334155;border-radius:4px;overflow:hidden}
-  .res-bar{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;padding:3px 8px;color:#0f172a;border-bottom:1px solid #334155}
-  .res-top{display:grid;grid-template-columns:${hayUSD?'1fr 1fr 1fr':'1fr 1fr'}}
-  .rc{padding:6px 10px;border-right:1px solid #e2e8f0}.rc:last-child{border-right:none}
-  .rl{font-size:8px;font-weight:700;text-transform:uppercase;color:#000;margin-bottom:3px}
-  .rv{font-size:13px;font-weight:900}.rs{font-size:8px;margin-top:1px;color:#000}
-  .res-bot{display:grid;grid-template-columns:${hayUSD?'1fr 1fr':'1fr'};border-top:2px solid #334155}
-  .tc{padding:7px 10px;border-right:1px solid #e2e8f0}.tc:last-child{border-right:none}
-  .tl{font-size:8px;font-weight:700;text-transform:uppercase;margin-bottom:3px}
-  .tv{font-size:16px;font-weight:900}.ts{font-size:8px;margin-top:2px;color:#000}
   @media print{.noprint{display:none}@page{size:letter;margin:6mm}}
   </style></head><body>
   <div class="hdr">
@@ -8248,39 +8236,33 @@ function _generarHojaCostosPDF(gastos,filtroVeh,tasaElegida){
     </tr></thead>
     <tbody>${filasAnexos}</tbody>
   </table>`:''}
-  <div class="res">
-    <div class="res-bar">📊 Resumen de Costos &nbsp;(Tasa aplicada: RD$ ${fN(tasaFallback)} x US$1)</div>
-    <div class="res-top">
-      <div class="rc">
-        <div class="rl">Sub-Total en Pesos (RD$)</div>
-        <div class="rv" style="color:#d97706">${fRD(totRD)}</div>
-        <div class="rs" style="color:#d97706">Pagado: ${fRD(totPagRD)}</div>
-        ${totPendRD>0?`<div class="rs" style="color:#dc2626">Pendiente: ${fRD(totPendRD)}</div>`:'<div class="rs" style="color:#d97706">✅ Sin pendiente</div>'}
-      </div>
-      ${hayUSD?`<div class="rc">
-        <div class="rl">Sub-Total en Dólares (US$)</div>
-        <div class="rv" style="color:#1e3a8a">${fUS(totUSD)}</div>
-        <div class="rs" style="color:#1e3a8a">Pagado: ${fUS(totPagUSD)}</div>
-        ${totPendUSD>0?`<div class="rs" style="color:#dc2626">Pendiente: ${fUS(totPendUSD)}</div>`:'<div class="rs" style="color:#1e3a8a">✅ Sin pendiente</div>'}
-      </div>`:''}
-      <div class="rc">
-        <div class="rl">Registros</div>
-        <div class="rv" style="font-size:16px;color:#334155">${gastos.length}</div>
-        <div class="rs">Anexos: ${anexos.length}</div>
-        <div class="rs" style="color:${totalPendRD>0?'#dc2626':'#1d4ed8'};font-weight:700;margin-top:2px">${totalPendRD>0?'⚠️ Tiene pendientes':'✅ Todo pagado'}</div>
+  ${nPendientes>0?`<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:7px;padding:5px 10px;font-size:10px;color:#9a3412;text-align:center;margin-top:9px"><b>Pendiente de pago:</b> ${fmtN(totalPendRD,false)} (≈ ${fmtN(totalPendRD/tasaFallback,true)} USD) — ${nPendientes} de ${gastos.length} registro(s) sin pagar</div>`:''}
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:9px">
+    <div>
+      <div style="font-size:8.5px;font-weight:700;color:#1e3a8a;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;text-align:center">Total sin placa</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        <div style="background:#eff6ff;border:1.5px solid #93c5fd;border-radius:8px;padding:7px;text-align:center">
+          <div style="font-size:8px;font-weight:700;color:#1e3a8a;text-transform:uppercase">US$</div>
+          <div style="font-size:14px;font-weight:800;color:#1e3a8a;margin-top:2px">${fmtN(sinPlacaRD/tasaFallback,true)}</div>
+        </div>
+        <div style="background:#eff6ff;border:1.5px solid #93c5fd;border-radius:8px;padding:7px;text-align:center">
+          <div style="font-size:8px;font-weight:700;color:#1e3a8a;text-transform:uppercase">RD$</div>
+          <div style="font-size:14px;font-weight:800;color:#1e3a8a;margin-top:2px">${fmtN(sinPlacaRD,false)}</div>
+        </div>
       </div>
     </div>
-    <div class="res-bot">
-      <div class="tc">
-        <div class="tl" style="color:#92400e">TOTAL GENERAL EN PESOS (RD$)</div>
-        <div class="tv" style="color:#d97706">${fRD(totalRD)}</div>
-        ${totalPendRD>0?`<div class="ts" style="color:#dc2626;font-weight:700;margin-top:3px">Pendiente: ${fRD(totalPendRD)}</div>`:'<div class="ts" style="color:#1d4ed8;font-weight:700;margin-top:3px">✅ Todo pagado</div>'}
+    <div>
+      <div style="font-size:8.5px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;text-align:center">Total con placa</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        <div style="background:#fef3c7;border:1.5px solid #fcd34d;border-radius:8px;padding:7px;text-align:center">
+          <div style="font-size:8px;font-weight:700;color:#92400e;text-transform:uppercase">US$</div>
+          <div style="font-size:14px;font-weight:800;color:#92400e;margin-top:2px">${fmtN(conPlacaRD/tasaFallback,true)}</div>
+        </div>
+        <div style="background:#fef3c7;border:1.5px solid #fcd34d;border-radius:8px;padding:7px;text-align:center">
+          <div style="font-size:8px;font-weight:700;color:#92400e;text-transform:uppercase">RD$</div>
+          <div style="font-size:14px;font-weight:800;color:#92400e;margin-top:2px">${fmtN(conPlacaRD,false)}</div>
+        </div>
       </div>
-      ${hayUSD?`<div class="tc">
-        <div class="tl" style="color:#1e40af">TOTAL GENERAL EN DÓLARES (US$)</div>
-        <div class="tv" style="color:#1e3a8a">${fUS(totalUS)}</div>
-        ${totalPendUS>0?`<div class="ts" style="color:#dc2626;font-weight:700;margin-top:3px">Pendiente: ${fUS(totalPendUS)}</div>`:'<div class="ts" style="color:#1d4ed8;font-weight:700;margin-top:3px">✅ Todo pagado</div>'}
-      </div>`:''}
     </div>
   </div>
   <div class="noprint" style="margin-top:12px;text-align:center">
