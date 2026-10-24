@@ -8073,6 +8073,36 @@ function exportarHojaCostos(){
   _generarHojaCostosPDF(gastos,filtroVeh,tasaElegida);
 }
 
+// Conceptos fijos de la Hoja de Costos (igual orden que TIPOS_GASTO_VEH) con sinónimos para
+// reconocer gastos con nombres viejos o distintos. Lo que no coincide cae en Anexos.
+const CONCEPTOS_FIJOS_HOJA_COSTOS_VEH=[
+  {nombre:'Flete/Transporte',claves:['flete','transporte','envio','shipping','traslado']},
+  {nombre:'Aduana/Impuestos',claves:['aduana','arancel','impuesto','customs','importacion']},
+  {nombre:'Reparación/Mecánica',claves:['reparacion','mecanica','taller','motor','mecanico']},
+  {nombre:'Pintura/Carrocería',claves:['pintura','carroceria','chapa','pintado','pintor']},
+  {nombre:'Gomas/Ruedas',claves:['goma','rueda','llanta','neumatico','aro','rin']},
+  {nombre:'Batería',claves:['bateria','acumulador']},
+  {nombre:'Cristales',claves:['cristal','vidrio','parabrisas','luna']},
+  {nombre:'Tapicería',claves:['tapiceria','asiento','forro','tapiz']},
+  {nombre:'Aire Acondicionado',claves:['aire acondicionado','a/c','climatizacion','clima']},
+  {nombre:'Electricidad',claves:['electricidad','electrico','cableado','alternador','arranque']},
+  {nombre:'Inspección/ITBI',claves:['inspeccion','itbi','revision tecnica']},
+  {nombre:'Placa/Registro',claves:['placa','registro','matricula','marbete','chasis']},
+  {nombre:'Seguro',claves:['seguro','poliza','aseguradora']},
+  {nombre:'Publicidad',claves:['publicidad','anuncio','marketing','promocion']},
+  {nombre:'Comisión',claves:['comision','honorario','gestor']},
+  {nombre:'Otros Gastos',claves:['otro','varios','diverso']}
+];
+function _normTxtHCV(s){return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();}
+function matchCategoriaFijaGastoVeh(tipo){
+  const t=_normTxtHCV(tipo);
+  if(!t)return null;
+  for(const cat of CONCEPTOS_FIJOS_HOJA_COSTOS_VEH){
+    for(const clave of cat.claves){if(t.includes(_normTxtHCV(clave)))return cat.nombre;}
+  }
+  return null;
+}
+
 function _generarHojaCostosPDF(gastos,filtroVeh,tasaElegida){
   const empresa=DB.config.empresa||'JEYCO AUTO';
   const logo=DB.config.logoData||'';
@@ -8082,55 +8112,64 @@ function _generarHojaCostosPDF(gastos,filtroVeh,tasaElegida){
   const fRD=(n)=>'RD$ '+parseFloat(n||0).toLocaleString('es-DO',{minimumFractionDigits:2,maximumFractionDigits:2});
   const fUS=(n)=>'US$ '+parseFloat(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
   const fN=(n)=>parseFloat(n||0).toLocaleString('es-DO',{minimumFractionDigits:2,maximumFractionDigits:2});
-  const gastosRD=gastos.filter(g=>(g.moneda||'RD$')==='RD$');
-  const gastosUSD=gastos.filter(g=>g.moneda==='USD');
-  const hayUSD=gastosUSD.length>0;
-  const hayRD=gastosRD.length>0;
-  const subtotRD=gastosRD.reduce((a,g)=>a+parseFloat(g.montoFactura||0),0);
-  const subtotPagRD=gastosRD.reduce((a,g)=>a+parseFloat(g.montoPagado||0),0);
-  const subtotPendRD=gastosRD.reduce((a,g)=>a+parseFloat(g.montoPendiente||0),0);
-  const subtotUSD=gastosUSD.reduce((a,g)=>a+parseFloat(g.montoFactura||0),0);
-  const subtotPagUSD=gastosUSD.reduce((a,g)=>a+parseFloat(g.montoPagado||0),0);
-  const subtotPendUSD=gastosUSD.reduce((a,g)=>a+parseFloat(g.montoPendiente||0),0);
   const tasaFallback=parseFloat(tasaElegida||DB.config.tasaCambio||60);
-  // Todo gasto en USD se convierte con la tasa elegida en la Hoja de Costos,
-  // sin importar la tasa que tenga guardada el gasto o cada pago individual.
-  const calcRDReal=(g)=>{
-    if((g.moneda||'RD$')==='RD$')return{factura:parseFloat(g.montoFactura||0),pagado:parseFloat(g.montoPagado||0),pendiente:parseFloat(g.montoPendiente||0),tasa:null};
-    const rdPagado=parseFloat(g.montoPagado||0)*tasaFallback;
-    const rdPendiente=parseFloat(g.montoPendiente||0)*tasaFallback;
-    const rdFactura=rdPagado+rdPendiente;
-    return{factura:rdFactura,pagado:rdPagado,pendiente:rdPendiente,tasa:tasaFallback};
-  };
-  const totalRD=gastos.reduce((a,g)=>a+calcRDReal(g).factura,0);
-  const totalPagRD=gastos.reduce((a,g)=>a+calcRDReal(g).pagado,0);
-  const totalPendRD=gastos.reduce((a,g)=>a+calcRDReal(g).pendiente,0);
-  // Total combinado en US$: se usa SIEMPRE la tasa elegida al generar la hoja (no un promedio
-  // de tasas históricas de cada pago), para que sea consistente con lo impreso en la hoja.
-  const totalUS=hayUSD?(subtotUSD+(subtotRD/tasaFallback)):0;
-  const totalPagUS=hayUSD?(subtotPagUSD+(subtotPagRD/tasaFallback)):0;
-  const totalPendUS=hayUSD?(totalUS-totalPagUS):0;
   const veh=filtroVeh?DB.vehiculos.find(v=>v.id===filtroVeh):null;
-  const filasRD=gastosRD.map((g,i)=>`<tr>
-    <td class="num">${i+1}</td><td class="desc">${escHtml(g.tipo||'—')}</td>
-    <td class="sup">${escHtml(g.suplidor||'—')}</td><td class="mon">RD$</td>
-    <td class="amt">${fN(g.montoFactura)}</td>
-    <td class="amt ok">${parseFloat(g.montoPagado||0)>0?fN(g.montoPagado):''}</td>
-    <td class="amt nd">${parseFloat(g.montoPendiente||0)>0?fN(g.montoPendiente):''}</td>
-    <td class="st"><span class="b ${g.statusGasto==='PAGADO'?'g':g.statusGasto==='ABONADO'?'a':'r'}">${g.statusGasto||'PEND.'}</span></td>
-  </tr>`).join('');
-  const filasUSD=gastosUSD.map((g,i)=>{
-    const rd=calcRDReal(g);
-    const tasasStr=(g.pagos||[]).filter(p=>p.tasa).map(p=>'RD$'+parseFloat(p.tasa).toFixed(2)).join(' / ');
-    const pendEst=parseFloat(g.montoPendiente||0)>0?` <span style="color:#f59e0b;font-size:8px">(est.)</span>`:'';
-    return`<tr class="urow">
-    <td class="num">${gastosRD.length+i+1}</td><td class="desc">${escHtml(g.tipo||'—')}</td>
-    <td class="sup">${escHtml(g.suplidor||'—')}</td><td class="mon">US$</td>
-    <td class="amt">${fN(g.montoFactura)}<br><span style="font-size:7px;color:#000;font-weight:700">=RD$ ${fN(rd.factura)}${pendEst}</span></td>
-    <td class="amt ok">${parseFloat(g.montoPagado||0)>0?fN(g.montoPagado)+'<br><span style="font-size:7px;color:#000;font-weight:700">RD$ '+fN(rd.pagado)+'</span>':''}</td>
-    <td class="amt nd">${parseFloat(g.montoPendiente||0)>0?fN(g.montoPendiente)+'<br><span style="font-size:7px;color:#dc2626">RD$ '+fN(rd.pendiente)+'</span>':''}</td>
-    <td class="st"><span class="b ${g.statusGasto==='PAGADO'?'g':g.statusGasto==='ABONADO'?'a':'r'}">${g.statusGasto||'PEND.'}</span>${tasasStr?`<br><span style="font-size:7px;color:#000">${tasasStr}</span>`:''}</td>
-  </tr>`;}).join('');
+
+  // Agrupa cada gasto en su concepto fijo; lo que no se reconoce cae en Anexos.
+  const porConcepto=CONCEPTOS_FIJOS_HOJA_COSTOS_VEH.map(cat=>({nombre:cat.nombre,gastos:gastos.filter(g=>matchCategoriaFijaGastoVeh(g.tipo)===cat.nombre)}));
+  const anexos=gastos.filter(g=>!matchCategoriaFijaGastoVeh(g.tipo));
+
+  const estadoDe=(gs)=>{
+    const pend=gs.reduce((a,g)=>a+parseFloat(g.montoPendiente||0),0);
+    const pag=gs.reduce((a,g)=>a+parseFloat(g.montoPagado||0),0);
+    if(pend>0&&pag>0)return'ABONADO';
+    if(pend>0)return'PENDIENTE';
+    return'PAGADO';
+  };
+  const pillClase={PAGADO:'pg',ABONADO:'ab',PENDIENTE:'pe'};
+
+  let numero=0,totUSD=0,totPagUSD=0,totPendUSD=0,totRD=0,totPagRD=0,totPendRD=0;
+
+  const filaHtml=(concepto,suplidor,gs)=>{
+    numero++;
+    const vacio=!gs.length;
+    const enUSD=gs.filter(g=>g.moneda==='USD');
+    const enRD=gs.filter(g=>(g.moneda||'RD$')==='RD$');
+    const montoUSD=enUSD.reduce((a,g)=>a+parseFloat(g.montoFactura||0),0);
+    const pagUSD=enUSD.reduce((a,g)=>a+parseFloat(g.montoPagado||0),0);
+    const pendUSD=enUSD.reduce((a,g)=>a+parseFloat(g.montoPendiente||0),0);
+    const montoRD=enRD.reduce((a,g)=>a+parseFloat(g.montoFactura||0),0);
+    const pagRD=enRD.reduce((a,g)=>a+parseFloat(g.montoPagado||0),0);
+    const pendRD=enRD.reduce((a,g)=>a+parseFloat(g.montoPendiente||0),0);
+    totUSD+=montoUSD;totPagUSD+=pagUSD;totPendUSD+=pendUSD;
+    totRD+=montoRD;totPagRD+=pagRD;totPendRD+=pendRD;
+    const estado=vacio?'':estadoDe(gs);
+    const celdaRD=montoRD>0?fN(montoRD):(montoUSD>0?`<span class="eq">≈ ${fN(montoUSD*tasaFallback)}</span>`:'');
+    return`<tr>
+      <td class="num">${numero}</td>
+      <td class="concepto"><span class="txt">${escHtml(concepto)}</span><span class="dots"></span></td>
+      <td class="sup">${suplidor?escHtml(suplidor):'—'}</td>
+      <td class="amt">${montoUSD>0?fN(montoUSD):''}</td>
+      <td class="amt">${celdaRD}</td>
+      <td class="st">${estado?`<span class="pill ${pillClase[estado]}">${estado}</span>`:''}</td>
+    </tr>`;
+  };
+
+  const filasFijas=porConcepto.map(c=>{
+    const suplidores=[...new Set(c.gastos.map(g=>g.suplidor).filter(Boolean))];
+    const suplidor=suplidores.length>2?suplidores.slice(0,2).join(', ')+' y otros':suplidores.join(', ');
+    return filaHtml(c.nombre,suplidor,c.gastos);
+  }).join('');
+  const filasAnexos=anexos.map(g=>filaHtml(g.tipo||'Gasto adicional','—',[g])).join('');
+
+  const totalRD=totRD+(totUSD*tasaFallback);
+  const totalPagRD=totPagRD+(totPagUSD*tasaFallback);
+  const totalPendRD=totPendRD+(totPendUSD*tasaFallback);
+  const hayUSD=totUSD>0;
+  const totalUS=hayUSD?(totUSD+(totRD/tasaFallback)):0;
+  const totalPagUS=hayUSD?(totPagUSD+(totPagRD/tasaFallback)):0;
+  const totalPendUS=hayUSD?(totalUS-totalPagUS):0;
+
   const win=window.open('','_blank','width=820,height=750');
   win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
   <title>Hoja de Costos${veh?' — '+veh.codigo:''}</title>
@@ -8147,27 +8186,28 @@ function _generarHojaCostosPDF(gastos,filtroVeh,tasaElegida){
   .veh-bar{background:#0f172a;color:#fff;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:3px 8px;display:flex;justify-content:space-between;align-items:center}
   .veh-bar span.cod{background:#f59e0b;color:#0f172a;padding:1px 8px;border-radius:8px;font-size:9px;font-weight:800}
   .veh-grid{display:grid;grid-template-columns:repeat(6,1fr)}
-  .vc{padding:4px 7px;border-right:1px solid #e2e8f0}.vc:last-child{border-right:none}
+  .vc{padding:4px 7px;border-right:1px solid #e2e8f0;background:#fff}.vc:last-child{border-right:none}
   .vc .l{font-size:8px;font-weight:700;text-transform:uppercase;color:#000;margin-bottom:1px}
   .vc .v{font-weight:700;font-size:10px}
   table{width:100%;border-collapse:collapse}
   .th{border-bottom:2px solid #0f172a}
   .th th{padding:7px 8px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.2px;white-space:nowrap;color:#0f172a}
-  td{padding:6px 7px;border-bottom:1px solid #e2e8f0;vertical-align:middle;font-size:11px}
-  .urow td{border-left:3px solid #1e3a8a}
+  td{padding:5px 7px;border-bottom:1px solid #e2e8f0;vertical-align:middle;font-size:12px}
   .num{width:20px;text-align:center;color:#000;font-size:9px}
-  .desc{font-weight:600;font-size:11px}.sup{color:#000;font-size:10px}
-  .mon{text-align:center;font-size:9px;font-weight:700;color:#000;width:26px}
-  .amt{text-align:right;font-family:'Courier New',monospace;white-space:nowrap;width:95px;font-size:11px}
-  .ok{color:#000;font-weight:700}.nd{color:#dc2626;font-weight:700}.st{text-align:center;width:54px}
+  .concepto{font-weight:600;font-size:12px;display:flex;align-items:baseline;gap:4px;white-space:nowrap;overflow:hidden}
+  .concepto .dots{flex:1;border-bottom:1px dotted #94a3b8;height:0;transform:translateY(-4px)}
+  .sup{color:#000;font-size:11px}
+  .amt{text-align:right;font-family:'Courier New',monospace;white-space:nowrap;width:95px;font-size:12px}
+  .amt .eq{color:#64748b;font-size:9px;font-weight:600}
+  .st{text-align:center;width:66px}
   .sh td{font-weight:800;font-size:9px;text-transform:uppercase;color:#0f172a;letter-spacing:.4px;padding:6px 7px;border-top:1px solid #334155;border-bottom:1px solid #334155}
-  .sr td{font-weight:800;font-size:10px;border-top:1px solid #334155;border-bottom:2px solid #334155}
-  .su td{font-weight:800;font-size:10px;border-top:1px solid #334155;border-bottom:2px solid #334155}
   .b{display:inline-block;padding:1px 5px;font-size:8px;font-weight:800}
   .g{color:#1d4ed8}.r{color:#dc2626}.a{color:#d97706}
+  .pill{display:inline-block;padding:2px 7px;border-radius:9px;font-size:8px;font-weight:800;color:#fff;letter-spacing:.2px}
+  .pill.pg{background:#16a34a}.pill.ab{background:#d97706}.pill.pe{background:#dc2626}
   .res{margin-top:16px;border:1px solid #334155;border-radius:4px;overflow:hidden}
   .res-bar{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;padding:3px 8px;color:#0f172a;border-bottom:1px solid #334155}
-  .res-top{display:grid;grid-template-columns:${hayRD&&hayUSD?'1fr 1fr 1fr':'1fr 1fr'}}
+  .res-top{display:grid;grid-template-columns:${hayUSD?'1fr 1fr 1fr':'1fr 1fr'}}
   .rc{padding:6px 10px;border-right:1px solid #e2e8f0}.rc:last-child{border-right:none}
   .rl{font-size:8px;font-weight:700;text-transform:uppercase;color:#000;margin-bottom:3px}
   .rv{font-size:13px;font-weight:900}.rs{font-size:8px;margin-top:1px;color:#000}
@@ -8175,7 +8215,7 @@ function _generarHojaCostosPDF(gastos,filtroVeh,tasaElegida){
   .tc{padding:7px 10px;border-right:1px solid #e2e8f0}.tc:last-child{border-right:none}
   .tl{font-size:8px;font-weight:700;text-transform:uppercase;margin-bottom:3px}
   .tv{font-size:16px;font-weight:900}.ts{font-size:8px;margin-top:2px;color:#000}
-  @media print{.noprint{display:none}@page{size:letter;margin:8mm}}
+  @media print{.noprint{display:none}@page{size:letter;margin:6mm}}
   </style></head><body>
   <div class="hdr">
     <div>${logo?`<img src="${logo}">`:''}
@@ -8184,7 +8224,7 @@ function _generarHojaCostosPDF(gastos,filtroVeh,tasaElegida){
       </div>
     </div>
     <div><div class="hdr-titulo">Hoja de Costos</div>
-      <div class="hdr-sub">Fecha: ${fmtDate(today())} &nbsp;|&nbsp; ${gastos.length} gasto(s)${hayUSD?` &nbsp;|&nbsp; Tasa considerada: RD$ ${fN(tasaFallback)} x US$1`:''}</div>
+      <div class="hdr-sub">Fecha: ${fmtDate(today())} &nbsp;|&nbsp; ${gastos.length} gasto(s) &nbsp;|&nbsp; Tasa considerada: RD$ ${fN(tasaFallback)} x US$1</div>
     </div>
   </div>
   ${veh?`<div class="veh-box">
@@ -8200,43 +8240,34 @@ function _generarHojaCostosPDF(gastos,filtroVeh,tasaElegida){
   </div>`:''}
   <table>
     <thead class="th"><tr>
-      <th class="num">#</th><th>Tipo de Gasto</th><th>Suplidor</th>
-      <th style="text-align:center">Mon.</th><th style="text-align:right">Factura</th>
-      <th style="text-align:right">Pagado</th><th style="text-align:right">Pendiente</th>
+      <th class="num">#</th><th>Concepto</th><th>Suplidor</th>
+      <th style="text-align:right">Monto US$</th><th style="text-align:right">Monto RD$</th>
       <th style="text-align:center">Estado</th>
     </tr></thead>
     <tbody>
-      ${hayRD?`<tr class="sh"><td colspan="8">💰 Gastos en Pesos Dominicanos (RD$)</td></tr>
-      ${filasRD}
-      ${gastosRD.length>1?`<tr class="sr"><td colspan="4" style="text-align:right;font-size:8px">SUB-TOTAL RD$</td>
-        <td class="amt">${fN(subtotRD)}</td><td class="amt ok">${fN(subtotPagRD)}</td>
-        <td class="amt nd">${subtotPendRD>0?fN(subtotPendRD):''}</td><td></td></tr>`:''}`:''}
-      ${hayUSD?`<tr class="sh"><td colspan="8">💵 Gastos en Dólares Americanos (US$)</td></tr>
-      ${filasUSD}
-      ${gastosUSD.length>1?`<tr class="su"><td colspan="4" style="text-align:right;font-size:8px">SUB-TOTAL US$</td>
-        <td class="amt">${fN(subtotUSD)}</td><td class="amt ok">${fN(subtotPagUSD)}</td>
-        <td class="amt nd">${subtotPendUSD>0?fN(subtotPendUSD):''}</td><td></td></tr>`:''}`:''}
+      ${filasFijas}
+      ${anexos.length?`<tr class="sh"><td colspan="6">📎 Anexos y Gastos Adicionales</td></tr>${filasAnexos}`:''}
     </tbody>
   </table>
   <div class="res">
-    <div class="res-bar">📊 Resumen de Costos${hayUSD?` &nbsp;(Tasa aplicada: RD$ ${fN(tasaFallback)} x US$1)`:''}</div>
+    <div class="res-bar">📊 Resumen de Costos &nbsp;(Tasa aplicada: RD$ ${fN(tasaFallback)} x US$1)</div>
     <div class="res-top">
-      ${hayRD?`<div class="rc">
+      <div class="rc">
         <div class="rl">Sub-Total en Pesos (RD$)</div>
-        <div class="rv">${fRD(subtotRD)}</div>
-        <div class="rs" style="color:#1d4ed8">Pagado: ${fRD(subtotPagRD)}</div>
-        ${subtotPendRD>0?`<div class="rs" style="color:#dc2626">Pendiente: ${fRD(subtotPendRD)}</div>`:'<div class="rs" style="color:#1d4ed8">✅ Sin pendiente</div>'}
-      </div>`:''}
+        <div class="rv" style="color:#d97706">${fRD(totRD)}</div>
+        <div class="rs" style="color:#d97706">Pagado: ${fRD(totPagRD)}</div>
+        ${totPendRD>0?`<div class="rs" style="color:#dc2626">Pendiente: ${fRD(totPendRD)}</div>`:'<div class="rs" style="color:#d97706">✅ Sin pendiente</div>'}
+      </div>
       ${hayUSD?`<div class="rc">
         <div class="rl">Sub-Total en Dólares (US$)</div>
-        <div class="rv" style="color:#1e3a8a">${fUS(subtotUSD)}</div>
-        <div class="rs" style="color:#1d4ed8">Pagado: ${fUS(subtotPagUSD)}</div>
-        ${subtotPendUSD>0?`<div class="rs" style="color:#dc2626">Pendiente: ${fUS(subtotPendUSD)}</div>`:'<div class="rs" style="color:#1d4ed8">✅ Sin pendiente</div>'}
+        <div class="rv" style="color:#1e3a8a">${fUS(totUSD)}</div>
+        <div class="rs" style="color:#1e3a8a">Pagado: ${fUS(totPagUSD)}</div>
+        ${totPendUSD>0?`<div class="rs" style="color:#dc2626">Pendiente: ${fUS(totPendUSD)}</div>`:'<div class="rs" style="color:#1e3a8a">✅ Sin pendiente</div>'}
       </div>`:''}
       <div class="rc">
         <div class="rl">Registros</div>
         <div class="rv" style="font-size:16px;color:#334155">${gastos.length}</div>
-        <div class="rs">RD$: ${gastosRD.length} &nbsp;|&nbsp; US$: ${gastosUSD.length}</div>
+        <div class="rs">Anexos: ${anexos.length}</div>
         <div class="rs" style="color:${totalPendRD>0?'#dc2626':'#1d4ed8'};font-weight:700;margin-top:2px">${totalPendRD>0?'⚠️ Tiene pendientes':'✅ Todo pagado'}</div>
       </div>
     </div>
