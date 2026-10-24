@@ -8112,56 +8112,52 @@ function _generarHojaCostosPDF(gastos,filtroVeh,tasaElegida){
   const fRD=(n)=>'RD$ '+parseFloat(n||0).toLocaleString('es-DO',{minimumFractionDigits:2,maximumFractionDigits:2});
   const fUS=(n)=>'US$ '+parseFloat(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
   const fN=(n)=>parseFloat(n||0).toLocaleString('es-DO',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const fmtN=(n,usd)=>usd?'$'+parseFloat(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}):parseFloat(n||0).toLocaleString('es-DO',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const fechaCorta=(f)=>{if(!f)return'—';const p=f.split('-');return p.length===3?p[2]+'/'+p[1]+'/'+p[0].slice(2):f;};
   const tasaFallback=parseFloat(tasaElegida||DB.config.tasaCambio||60);
+  const equivRD=(g)=>g.moneda==='USD'?parseFloat(g.montoFactura||0)*tasaFallback:parseFloat(g.montoFactura||0);
+  const scStatus={PAGADO:'#dcfce7|#16a34a',ABONADO:'#fef3c7|#d97706',PENDIENTE:'#fee2e2|#dc2626'};
+  const pill=(estado)=>{const[bg,col]=(scStatus[estado||'PENDIENTE']||scStatus.PENDIENTE).split('|');return`<span style="background:${bg};color:${col};padding:1px 8px;border-radius:8px;font-size:9px;font-weight:700;white-space:nowrap">${estado||'PENDIENTE'}</span>`;};
   const veh=filtroVeh?DB.vehiculos.find(v=>v.id===filtroVeh):null;
 
   // Agrupa cada gasto en su concepto fijo; lo que no se reconoce cae en Anexos.
-  const porConcepto=CONCEPTOS_FIJOS_HOJA_COSTOS_VEH.map(cat=>({nombre:cat.nombre,gastos:gastos.filter(g=>matchCategoriaFijaGastoVeh(g.tipo)===cat.nombre)}));
+  const porConcepto=CONCEPTOS_FIJOS_HOJA_COSTOS_VEH.map(cat=>({nombre:cat.nombre,gastos:gastos.filter(g=>matchCategoriaFijaGastoVeh(g.tipo)===cat.nombre).sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''))}));
   const anexos=gastos.filter(g=>!matchCategoriaFijaGastoVeh(g.tipo));
 
-  const estadoDe=(gs)=>{
-    const pend=gs.reduce((a,g)=>a+parseFloat(g.montoPendiente||0),0);
-    const pag=gs.reduce((a,g)=>a+parseFloat(g.montoPagado||0),0);
-    if(pend>0&&pag>0)return'ABONADO';
-    if(pend>0)return'PENDIENTE';
-    return'PAGADO';
-  };
-  const pillClase={PAGADO:'pg',ABONADO:'ab',PENDIENTE:'pe'};
+  let numero=0;
+  const fila16=(g)=>{numero++;const esUSD=g.moneda==='USD';return`<tr>
+    <td style="padding:3px 7px;color:#64748b">${numero}</td>
+    <td style="padding:3px 7px;color:#64748b;white-space:nowrap">${fechaCorta(g.fecha)}</td>
+    <td style="padding:3px 7px"><span class="leader">${escHtml(g.tipo||'—')}<span class="dots"></span></span></td>
+    <td style="padding:3px 7px;text-align:right;font-weight:700;white-space:nowrap">${esUSD?fmtN(g.montoFactura,true):'—'}</td>
+    <td style="padding:3px 7px;text-align:right;font-weight:700;white-space:nowrap">${esUSD?fmtN(equivRD(g),false):fmtN(g.montoFactura,false)}</td>
+    <td style="padding:3px 7px;text-align:center">${pill(g.statusGasto)}</td>
+  </tr>`;};
+  const filaVacia16=(tipo)=>{numero++;return`<tr>
+    <td style="padding:3px 7px;color:#cbd5e1">${numero}</td>
+    <td style="padding:3px 7px;color:#cbd5e1">—</td>
+    <td style="padding:3px 7px;color:#94a3b8"><span class="leader">${escHtml(tipo)}<span class="dots"></span></span></td>
+    <td style="padding:3px 7px;text-align:right;color:#cbd5e1">—</td>
+    <td style="padding:3px 7px;text-align:right;color:#cbd5e1">—</td>
+    <td style="padding:3px 7px;text-align:center;color:#cbd5e1">—</td>
+  </tr>`;};
 
-  let numero=0,totUSD=0,totPagUSD=0,totPendUSD=0,totRD=0,totPagRD=0,totPendRD=0;
+  const filasFijas=porConcepto.map(c=>c.gastos.length?c.gastos.map(fila16).join(''):filaVacia16(c.nombre)).join('');
+  const filasAnexos=anexos.map(g=>`<tr>
+    <td style="padding:3px 7px;color:#64748b;white-space:nowrap">${fechaCorta(g.fecha)}</td>
+    <td style="padding:3px 7px"><span class="leader">${escHtml(g.tipo||'—')}<span class="dots"></span></span></td>
+    <td style="padding:3px 7px;text-align:right;font-weight:700">${fmtN(equivRD(g),false)}</td>
+    <td style="padding:3px 7px;text-align:center">${pill(g.statusGasto)}</td>
+  </tr>`).join('');
 
-  const filaHtml=(concepto,suplidor,gs)=>{
-    numero++;
-    const vacio=!gs.length;
-    const enUSD=gs.filter(g=>g.moneda==='USD');
-    const enRD=gs.filter(g=>(g.moneda||'RD$')==='RD$');
-    const montoUSD=enUSD.reduce((a,g)=>a+parseFloat(g.montoFactura||0),0);
-    const pagUSD=enUSD.reduce((a,g)=>a+parseFloat(g.montoPagado||0),0);
-    const pendUSD=enUSD.reduce((a,g)=>a+parseFloat(g.montoPendiente||0),0);
-    const montoRD=enRD.reduce((a,g)=>a+parseFloat(g.montoFactura||0),0);
-    const pagRD=enRD.reduce((a,g)=>a+parseFloat(g.montoPagado||0),0);
-    const pendRD=enRD.reduce((a,g)=>a+parseFloat(g.montoPendiente||0),0);
-    totUSD+=montoUSD;totPagUSD+=pagUSD;totPendUSD+=pendUSD;
-    totRD+=montoRD;totPagRD+=pagRD;totPendRD+=pendRD;
-    const estado=vacio?'':estadoDe(gs);
-    const celdaRD=montoRD>0?fN(montoRD):(montoUSD>0?`<span class="eq">≈ ${fN(montoUSD*tasaFallback)}</span>`:'');
-    return`<tr>
-      <td class="num">${numero}</td>
-      <td class="concepto"><span class="txt">${escHtml(concepto)}</span><span class="dots"></span></td>
-      <td class="sup">${suplidor?escHtml(suplidor):'—'}</td>
-      <td class="amt">${montoUSD>0?fN(montoUSD):''}</td>
-      <td class="amt">${celdaRD}</td>
-      <td class="st">${estado?`<span class="pill ${pillClase[estado]}">${estado}</span>`:''}</td>
-    </tr>`;
-  };
-
-  const filasFijas=porConcepto.map(c=>{
-    const suplidores=[...new Set(c.gastos.map(g=>g.suplidor).filter(Boolean))];
-    const suplidor=suplidores.length>2?suplidores.slice(0,2).join(', ')+' y otros':suplidores.join(', ');
-    return filaHtml(c.nombre,suplidor,c.gastos);
-  }).join('');
-  const filasAnexos=anexos.map(g=>filaHtml(g.tipo||'Gasto adicional','—',[g])).join('');
-
+  // Totales — independientes de cómo se dibujan las filas.
+  const enUSD=gastos.filter(g=>g.moneda==='USD'),enRD=gastos.filter(g=>(g.moneda||'RD$')==='RD$');
+  const totUSD=enUSD.reduce((a,g)=>a+parseFloat(g.montoFactura||0),0);
+  const totPagUSD=enUSD.reduce((a,g)=>a+parseFloat(g.montoPagado||0),0);
+  const totPendUSD=enUSD.reduce((a,g)=>a+parseFloat(g.montoPendiente||0),0);
+  const totRD=enRD.reduce((a,g)=>a+parseFloat(g.montoFactura||0),0);
+  const totPagRD=enRD.reduce((a,g)=>a+parseFloat(g.montoPagado||0),0);
+  const totPendRD=enRD.reduce((a,g)=>a+parseFloat(g.montoPendiente||0),0);
   const totalRD=totRD+(totUSD*tasaFallback);
   const totalPagRD=totPagRD+(totPagUSD*tasaFallback);
   const totalPendRD=totPendRD+(totPendUSD*tasaFallback);
@@ -8189,22 +8185,13 @@ function _generarHojaCostosPDF(gastos,filtroVeh,tasaElegida){
   .vc{padding:4px 7px;border-right:1px solid #e2e8f0;background:#fff}.vc:last-child{border-right:none}
   .vc .l{font-size:8px;font-weight:700;text-transform:uppercase;color:#000;margin-bottom:1px}
   .vc .v{font-weight:700;font-size:10px}
-  table{width:100%;border-collapse:collapse}
-  .th{border-bottom:2px solid #0f172a}
-  .th th{padding:7px 8px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.2px;white-space:nowrap;color:#0f172a}
-  td{padding:5px 7px;border-bottom:1px solid #e2e8f0;vertical-align:middle;font-size:12px}
-  .num{width:20px;text-align:center;color:#000;font-size:9px}
-  .concepto{font-weight:600;font-size:12px;display:flex;align-items:baseline;gap:4px;white-space:nowrap;overflow:hidden}
-  .concepto .dots{flex:1;border-bottom:1px dotted #94a3b8;height:0;transform:translateY(-4px)}
-  .sup{color:#000;font-size:11px}
-  .amt{text-align:right;font-family:'Courier New',monospace;white-space:nowrap;width:95px;font-size:12px}
-  .amt .eq{color:#64748b;font-size:9px;font-weight:600}
-  .st{text-align:center;width:66px}
-  .sh td{font-weight:800;font-size:9px;text-transform:uppercase;color:#0f172a;letter-spacing:.4px;padding:6px 7px;border-top:1px solid #334155;border-bottom:1px solid #334155}
+  table{width:100%;border-collapse:collapse;margin-top:3px;font-size:12px}
+  tr:nth-child(odd) td{background:#f8fafc}
+  .leader{display:flex;align-items:baseline;gap:4px}
+  .leader .dots{flex:1;border-bottom:1px dotted #cbd5e1;margin-bottom:3px;min-width:10px}
   .b{display:inline-block;padding:1px 5px;font-size:8px;font-weight:800}
   .g{color:#1d4ed8}.r{color:#dc2626}.a{color:#d97706}
-  .pill{display:inline-block;padding:2px 7px;border-radius:9px;font-size:8px;font-weight:800;color:#fff;letter-spacing:.2px}
-  .pill.pg{background:#16a34a}.pill.ab{background:#d97706}.pill.pe{background:#dc2626}
+  .subhdr{font-size:9px;font-weight:800;text-transform:uppercase;color:#0f172a;letter-spacing:.4px;margin:14px 0 2px}
   .res{margin-top:16px;border:1px solid #334155;border-radius:4px;overflow:hidden}
   .res-bar{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;padding:3px 8px;color:#0f172a;border-bottom:1px solid #334155}
   .res-top{display:grid;grid-template-columns:${hayUSD?'1fr 1fr 1fr':'1fr 1fr'}}
@@ -8239,16 +8226,28 @@ function _generarHojaCostosPDF(gastos,filtroVeh,tasaElegida){
     </div>
   </div>`:''}
   <table>
-    <thead class="th"><tr>
-      <th class="num">#</th><th>Concepto</th><th>Suplidor</th>
-      <th style="text-align:right">Monto US$</th><th style="text-align:right">Monto RD$</th>
-      <th style="text-align:center">Estado</th>
+    <thead><tr style="background:#1e293b;color:#fff">
+      <th style="text-align:left;padding:3px 7px;font-size:8.5px;width:20px">#</th>
+      <th style="text-align:left;padding:3px 7px;font-size:8.5px;width:52px">Fecha</th>
+      <th style="text-align:left;padding:3px 7px;font-size:8.5px">Concepto</th>
+      <th style="text-align:right;padding:3px 7px;font-size:8.5px;width:90px">Monto US$</th>
+      <th style="text-align:right;padding:3px 7px;font-size:8.5px;width:95px">Monto RD$</th>
+      <th style="text-align:center;padding:3px 7px;font-size:8.5px;width:62px">Estado</th>
     </tr></thead>
     <tbody>
       ${filasFijas}
-      ${anexos.length?`<tr class="sh"><td colspan="6">📎 Anexos y Gastos Adicionales</td></tr>${filasAnexos}`:''}
     </tbody>
   </table>
+  ${anexos.length?`<div class="subhdr">📎 Anexos y Gastos Adicionales</div>
+  <table>
+    <thead><tr style="background:#1e293b;color:#fff">
+      <th style="text-align:left;padding:3px 7px;font-size:8.5px;width:52px">Fecha</th>
+      <th style="text-align:left;padding:3px 7px;font-size:8.5px">Concepto</th>
+      <th style="text-align:right;padding:3px 7px;font-size:8.5px;width:90px">Monto RD$</th>
+      <th style="text-align:center;padding:3px 7px;font-size:8.5px;width:62px">Estado</th>
+    </tr></thead>
+    <tbody>${filasAnexos}</tbody>
+  </table>`:''}
   <div class="res">
     <div class="res-bar">📊 Resumen de Costos &nbsp;(Tasa aplicada: RD$ ${fN(tasaFallback)} x US$1)</div>
     <div class="res-top">
